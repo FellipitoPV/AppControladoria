@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     View,
     Text,
@@ -7,87 +7,77 @@ import {
     TextInput,
     StyleSheet,
     Modal,
+    StyleProp,
+    ViewStyle,
+    TextStyle,
 } from 'react-native';
 import { customTheme } from '../../theme/theme';
 
-interface ClienteInterface {
-    cnpjCpf: string;
-    razaoSocial: string;
-}
-
-interface DropdownClientesProps {
-    clientes: ClienteInterface[];
-    onSelect: (cliente: ClienteInterface) => void;
+interface DropdownProps {
+    items: string[];
+    onSelect: (item: string) => void;
     placeholder?: string;
+    searchable?: boolean;
+    style?: StyleProp<ViewStyle>;
+    containerStyle?: StyleProp<ViewStyle>;
+    textStyle?: StyleProp<TextStyle>;
 }
 
-export const DropdownClientes: React.FC<DropdownClientesProps> = ({
-    clientes,
+export const Dropdown: React.FC<DropdownProps> = ({
+    items,
     onSelect,
-    placeholder = 'Selecione um cliente',
+    placeholder = 'Selecione um item',
+    searchable = false,
 }) => {
     const [isVisible, setIsVisible] = useState(false);
     const [searchText, setSearchText] = useState('');
-    const [selectedCliente, setSelectedCliente] = useState<ClienteInterface | null>(null);
+    const [selectedItem, setSelectedItem] = useState<string | null>(null);
 
-    const filteredClientes = clientes.filter((cliente) => {
-        const search = searchText.toLowerCase();
-        return (
-            cliente.razaoSocial.toLowerCase().includes(search) ||
-            cliente.cnpjCpf.replace(/[^\d]/g, '').includes(search)
-        );
-    });
+    const filteredItems = searchable
+        ? items.filter(item =>
+            item.toLowerCase().includes(searchText.toLowerCase()))
+        : items;
 
-    const handleSelect = (cliente: ClienteInterface) => {
-        setSelectedCliente(cliente);
-        onSelect(cliente);
+    const handleSelect = (item: string) => {
+        setSelectedItem(item);
+        onSelect(item);
         setIsVisible(false);
     };
 
-    // Formata CNPJ/CPF para exibição
-    const formatCnpjCpf = (value: string) => {
-        const numbers = value.replace(/[^\d]/g, '');
-        if (numbers.length === 11) {
-            return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/g, '$1.$2.$3-$4');
-        }
-        return numbers.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/g, '$1.$2.$3/$4-$5');
-    };
-
     return (
-        <View style={styles.container}>
+        <View style={[styles.container]}>
             <TouchableOpacity
-                style={styles.dropdownButton}
+                style={[styles.dropdownButton]}
                 onPress={() => setIsVisible(true)}
             >
-                <Text style={styles.dropdownButtonText}>
-                    {selectedCliente
-                        ? `${selectedCliente.razaoSocial} (${formatCnpjCpf(selectedCliente.cnpjCpf)})`
-                        : placeholder}
+                <Text style={[styles.dropdownButtonText]}>
+                    {selectedItem || placeholder}
                 </Text>
             </TouchableOpacity>
 
             <Modal visible={isVisible} animationType="slide" transparent>
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder="Buscar por nome ou CNPJ/CPF"
-                            placeholderTextColor={customTheme.colors.onSecondary}
-                            value={searchText}
-                            onChangeText={setSearchText}
-                            autoCorrect={false}
-                        />
+                        {searchable && (
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Buscar"
+                                placeholderTextColor={customTheme.colors.onSecondary}
+                                value={searchText}
+                                onChangeText={setSearchText}
+                                autoCorrect={false}
+                            />
+                        )}
 
                         <FlatList
-                            data={filteredClientes}
-                            keyExtractor={(item) => item.cnpjCpf}
+                            data={filteredItems}
+                            keyExtractor={(item) => item}
                             renderItem={({ item }) => (
                                 <TouchableOpacity
                                     style={styles.itemContainer}
                                     onPress={() => handleSelect(item)}
                                 >
-                                    <Text style={styles.itemName}>{item.razaoSocial}</Text>
-                                    <Text style={styles.itemCnpj}>{formatCnpjCpf(item.cnpjCpf)}</Text>
+                                    <Text style={styles.itemText}>{item}</Text>
                                 </TouchableOpacity>
                             )}
                             style={styles.list}
@@ -151,15 +141,9 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#eee',
     },
-    itemName: {
+    itemText: {
         fontSize: 16,
-        fontWeight: '500',
         color: '#333',
-    },
-    itemCnpj: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 4,
     },
     closeButton: {
         marginTop: 12,

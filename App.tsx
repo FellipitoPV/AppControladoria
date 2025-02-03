@@ -4,15 +4,15 @@ import { createStackNavigator } from '@react-navigation/stack';
 import HomeScreen from './src/screens/HomeScreen';
 import FormularioMedicaoCompostagem from './src/screens/Pessagem/FormularioOcorrencia';
 import FlashMessage from "react-native-flash-message";
-import CompostagemList from './src/screens/Pessagem/CompostagemList';
+import CompostagemList from './src/screens/Pessagem/RelatoriosLista';
 import LoginScreen from './src/screens/LoginScreen';
 import Toast, { ToastConfig } from 'react-native-toast-message';
 import { StyleSheet, Text, View } from 'react-native';
 import { UserProvider } from './src/contexts/userContext';
 import { NetworkProvider } from './src/contexts/NetworkContext';
-import CompostagemRotinaList from './src/screens/Pessagem/CompostagemRotinaList';
 import FormularioOcorrencia from './src/screens/Pessagem/FormularioOcorrencia';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import RelatorioOcorrenciaList from './src/screens/Pessagem/RelatoriosLista';
 
 const Stack = createStackNavigator();
 
@@ -126,8 +126,7 @@ export default function App() {
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false, gestureEnabled: false }} />
             <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false, gestureEnabled: false }} />
             <Stack.Screen name="NewP" component={FormularioOcorrencia} options={{ headerShown: false, gestureEnabled: false }} />
-            <Stack.Screen name="List" component={CompostagemList} options={{ headerShown: false, gestureEnabled: false }} />
-            <Stack.Screen name="RList" component={CompostagemRotinaList} options={{ headerShown: false, gestureEnabled: false }} />
+            <Stack.Screen name="List" component={RelatorioOcorrenciaList} options={{ headerShown: false, gestureEnabled: false }} />
           </Stack.Navigator>
         </NavigationContainer>
         <Toast config={toastConfig} position='top' />

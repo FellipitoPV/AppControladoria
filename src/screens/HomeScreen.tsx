@@ -30,6 +30,7 @@ import { useAppUpdater } from '../helpers/AppUpdater';
 import { generateWordDocument } from '../helpers/generateApi';
 import { RelatorioData } from '../helpers/Types';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import FeedbackFloatingButton from '../assets/components/FeedbackFloatingButton';
 
 export default function HomeScreen({ navigation }: { navigation: any }) {
     const { userInfo, isLoading, clearUserInfo } = useUser();
@@ -228,17 +229,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                             <Text variant="bodyMedium" style={styles.actionText}>Histórico de Ocorrências</Text>
                         </TouchableOpacity>
 
-                        {/* Tetar geração de documento */}
-                        <TouchableOpacity
-                            style={styles.actionCard}
-                            onPress={testGenerateDocument}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.secondaryContainer }]}>
-                                <Icon name="description" size={32} color={customTheme.colors.primary} />
-
-                            </View>
-                            <Text variant="bodyMedium" style={styles.actionText}>Gerar Doc</Text>
-                        </TouchableOpacity>
                     </View>
 
                     {/* Alerta de nova atualização */}
@@ -283,7 +273,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 <View style={styles.footer}>
                     <Icon name="info" size={20} color={customTheme.colors.onSurfaceVariant} />
                     <Text variant="bodySmall" style={styles.versionText}>
-                        Compostagem Eco v{version}
+                        Controladoria v{version}
                     </Text>
                 </View>
             </Surface>
@@ -404,6 +394,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                     </Surface>
                 </View>
             </Modal>
+
+            <FeedbackFloatingButton />
 
         </SafeAreaView>
     );

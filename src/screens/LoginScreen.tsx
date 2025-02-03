@@ -19,7 +19,7 @@ import { checkInternetConnection, showGlobalToast } from '../helpers/GlobalApi';
 import { useUser } from '../contexts/userContext';
 import { User } from '../helpers/Types';
 import { customTheme } from '../theme/theme';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 
 
 const inputTheme = {
@@ -286,7 +286,7 @@ export default function LoginScreen({ navigation }: any) {
                     />
 
                     <Text variant="bodyLarge" style={styles.subtitle}>
-                        Faça login para acessar o sistema 
+                        Faça login para acessar o sistema
                     </Text>
                 </View>
 
@@ -299,7 +299,7 @@ export default function LoginScreen({ navigation }: any) {
                         autoCapitalize="none"
                         keyboardType="email-address"
                         left={<TextInput.Icon
-                            icon={() => <Icon name="email" size={24} color={customTheme.colors.primary} />}
+                            icon={() => <MaterialIcon name="email" size={24} color={customTheme.colors.primary} />}
                         />}
                         style={styles.input}
                         theme={inputTheme}
@@ -313,11 +313,11 @@ export default function LoginScreen({ navigation }: any) {
                         onChangeText={setPassword}
                         secureTextEntry={!showPassword}
                         left={<TextInput.Icon
-                            icon={() => <Icon name="lock" size={24} color={customTheme.colors.primary} />}
+                            icon={() => <MaterialIcon name="lock" size={24} color={customTheme.colors.primary} />}
                         />}
                         right={<TextInput.Icon
                             icon={() => (
-                                <Icon
+                                <MaterialIcon
                                     name={showPassword ? "visibility-off" : "visibility"}
                                     size={24}
                                     color={customTheme.colors.primary}
@@ -334,7 +334,13 @@ export default function LoginScreen({ navigation }: any) {
                         loading={isLoading}
                         disabled={isLoading}
                         style={styles.loginButton}
-                        icon="login"
+                        icon={({ size, color }) => (
+                            <MaterialIcon
+                                name="login"
+                                size={size}
+                                color={color}
+                            />
+                        )}
                     >
                         <Text style={{ color: customTheme.colors.onPrimary }}>
                             {isLoading ? 'Entrando...' : 'Entrar'}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     View,
     ScrollView,
@@ -28,26 +28,37 @@ import { clientes, RelatorioData } from '../../helpers/Types';
 import api, { generateWordDocument } from '../../helpers/generateApi';
 import { Asset, launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { getStorage, ref, uploadBytes, getDownloadURL, uploadString } from '@react-native-firebase/storage';
+import firestore from '@react-native-firebase/firestore';
 import ImageResizer from 'react-native-image-resizer';
 import RNFS from 'react-native-fs';
 import storage from '@react-native-firebase/storage';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { DropdownClientes } from '../../assets/components/DropdownClientes';
-
+import Share from 'react-native-share';
+import { Dropdown } from 'react-native-element-dropdown';
+import PhotoViewerModal from '../../assets/components/PhotoViewerModal';
 
 
 const inputTheme = {
     colors: {
-        onSurface: "black",
+        onSurface: customTheme.colors.onSurface,
         onSurfaceVariant: customTheme.colors.primary,
         primary: customTheme.colors.primary,
+        background: customTheme.colors.surface,
+        placeholder: customTheme.colors.onSurfaceDisabled,
+        disabled: customTheme.colors.onSurface, // Alterado para garantir visibilidade
+        error: customTheme.colors.error,
+        // Adicionando cores específicas para o estado desabilitado
+        onSurfaceDisabled: customTheme.colors.onSurface, // Cor do texto quando desabilitado
+        surfaceDisabled: customTheme.colors.surfaceVariant // Cor do fundo quando desabilitado
     }
 };
 
+
 const classificacaoList = [
-    { label: 'Qualidade', value: 'qualidade' },
-    { label: 'Ambiental', value: 'ambiental' },
-    { label: 'Segurança e Saúde Ocupacional', value: 'sso' },
+    { label: 'Qualidade', value: 'Qualidade' },
+    { label: 'Ambiental', value: 'Ambiental' },
+    { label: 'Segurança e Saúde Ocupacional', value: 'Segurança e Saúde Ocupacional' },
 ];
 
 interface ClienteInterface {
@@ -60,7 +71,6 @@ interface DropdownClientesProps {
     onSelect: (cliente: ClienteInterface) => void;
     placeholder?: string;
 }
-
 
 type TipoOcorrencia = 'triagem' | 'reclassificacao' | 'diferenca_peso' | 'outros';
 
@@ -87,6 +97,76 @@ const tiposOcorrencia = [
     }
 ];
 
+interface PhotoNameDialogProps {
+    visible: boolean;
+    onDismiss: () => void;
+    onConfirm: (photoName: string) => void;
+    tempPhotoUri: string | null;
+    initialName?: string; // Novo prop para o nome inicial
+}
+
+const PhotoNameDialog: React.FC<PhotoNameDialogProps> = ({
+    visible,
+    onDismiss,
+    onConfirm,
+    tempPhotoUri,
+    initialName = '' // Valor padrão vazio
+}) => {
+    const [localPhotoName, setLocalPhotoName] = useState('');
+
+    // Atualiza o nome local quando o diálogo é aberto
+    useEffect(() => {
+        if (visible) {
+            setLocalPhotoName(initialName);
+        } else {
+            setLocalPhotoName('');
+        }
+    }, [visible, initialName]);
+
+    return (
+        <Dialog
+            visible={visible}
+            onDismiss={onDismiss}
+            style={styles.photoNameDialog}
+        >
+            <Dialog.Title>Nome da Foto</Dialog.Title>
+            <Dialog.Content>
+                {tempPhotoUri && (
+                    <View style={styles.photoPreviewContainer}>
+                        <Image
+                            source={{ uri: tempPhotoUri }}
+                            style={styles.photoPreviewImage}
+                            resizeMode="cover"
+                        />
+                    </View>
+                )}
+
+                <TextInput
+                    mode="outlined"
+                    label="Nome da foto"
+                    value={localPhotoName}
+                    onChangeText={setLocalPhotoName}
+                    style={styles.photoNameInput}
+                />
+            </Dialog.Content>
+            <Dialog.Actions>
+                <Button onPress={onDismiss}>
+                    Cancelar
+                </Button>
+                <Button
+                    onPress={() => {
+                        onConfirm(localPhotoName);
+                        setLocalPhotoName('');
+                    }}
+                    disabled={!localPhotoName.trim()}
+                >
+                    Confirmar
+                </Button>
+            </Dialog.Actions>
+        </Dialog>
+    );
+};
+
 export default function FormularioOcorrencia({ navigation }: { navigation: any }) {
     const { userInfo } = useUser();
     const [loading, setLoading] = useState(false);
@@ -97,11 +177,21 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
     const [cliente, setCliente] = useState('');
     const [tipoOcorrencia, setTipoOcorrencia] = useState<TipoOcorrencia | ''>('');
     const [numeroOS, setNumeroOS] = useState('');
-    const [data, setData] = useState(new Date());
     const [dataOcorrencia, setDataOcorrencia] = useState(new Date());
+
+    //Datas
+    const [data, setData] = useState(new Date());
     const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
+
+
+    const [selectedClientValue, setSelectedClientValue] = useState('');
+
     const [mostrarSeletorDataOcorrencia, setMostrarSeletorDataOcorrencia] = useState(false);
 
+    const [showSuccessDialog, setShowSuccessDialog] = useState<boolean>(false)
+    const [documentPath, setDocumentPath] = useState<string | null>(null);
+
+    const classificacaoItems = classificacaoList.map(item => item.label);
 
     // Estados para fotos
     const [photos, setPhotos] = useState<Array<{
@@ -110,7 +200,6 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
     }>>([]);
     const [photoModalVisible, setPhotoModalVisible] = useState(false);
     const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
-    const [photoName, setPhotoName] = useState('');
     const [showPhotoNameDialog, setShowPhotoNameDialog] = useState(false);
     const [tempPhotoUri, setTempPhotoUri] = useState<string | null>(null);
 
@@ -130,7 +219,7 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
 
     const handleSelectCliente = (cliente: ClienteInterface) => {
         console.log('Cliente selecionado:', cliente);
-        // Faça algo com o cliente selecionado
+        setCliente(` ${cliente.razaoSocial} (${cliente.cnpjCpf})`);
     };
 
     const checkCameraPermission = async () => {
@@ -197,7 +286,17 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
         });
     };
 
+    const handleDataChange = (event: any, selectedDate?: Date) => {
+        setMostrarSeletorData(false); // Fecha o seletor
+
+        if (selectedDate) {
+            setDataOcorrencia(selectedDate); // Atualiza a data se uma foi selecionada
+        }
+    };
+
+
     const handleTakePhoto = async () => {
+        console.log('Iniciando captura de foto');
         if (photos.length >= 4) {
             Alert.alert('Limite de Fotos', 'Você já atingiu o limite de 4 fotos.');
             return;
@@ -210,10 +309,12 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
             const result = await launchCamera({
                 mediaType: 'photo',
                 quality: 0.5,
-                includeBase64: false, // Não precisamos mais do base64
+                includeBase64: false,
                 maxWidth: 800,
                 maxHeight: 800,
             });
+
+            console.log('Resultado da câmera:', result);
 
             if (result.assets && result.assets[0]) {
                 const asset = result.assets[0];
@@ -221,7 +322,8 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
                     throw new Error('URI não disponível');
                 }
 
-                setTempPhotoUri(asset.uri); // Guardamos a URI ao invés do base64
+                console.log('URI da foto:', asset.uri);
+                setTempPhotoUri(asset.uri);
                 setShowPhotoNameDialog(true);
             }
         } catch (error) {
@@ -260,19 +362,6 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
         }
     };
 
-    // Quando adiciona a foto ao array
-    const handleAddPhoto = () => {
-        if (tempPhotoUri && photoName) {
-            setPhotos(prev => [...prev, {
-                img: tempPhotoUri, // Já está em base64
-                imgName: `imagem - ${photos.length + 1} - ${photoName}`
-            }]);
-            setPhotoName('');
-            setTempPhotoUri(null);
-            setShowPhotoNameDialog(false);
-        }
-    };
-
     const handleDeletePhoto = (index: number) => {
         Alert.alert(
             'Confirmar Exclusão',
@@ -287,15 +376,23 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
                         setPhotoModalVisible(false);
                         setSelectedPhotoIndex(null);
 
-                        // Depois atualizamos as fotos
+                        // Depois atualizamos as fotos com a renumeração
                         setTimeout(() => {
                             setPhotos(prev => {
-                                const newPhotos = prev.filter((_, i) => i !== index);
-                                // Renomear as fotos restantes
-                                return newPhotos.map((photo, i) => ({
-                                    ...photo,
-                                    name: `imagem - ${i + 1} - ${photo.imgName.split(' - ')[2]}`
-                                }));
+                                // Remove a foto selecionada
+                                const updatedPhotos = prev.filter((_, i) => i !== index);
+
+                                // Renumera todas as fotos restantes
+                                return updatedPhotos.map((photo, newIndex) => {
+                                    // Pega o nome original da foto (após o último hífen)
+                                    const originalName = photo.imgName.split(' - ')[2];
+
+                                    // Retorna o objeto foto atualizado com o novo número
+                                    return {
+                                        ...photo,
+                                        imgName: `imagem - ${newIndex + 1} - ${originalName}`
+                                    };
+                                });
                             });
                         }, 100);
                     }
@@ -304,14 +401,55 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
         );
     };
 
-    const handleTipoOcorrenciaSelect = (tipo: TipoOcorrencia) => {
-        setTipoOcorrencia(tipo);
-        setShowTipoOcorrenciaModal(false);
-        setTipoOcorrenciaError(false);
+    // Adicione as funções de manipulação
+    const handleEditPhotoName = () => {
+        if (selectedPhotoIndex !== null) {
+            // Primeiro, guarda a referência da foto atual
+            const currentPhoto = photos[selectedPhotoIndex];
+
+            // Fecha o modal de visualização
+            setPhotoModalVisible(false);
+
+            // Pequeno delay para garantir uma transição suave
+            setTimeout(() => {
+                // Define a foto temporária para preview
+                setTempPhotoUri(currentPhoto.img);
+
+                // Abre o diálogo de edição do nome
+                setShowPhotoNameDialog(true);
+            }, 100);
+        }
+    };
+
+    // Modifique a função handlePhotoConfirm para atualizar o nome da foto
+    const handlePhotoConfirm = (name: string) => {
+        if (selectedPhotoIndex !== null && name) {
+            // Atualiza o nome da foto existente
+            setPhotos(prev => prev.map((photo, index) =>
+                index === selectedPhotoIndex
+                    ? { ...photo, imgName: `imagem - ${selectedPhotoIndex + 1} - ${name}` }
+                    : photo
+            ));
+        } else if (tempPhotoUri && name) {
+            // Adiciona nova foto (comportamento existente)
+            setPhotos(prev => [...prev, {
+                img: tempPhotoUri,
+                imgName: `imagem - ${prev.length + 1} - ${name}`
+            }]);
+        }
+
+        // Limpa os estados
+        setShowPhotoNameDialog(false);
+        setTempPhotoUri(null);
+        setSelectedPhotoIndex(null);
+    };
+
+    const handleClosePhotoViewer = () => {
+        setPhotoModalVisible(false);
+        setSelectedPhotoIndex(null);
     };
 
     // Parte para salvar no storage e chamar API
-
     const uploadImageToFirebase = async (imageUri: string, fileName: string) => {
         try {
             const timestamp = new Date().getTime();
@@ -350,37 +488,101 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
         }
     };
 
+    const uploadPDFToFirebase = async (pdfPath: string, fileName: string) => {
+        try {
+            // Criamos um nome único com timestamp para evitar conflitos
+            const timestamp = new Date().getTime();
+            const cleanClientName = cliente.replace(/\s*\([^)]*\)/, '').trim();
+            const storagePath = `relatorios/${cleanClientName}/RO-${numero}-${timestamp}.pdf`;
+
+            // Cria a referência no storage
+            const reference = storage().ref(storagePath);
+
+            // Faz o upload do arquivo
+            await reference.putFile(pdfPath);
+
+            // Obtém a URL do documento
+            const downloadURL = await reference.getDownloadURL();
+
+            return {
+                url: downloadURL,
+                path: storagePath,
+                fileName: fileName
+            };
+
+        } catch (error) {
+            console.error('Erro ao fazer upload do PDF:', error);
+            throw new Error(`Falha ao fazer upload do documento: ${error}`);
+        }
+    };
+
+
     const handleSalvar = async () => {
         if (loading) return;
         setLoading(true);
 
         try {
+
+            try {
+                const response = await api.get('/test');
+                console.log('Teste de conexão:', response.data);
+
+                // Mostra toast de sucesso na conexão
+                showGlobalToast(
+                    'info',
+                    'Conectado',
+                    'Conexão com servidor estabelecida',
+                    3000
+                );
+            } catch (error: any) {
+                console.error('Erro de conexão com servidor:', {
+                    message: error.message,
+                    code: error.code,
+                    response: error.response
+                });
+
+                showGlobalToast(
+                    'error',
+                    'Erro de Conexão',
+                    'Não foi possível conectar ao servidor local. Verifique se o servidor está rodando.',
+                    7000
+                );
+                setLoading(false);
+                return;
+            }
+
             let hasError = false;
+            let message = [];  // Mudamos para um array para acumular as mensagens
 
             // Validações
             if (!classificacao) {
                 setClassificacaoError(true);
+                message.push("Classificação");
                 hasError = true;
             }
             if (!numero.trim()) {
                 setNumeroError(true);
+                message.push("Número");
                 hasError = true;
             }
             if (!cliente) {
                 setClienteError(true);
+                message.push("Cliente");
                 hasError = true;
             }
             if (!tipoOcorrencia) {
                 setTipoOcorrenciaError(true);
+                message.push("Tipo de Ocorrência");
                 hasError = true;
             }
 
             if (hasError) {
+                const camposFaltantes = message.join(", ");
                 showGlobalToast(
                     'error',
                     'Campos obrigatórios',
-                    'Por favor, preencha todos os campos obrigatórios',
-                    4000
+                    `Por favor, preencha os seguintes campos: ${camposFaltantes}`,
+                    7000
                 );
                 setLoading(false);
                 return;
@@ -391,7 +593,7 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
                 'info',
                 'Processando',
                 'Fazendo upload das imagens...',
-                2000
+                7000
             );
 
             // Fazer upload de cada foto e obter as URLs
@@ -409,7 +611,7 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
                 'info',
                 'Processando',
                 'Gerando documento...',
-                2000
+                20000
             );
 
             // Preparar os dados para o relatório com o novo formato
@@ -429,43 +631,131 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
             };
 
             // Gera o documento usando a API
-            const documentPath = await generateWordDocument(relatorioData);
+            const localDocumentPath = await generateWordDocument(relatorioData);
+            setDocumentPath(localDocumentPath);
 
-            // Após gerar o documento com sucesso, deletar as imagens
-            await deleteImagesFolder();
+            // Mostra mensagem de upload do PDF
+            showGlobalToast(
+                'info',
+                'Processando',
+                'Salvando documento no servidor...',
+                7000
+            );
+
+            // Faz o upload do PDF
+            const cleanClientName = cliente.replace(/\s*\([^)]*\)/, '').trim();
+            const fileName = `RO-${numero}-${cleanClientName}.pdf`;
+
+            const uploadedPDF = await uploadPDFToFirebase(localDocumentPath, fileName);
+
+            // Salvando informações do PDF no firebase
+            await firestore().collection('relatoriosOcorrencia').add({
+                numeroRO: numero,
+                cliente: cleanClientName,
+                resp: userInfo?.user || '',
+                classificacao: classificacao,
+                data: formatDate(data),
+                pdfUrl: uploadedPDF.url,
+                storagePath: uploadedPDF.path,
+                createdAt: firestore.FieldValue.serverTimestamp()
+            });
 
             showGlobalToast(
                 'success',
                 'Sucesso',
-                `Relatório gerado com sucesso em: ${documentPath}`,
-                4000
+                'Relatório salvo com sucesso!',
+                7000
             );
 
-            // Limpar o formulário após sucesso
-            //navigation.goBack();
+            // Continua com o compartilhamento e limpeza
+            await handleShare(localDocumentPath);
+            await deleteImagesFolder();
 
-            return documentPath;
-        } catch (error) {
-            console.error('Erro ao gerar relatório:', error);
+            // Opcionalmente, navegue para a tela inicial
+            // navigation.navigate('Home');
 
-            // Feedback mais específico de erro para o usuário
-            let errorMessage = 'Erro ao gerar relatório. ';
-            if (error instanceof Error) {
-                if (error.message.includes('Network')) {
-                    errorMessage += 'Verifique sua conexão com a internet.';
-                } else {
-                    errorMessage += error.message;
-                }
+        } catch (error:any) {
+            console.error('Erro detalhado:', {
+                message: error.message,
+                code: error.code,
+                stack: error.stack,
+                response: error.response
+            });
+
+            // Mensagem mais específica baseada no tipo de erro
+            let errorMessage = 'Erro ao salvar o relatório. Tente novamente.';
+            if (error.code === 'ECONNREFUSED') {
+                errorMessage = 'Servidor não está acessível. Verifique a conexão.';
+            } else if (error.message?.includes('Firebase')) {
+                errorMessage = 'Erro ao fazer upload das imagens. Verifique sua conexão.';
             }
 
             showGlobalToast(
                 'error',
                 'Erro',
                 errorMessage,
-                4000
+                7000
             );
         } finally {
             setLoading(false);
+        }
+    };
+
+
+    const handleShare = async (localPath: string) => {
+        try {
+            if (!localPath) {
+                showGlobalToast(
+                    'error',
+                    'Erro',
+                    'Nenhum documento disponível para compartilhar',
+                    7000
+                );
+                return;
+            }
+
+            // Verifica se o arquivo existe
+            const fileExists = await RNFS.exists(localPath);
+            if (!fileExists) {
+                showGlobalToast(
+                    'error',
+                    'Erro',
+                    'Arquivo não encontrado',
+                    7000
+                );
+                return;
+            }
+
+            // Ajusta o caminho do arquivo para o formato correto dependendo da plataforma
+            const filePath = Platform.OS === 'ios' ? localPath : `file://${localPath}`;
+
+            const shareOptions = {
+                title: 'Compartilhar Relatório',
+                url: filePath,
+                type: 'application/pdf',  // Tipo para PDF
+                failOnCancel: false,
+            };
+
+            const result = await Share.open(shareOptions); // Usa o `Share.open` ao invés do `Share.share`
+
+            if (result) {
+                showGlobalToast(
+                    'success',
+                    'Sucesso',
+                    'Documento compartilhado com sucesso!',
+                    3000
+                );
+            }
+            navigation.navigate("Home")
+        } catch (error: any) {
+            console.error('Erro ao compartilhar:', error);
+            showGlobalToast(
+                'info',
+                'Documento salvo',
+                'O documento pode ser encontrado na pasta de Relatorios na pasta Documents do aparelho',
+                7000
+            );
+            navigation.navigate("Home")
         }
     };
 
@@ -474,7 +764,6 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
             {/* Header */}
             <View style={styles.header}>
                 <MaterialIcons name="post-add" size={32} color={customTheme.colors.primary} />
-
                 <Text variant="headlineMedium" style={styles.headerTitle}>
                     Novo Relatório de Ocorrência
                 </Text>
@@ -482,6 +771,7 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
 
             {/* Conteúdo Principal */}
             <ScrollView style={styles.content}>
+
                 {/* Seção: Informações Gerais */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
@@ -492,109 +782,177 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
                     </View>
 
                     {/* Classificação */}
-                    <DropDownPicker
-                        open={openClassificacao}
-                        value={classificacao}
-                        items={classificacaoList}
-                        setOpen={setOpenClassificacao}
-                        setValue={setClassificacao}
-                        listMode="MODAL"
-                        placeholder="Selecione a Classificação"
-                        style={[styles.dropdown, classificacaoError && styles.dropdownError]}
-                        textStyle={styles.dropdownText}
-                        containerStyle={styles.dropdownContainer}
-                    />
-
-                    {/* Número */}
-                    <TextInput
-                        mode="outlined"
-                        label="Número do Relatório"
-                        value={numero}
-                        onChangeText={(text) => {
-                            setNumero(text);
-                            setNumeroError(false);
-                        }}
-                        error={numeroError}
-                        style={styles.textInput}
-                        theme={inputTheme}
-                        left={<TextInput.Icon icon={() => (
-                            <MaterialIcons name="description" size={24} color={customTheme.colors.primary} />
-                        )} />
-                        }
-                    />
+                    <View style={styles.inputRow}>
+                        <MaterialIcons
+                            name="category"
+                            size={24}
+                            color={customTheme.colors.primary}
+                        />
+                        <Dropdown
+                            style={[
+                                styles.dropdown,
+                                classificacaoError && styles.dropdownError
+                            ]}
+                            containerStyle={styles.dropdownList}
+                            placeholderStyle={styles.placeholderStyle}
+                            selectedTextStyle={styles.selectedTextStyle}
+                            data={classificacaoList.map(item => ({
+                                label: item.label,
+                                value: item.value
+                            }))}
+                            maxHeight={350}
+                            labelField="label"
+                            valueField="value"
+                            placeholder="Selecione a Classificação"
+                            value={classificacao}
+                            onChange={item => {
+                                setClassificacao(item.value);
+                                setClassificacaoError(false);
+                            }}
+                            renderItem={item => (
+                                <View style={styles.dropdownItem}>
+                                    <Text style={styles.dropdownItemText}>{item.label}</Text>
+                                </View>
+                            )}
+                        />
+                    </View>
 
                     {/* Cliente */}
-                    <DropdownClientes
-                        clientes={clientes}
-                        onSelect={handleSelectCliente}
-                        placeholder="Selecione um cliente"
-                    />
+                    <View style={styles.inputRow}>
+                        <MaterialIcons
+                            name="business"
+                            size={24}
+                            color={customTheme.colors.primary}
+                        />
+                        <Dropdown
+                            style={[
+                                styles.dropdown,
+                                classificacaoError && styles.dropdownError
+                            ]}
+                            containerStyle={styles.dropdownList}
+                            placeholderStyle={styles.placeholderStyle}
+                            selectedTextStyle={styles.selectedTextStyle}
+                            itemTextStyle={styles.dropdownText}
+                            data={clientes.map(cliente => ({
+                                label: `${cliente.razaoSocial} (${cliente.cnpjCpf})`,
+                                value: cliente.cnpjCpf
+                            }))}
+                            search
+                            searchPlaceholder="Buscar cliente..."
+                            maxHeight={300}
+                            labelField="label"
+                            valueField="value"
+                            placeholder="Selecione o Cliente"
+                            inputSearchStyle={{ color: customTheme.colors.tertiary }}
+                            value={selectedClientValue} // Adicione esta linha
+                            onChange={item => {
+                                setSelectedClientValue(item.value); // Adicione esta linha
+                                const selectedClient = clientes.find(c => c.cnpjCpf === item.value);
+                                if (selectedClient) {
+                                    handleSelectCliente(selectedClient);
+                                }
+                            }}
+                        />
+                    </View>
 
                     {/* Tipo de Ocorrência */}
-                    <Button
-                        mode="outlined"
-                        onPress={() => setShowTipoOcorrenciaModal(true)}
-                        style={[
-                            styles.tipoOcorrenciaButton,
-                            tipoOcorrenciaError && styles.buttonError
-                        ]}
-                    >
-                        {tipoOcorrencia ?
-                            tiposOcorrencia.find(t => t.value === tipoOcorrencia)?.label :
-                            "Selecione o Tipo de Ocorrência"
-                        }
-                    </Button>
+                    <View style={styles.inputRow}>
+                        <MaterialIcons
+                            name="assignment"
+                            size={24}
+                            color={customTheme.colors.primary}
+                        />
+                        <Dropdown
+                            style={styles.dropdown}
+                            placeholderStyle={styles.placeholderStyle}
+                            selectedTextStyle={styles.selectedTextStyle}
+                            itemTextStyle={styles.dropdownText}
+                            data={tiposOcorrencia.map(item => ({
+                                label: item.label,
+                                value: item.value
+                            }))}
+                            maxHeight={300}
+                            labelField="label"
+                            valueField="value"
+                            placeholder="Selecione o Tipo de Ocorrência"
+                            value={tipoOcorrencia}
+                            onChange={item => {
+                                setTipoOcorrencia(item.value as TipoOcorrencia);
+                                setTipoOcorrenciaError(false);
+                            }}
+                        />
+                    </View>
 
-                    {/* Campos condicionais baseados no tipo de ocorrência */}
+                    {/* Número OS */}
                     {tipoOcorrencia && (
-                        <View style={styles.ocorrenciaDetalhes}>
+                        <View style={styles.inputRow}>
+                            <MaterialIcons
+                                name="receipt"
+                                size={24}
+                                color={customTheme.colors.primary}
+                            />
                             <TextInput
                                 mode="outlined"
                                 label="Número da OS"
                                 value={numeroOS}
                                 onChangeText={setNumeroOS}
-                                style={styles.textInput}
+                                keyboardType="numeric"
+                                style={styles.textInputStyle}
                                 theme={inputTheme}
-                                left={<TextInput.Icon icon={() => (
-                                    <MaterialIcons name="123" size={30} color={customTheme.colors.primary} />
-                                )} />}
                             />
-
-                            <TouchableOpacity
-                                style={styles.input}
-                                onPress={() => setMostrarSeletorDataOcorrencia(true)}
-                            >
-                                <MaterialIcons name="calendar-month" size={20} color={customTheme.colors.primary} />
-                                <Text style={styles.inputText}>
-                                    Data da OS: {dataOcorrencia.toLocaleDateString()}
-                                </Text>
-                            </TouchableOpacity>
                         </View>
                     )}
 
-                    {/* Responsável */}
-                    <TextInput
-                        mode="outlined"
-                        label="Responsável"
-                        value={userInfo?.user || ''}
-                        disabled
-                        style={[styles.textInput, styles.inputDisabled]}
-                        theme={inputTheme}
-                        left={<TextInput.Icon icon={() => (
-                            <MaterialIcons name="person" size={20} color={customTheme.colors.primary} />
-                        )} />}
-                    />
+                    {/* Número do Relatório */}
+                    <View style={styles.inputRow}>
+                        <MaterialIcons
+                            name="description"
+                            size={24}
+                            color={customTheme.colors.primary}
+                        />
+                        <TextInput
+                            mode="outlined"
+                            label="Número do Relatório"
+                            value={numero}
+                            keyboardType='numeric'
+                            onChangeText={(text) => {
+                                setNumero(text);
+                                setNumeroError(false);
+                            }}
+                            error={numeroError}
+                            style={styles.textInputStyle}
+                            theme={inputTheme}
+                        />
+                    </View>
 
-                    {/* Data do Relatório */}
-                    <TouchableOpacity
-                        style={styles.input}
-                        onPress={() => setMostrarSeletorData(true)}
-                    >
-                        <MaterialIcons name="calendar-today" size={20} color={customTheme.colors.primary} />
-                        <Text style={styles.inputText}>
-                            Data do Relatório: {data.toLocaleDateString()}
-                        </Text>
-                    </TouchableOpacity>
+                    <View style={styles.inputRow}>
+                        <MaterialIcons
+                            name="calendar-today"
+                            size={24}
+                            color={customTheme.colors.primary}
+                        />
+                        <TouchableOpacity
+                            style={styles.dateInput}
+                            onPress={() => setMostrarSeletorData(true)}
+                        >
+                            <Text style={styles.dateText}>
+                                Data da ocorrência: {dataOcorrencia.toLocaleDateString('pt-BR')}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {/* DatePicker */}
+                        {mostrarSeletorData && (
+                            <DateTimePicker
+                                value={dataOcorrencia}
+                                mode="date"
+                                onChange={handleDataChange}
+                                maximumDate={new Date()} // Impede seleção de datas futuras
+                                locale="pt-BR" // Define o locale para português
+                                // Para iOS, adicione mais estilização
+                                textColor={customTheme.colors.onSurface}
+                            />
+                        )}
+                    </View>
                 </View>
 
                 {/* Seção: Registro Fotográfico */}
@@ -607,56 +965,70 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
                     </View>
 
                     <View style={styles.photoButtons}>
-                        <Button
+                        <TouchableOpacity
                             style={styles.photoButton}
-                            mode="contained-tonal"
                             onPress={handleTakePhoto}
-                            icon={() => <MaterialIcons name="camera-alt" size={24} color={customTheme.colors.primary} />}
                         >
-                            Tirar Foto
-                        </Button>
-                        <Button
+                            <View style={styles.photoButtonContent}>
+                                <MaterialIcons name="camera-alt" size={24} color={customTheme.colors.onPrimary} />
+                                <Text style={styles.photoButtonText}>Tirar Foto</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
                             style={styles.photoButton}
-                            mode="contained-tonal"
                             onPress={handleSelectPhoto}
-                            icon={() => <MaterialIcons name="photo-library" size={24} color={customTheme.colors.primary} />}
                         >
-                            Galeria
-                        </Button>
+                            <View style={styles.photoButtonContent}>
+                                <MaterialIcons name="photo-library" size={24} color={customTheme.colors.onPrimary} />
+                                <Text style={styles.photoButtonText}>Galeria</Text>
+                            </View>
+                        </TouchableOpacity>
                     </View>
+
+                    {/* Adicione esta linha aqui */}
+                    <Text style={styles.photoTip}>
+                        É recomendado capturar fotos na horizontal para melhor visualização no documento
+                    </Text>
 
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         style={styles.photoList}
                     >
-                        {photos.map((photo, index) => (
-                            <TouchableOpacity
-                                key={index}
-                                onPress={() => {
-                                    setSelectedPhotoIndex(index);
-                                    setPhotoModalVisible(true);
-                                }}
-                                style={styles.photoContainer}
-                            >
-                                <Image
-                                    source={{ uri: photo.img }}
-                                    style={styles.photoThumbnail}
-                                />
-                                <Text style={styles.photoName} numberOfLines={1}>
-                                    {photo.imgName}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
+                        {photos.length === 0 ? (
+                            <View style={styles.emptyPhotos}>
+                                <Text>Nenhuma foto adicionada</Text>
+                            </View>
+                        ) : (
+                            photos.map((photo, index) => (
+                                <TouchableOpacity
+                                    key={index}
+                                    onPress={() => {
+                                        setSelectedPhotoIndex(index);
+                                        setPhotoModalVisible(true);
+                                    }}
+                                    style={styles.photoContainer}
+                                >
+                                    <Image
+                                        source={{ uri: photo.img }}
+                                        style={styles.photoThumbnail}
+                                    />
+                                    <Text style={styles.photoName} numberOfLines={1}>
+                                        {photo.imgName}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))
+                        )}
                     </ScrollView>
                 </View>
 
                 {/* Seção: Observações */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <MaterialIcons name="notes" size={24} color={customTheme.colors.primary} />
+                        <MaterialIcons name="note-add" size={24} color={customTheme.colors.primary} />
                         <Text variant="titleMedium" style={styles.sectionTitle}>
-                            Observações / Ações Tomadas
+                            Observações
                         </Text>
                     </View>
 
@@ -669,200 +1041,478 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
                         numberOfLines={6}
                         style={[styles.textInput, styles.observacoesInput]}
                         theme={inputTheme}
+                        left={<TextInput.Icon icon={() => (
+                            <MaterialIcons name="edit" size={24} color={customTheme.colors.primary} />
+                        )} />}
                     />
                 </View>
 
                 {/* Botão Salvar */}
-                <Button
-                    style={styles.saveButton}
-                    mode="contained"
+                <TouchableOpacity
+                    style={[styles.saveButton, loading && styles.saveButtonDisabled]}
                     onPress={handleSalvar}
-                    icon={() => <MaterialIcons name="save" size={24} color={customTheme.colors.onPrimary} />}
+                    disabled={loading}
                 >
-                    Salvar Relatório
-                </Button>
+                    <View style={styles.saveButtonContent}>
+                        <MaterialIcons
+                            name="save"
+                            size={24}
+                            color={customTheme.colors.onPrimary}
+                        />
+                        <Text style={styles.saveButtonText}>
+                            {loading ? 'Salvando...' : 'Salvar Relatório'}
+                        </Text>
+                    </View>
+                </TouchableOpacity>
             </ScrollView>
 
-            {/* Modal de Tipo de Ocorrência */}
-            <Portal>
-                <Dialog
-                    visible={showTipoOcorrenciaModal}
-                    onDismiss={() => setShowTipoOcorrenciaModal(false)}
-                    style={styles.dialog}
-                >
-                    <Dialog.Title style={styles.dialogTitle}>Tipo de Ocorrência</Dialog.Title>
-                    <Dialog.Content>
-                        <View style={styles.tiposGrid}>
-                            {tiposOcorrencia.map((tipo) => (
-                                <TouchableOpacity
-                                    key={tipo.value}
-                                    style={styles.tipoCard}
-                                    onPress={() => handleTipoOcorrenciaSelect(tipo.value as TipoOcorrencia)}
-                                >
-                                    <View style={styles.tipoIconContainer}>
-                                        <MaterialIcons
-                                            name={tipo.icon}
-                                            size={24}
-                                            color={customTheme.colors.primary}
-                                        />
-                                    </View>
-                                    <Text style={styles.tipoText}>{tipo.label}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </Dialog.Content>
-                </Dialog>
-            </Portal>
-
-            {/* DateTimePickers */}
-            {mostrarSeletorData && (
-                <DateTimePicker
-                    value={data}
-                    mode="date"
-                    onChange={(_, selectedDate) => {
-                        setMostrarSeletorData(false);
-                        if (selectedDate) setData(selectedDate);
-                    }}
-                />
-            )}
-
-            {mostrarSeletorDataOcorrencia && (
-                <DateTimePicker
-                    value={dataOcorrencia}
-                    mode="date"
-                    onChange={(_, selectedDate) => {
-                        setMostrarSeletorDataOcorrencia(false);
-                        if (selectedDate) setDataOcorrencia(selectedDate);
-                    }}
-                />
-            )}
-
-            {/* Modal de Nome da Foto */}
-            <Portal>
-                <Dialog
-                    visible={showPhotoNameDialog}
-                    onDismiss={() => {
-                        setShowPhotoNameDialog(false);
-                        setTempPhotoUri(null);
-                        setPhotoName('');
-                    }}
-                    style={styles.photoNameDialog}
-                >
-                    <Dialog.Title>Nome da Foto</Dialog.Title>
-                    <Dialog.Content>
-                        {tempPhotoUri && (
-                            <View style={styles.photoPreviewContainer}>
-                                <Image
-                                    source={{ uri: tempPhotoUri }}
-                                    style={styles.photoPreview}
-                                    resizeMode="cover"
-                                />
-                            </View>
-                        )}
-
-                        <Text style={styles.photoNameInfo}>
-                            O nome final será formatado como:{'\n'}
-                            <Text style={styles.photoNameExample}>
-                                IMAGEM - {photos.length + 1} - {photoName || 'nome da foto'}
-                            </Text>
-                        </Text>
-
-                        <TextInput
-                            mode="outlined"
-                            label="Digite um nome para a foto"
-                            value={photoName}
-                            onChangeText={setPhotoName}
-                            style={[styles.textInput, styles.photoNameInput]}
-                            placeholder="Ex: Vista frontal do local"
-                            theme={inputTheme}
-                        />
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button
-                            onPress={() => {
-                                setShowPhotoNameDialog(false);
-                                setTempPhotoUri(null);
-                                setPhotoName('');
-                            }}
-                            textColor={customTheme.colors.error}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button
-                            onPress={handleAddPhoto}
-                            disabled={!photoName.trim()}
-                            textColor={customTheme.colors.primary}
-                        >
-                            Confirmar
-                        </Button>
-                    </Dialog.Actions>
-                </Dialog>
-            </Portal>
-
-            {/* Modal de Visualização de Foto */}
-            <Modal
-                visible={photoModalVisible}
-                transparent={true}
-                onRequestClose={() => {
-                    setPhotoModalVisible(false);
+            {/* Dialog para nomear a foto */}
+            <PhotoNameDialog
+                visible={showPhotoNameDialog}
+                onDismiss={() => {
+                    setShowPhotoNameDialog(false);
+                    setTempPhotoUri(null);
                     setSelectedPhotoIndex(null);
                 }}
-            >
-                <View style={styles.modalContainer}>
-                    {selectedPhotoIndex !== null && photos[selectedPhotoIndex] && (
-                        <View style={styles.modalContent}>
-                            <Image
-                                source={{ uri: photos[selectedPhotoIndex].img }}
-                                style={styles.fullScreenImage}
-                                resizeMode="contain"
-                            />
-                            <View style={styles.modalHeader}>
-                                <Text style={styles.modalPhotoName}>
-                                    {photos[selectedPhotoIndex].imgName}
-                                </Text>
-                            </View>
-                            <View style={styles.modalButtons}>
-                                <TouchableOpacity
-                                    style={[styles.modalButton, styles.deleteButton]}
-                                    onPress={() => handleDeletePhoto(selectedPhotoIndex)}
-                                >
-                                    <MaterialIcons name="delete" size={24} color="white" />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.modalButton}
-                                    onPress={() => {
-                                        setPhotoModalVisible(false);
-                                        setSelectedPhotoIndex(null);
-                                    }}
-                                >
-                                    <MaterialIcons name="close" size={24} color="white" />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    )}
-                </View>
-            </Modal>
+                onConfirm={handlePhotoConfirm}
+                tempPhotoUri={tempPhotoUri}
+                initialName={selectedPhotoIndex !== null ?
+                    photos[selectedPhotoIndex].imgName.split(' - ')[2] : ''} // Pega apenas a parte do nome personalizado
+            />
+
+            <PhotoViewerModal
+                visible={photoModalVisible}
+                photo={selectedPhotoIndex !== null ? photos[selectedPhotoIndex] : null}
+                onClose={handleClosePhotoViewer}
+                onDelete={() => handleDeletePhoto(selectedPhotoIndex!)}
+                onEdit={handleEditPhotoName}
+            />
+
         </Surface>
     );
 };
 
 const styles = StyleSheet.create({
+    photoTip: {
+        fontSize: 12,
+        color: customTheme.colors.onSurfaceVariant,
+        fontStyle: 'italic',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    dateInput: {
+        flex: 1,
+        backgroundColor: customTheme.colors.surface,
+        padding: 12,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+    },
+    dateText: {
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
+    },
+    datePickerIOS: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: customTheme.colors.surface,
+    },
+    photoNameDialog: {
+        backgroundColor: customTheme.colors.surface,
+        borderRadius: 8,
+        width: '90%',
+        alignSelf: 'center',
+    },
+    photoPreviewContainer: {
+        width: '100%',
+        height: 200,
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginBottom: 16,
+        backgroundColor: customTheme.colors.surfaceVariant,
+    },
+    photoPreviewImage: {
+        width: '100%',
+        height: '100%',
+    },
+    photoNameInput: {
+        marginTop: 8,
+        backgroundColor: customTheme.colors.surface,
+    },
+    itemContainerStyle: {
+        width: '100%',
+    },
+    placeholderStyle: {
+        fontSize: 16,
+        color: customTheme.colors.onSurfaceVariant,
+        position: 'relative', // Adicione isto
+    },
+    selectedTextStyle: {
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
+        position: 'relative', // Adicione isto
+    },
+    inputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+        gap: 8,
+    },
+    dropdown: {
+        flex: 1,
+        minHeight: 50,
+        borderColor: customTheme.colors.outline,
+        borderWidth: 1,
+        borderRadius: 4,
+        paddingHorizontal: 12,
+        backgroundColor: customTheme.colors.surface,
+    },
+    dropdownList: {
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+        backgroundColor: customTheme.colors.surface,
+        color: customTheme.colors.tertiary,
+    },
+    dropdownItem: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    dropdownItemText: {
+        flex: 1,
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
+    },
+    dropdownError: {
+        borderColor: customTheme.colors.error,
+        borderWidth: 2,
+    },
+    dropdownContainer: {
+        flex: 1,
+        width: '85%', // Limita a largura do dropdown
+    },
+    dropdownStyle: {
+        width: '85%', // Limita a largura do dropdown
+    },
+    textInputStyle: {
+        flex: 1,
+        backgroundColor: customTheme.colors.surface,
+        width: '85%', // Mantém consistência com os dropdowns
+    },
+    inputContainer: {
+        marginBottom: 12,
+    },
+    inputWrapper: {
+        backgroundColor: customTheme.colors.surface,
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+        borderRadius: 4,
+        height: 56, // Mesma altura do TextInput
+        flexDirection: 'row',
+        alignItems: 'center',
+        overflow: 'hidden',
+    },
+    inputIcon: {
+        marginLeft: 12,
+        marginRight: 8,
+    },
+    inputError: {
+        borderColor: customTheme.colors.error,
+        borderWidth: 2,
+    },
+    dropdownInput: {
+        flex: 1,
+        borderWidth: 0, // Remove a borda do dropdown
+        backgroundColor: 'transparent',
+        height: '100%',
+    },
+    textInput: {
+        backgroundColor: customTheme.colors.surface,
+        marginBottom: 12,
+        height: 56,
+    },
+    container: {
+        flex: 1,
+        backgroundColor: customTheme.colors.background,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: customTheme.colors.surface,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        elevation: 4,
+        borderBottomWidth: 1,
+        borderBottomColor: customTheme.colors.outline,
+    },
+    headerTitle: {
+        marginLeft: 12,
+        color: customTheme.colors.onSurface,
+        fontWeight: '600',
+    },
+    content: {
+        flex: 1,
+        padding: 16,
+    },
+    section: {
+        marginBottom: 24,
+        backgroundColor: customTheme.colors.surface,
+        borderRadius: 12,
+        padding: 16,
+        elevation: 2,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+        paddingBottom: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: customTheme.colors.outlineVariant,
+    },
+    sectionTitle: {
+        marginLeft: 8,
+        color: customTheme.colors.onSurface,
+        fontWeight: '600',
+    },
+    dropdownButton: {
+        backgroundColor: customTheme.colors.surface,
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+        borderRadius: 4,
+        marginBottom: 12,
+        height: 56,
+        justifyContent: 'center',
+        paddingHorizontal: 16,
+    },
+    dropdownContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    dropdownText: {
+        flex: 1,
+        marginLeft: 12,
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
+    },
+    placeholderText: {
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    input: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: customTheme.colors.surface,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+        marginBottom: 12,
+    },
+    inputText: {
+        marginLeft: 12,
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
+    },
+    photoButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 16,
+    },
+    photoButton: {
+        flex: 1,
+        backgroundColor: customTheme.colors.primary,
+        borderRadius: 8,
+        padding: 12,
+        elevation: 2,
+    },
+    photoButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    photoButtonText: {
+        color: customTheme.colors.onPrimary,
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    photoList: {
+        flexDirection: 'row',
+        marginBottom: 8,
+    },
+    emptyPhotos: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: 120,
+    },
+    photoContainer: {
+        marginRight: 12,
+        width: 120,
+    },
+    photoThumbnail: {
+        width: 120,
+        height: 120,
+        borderRadius: 8,
+        marginBottom: 4,
+    },
+    photoName: {
+        fontSize: 12,
+        color: customTheme.colors.onSurfaceVariant,
+        textAlign: 'center',
+    },
+    observacoesInput: {
+        minHeight: 120,
+    },
+    saveButton: {
+        backgroundColor: customTheme.colors.primary,
+        borderRadius: 8,
+        padding: 16,
+        marginBottom: 24,
+        elevation: 3,
+    },
+    saveButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    saveButtonText: {
+        color: customTheme.colors.onPrimary,
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    saveButtonDisabled: {
+        opacity: 0.6,
+    },
+    tipoOcorrenciaContainer: {
+        marginBottom: 12,
+        borderColor: customTheme.colors.outline,
+        borderWidth: 1,
+        borderRadius: 4,
+        backgroundColor: customTheme.colors.surface,
+        height: 56,
+        justifyContent: 'center', // Centraliza verticalmente
+        paddingHorizontal: 16,
+    },
+    tipoOcorrenciaContent: {
+        flexDirection: 'row',
+        alignItems: 'center', // Alinha os itens verticalmente
+    },
+    tipoOcorrenciaText: {
+        color: customTheme.colors.onSurface,
+        fontSize: 16,
+        marginLeft: 12,
+        flex: 1,
+    },
+    tipoOcorrenciaButton: {
+        marginBottom: 12,
+        borderColor: customTheme.colors.outline,
+        borderWidth: 1,
+        backgroundColor: customTheme.colors.surface,
+        height: 56, // Mesmo tamanho dos inputs
+        justifyContent: 'flex-start',
+        paddingHorizontal: 16,
+    },
     searchContainer: {
         padding: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        borderBottomColor: customTheme.colors.outline,
+        backgroundColor: customTheme.colors.surface
     },
     searchInput: {
         borderWidth: 1,
-        borderColor: '#ddd',
+        borderColor: customTheme.colors.outline,
         borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 8,
         fontSize: 14,
-        backgroundColor: '#f9f9f9',
+        backgroundColor: customTheme.colors.surface,
+        color: customTheme.colors.onSurface
     },
-    dropdownItem: {
-        padding: 10,
+    dropdownItemLabel: {
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
+        flex: 1
+    },
+    dropdownItemCnpj: {
+        fontSize: 12,
+        color: customTheme.colors.primary
+    },
+    photoNameInfo: {
+        marginBottom: 16,
+        color: customTheme.colors.onSurfaceVariant,
+        textAlign: 'center'
+    },
+    photoNameExample: {
+        color: customTheme.colors.primary,
+        fontWeight: '500'
+    },
+    inputDisabled: {
+        backgroundColor: customTheme.colors.surfaceDisabled,
+        color: customTheme.colors.onSurface,
+        opacity: 0.8
+    },
+    ocorrenciaDetalhes: {
+        backgroundColor: customTheme.colors.surfaceVariant,
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 12
+    },
+    dialog: {
+        backgroundColor: customTheme.colors.surface,
+        borderRadius: 28,
+        marginHorizontal: 24
+    },
+    dialogTitle: {
+        textAlign: 'center',
+        color: customTheme.colors.primary,
+        fontSize: 20,
+        fontWeight: 'bold'
+    },
+    tipoCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: customTheme.colors.surfaceVariant,
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 8
+    },
+    tipoIconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: customTheme.colors.surface,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12
+    },
+    tipoText: {
+        flex: 1,
+        fontSize: 16,
+        color: customTheme.colors.onSurface
+    },
+    modalContainer: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    modalHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        padding: 16
+    },
+    modalPhotoName: {
+        color: customTheme.colors.onPrimary,
+        fontSize: 16,
+        textAlign: 'center'
     },
     dropdownItemMain: {
         flexDirection: 'row',
@@ -876,229 +1526,23 @@ const styles = StyleSheet.create({
         marginTop: 4,
         gap: 4,
     },
-    dropdownItemLabel: {
-        fontSize: 16,
-        color: '#000',
-        flex: 1,
-    },
-    dropdownItemCnpj: {
-        fontSize: 12,
-        color: customTheme.colors.primary,
-    },
-    photoNameDialog: {
-        maxWidth: '90%',
-        width: 350,
-        color: customTheme.colors.primary,
-    },
-    photoPreviewContainer: {
-        alignItems: 'center',
-        marginBottom: 16,
-        borderRadius: 8,
-        overflow: 'hidden',
-        elevation: 2,
-    },
     photoPreview: {
         width: '100%',
         height: 200,
         backgroundColor: customTheme.colors.surfaceVariant,
     },
-    photoNameInfo: {
-        marginBottom: 16,
-        color: customTheme.colors.onSurfaceVariant,
-        textAlign: 'center',
-    },
-    photoNameExample: {
-        color: customTheme.colors.primary,
-        fontWeight: '500',
-    },
-    photoNameInput: {
-        marginTop: 8,
-    },
-    container: {
-        flex: 1,
-        backgroundColor: customTheme.colors.background,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surface,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        elevation: 4,
-    },
-    headerTitle: {
-        marginLeft: 12,
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
-    },
-    content: {
-        flex: 1,
-        padding: 16,
-    },
-    section: {
-        marginBottom: 24,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    sectionTitle: {
-        marginLeft: 8,
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
-    },
-    dropdown: {
-        backgroundColor: customTheme.colors.surface,
-        borderColor: customTheme.colors.outline,
-        marginBottom: 12,
-        height: 56,
-    },
-    dropdownText: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-    },
-    dropdownContainer: {
-        marginBottom: 12,
-    },
-    dropdownError: {
-        borderColor: customTheme.colors.error,
-        borderWidth: 2,
-    },
-    textInput: {
-        backgroundColor: customTheme.colors.surface,
-        marginBottom: 12,
-    },
-    inputDisabled: {
-        backgroundColor: customTheme.colors.surfaceVariant,
-        opacity: 0.8,
-    },
-    input: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surface,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 8,
-        marginBottom: 12,
-        elevation: 2,
-    },
-    inputText: {
-        marginLeft: 12,
-        color: customTheme.colors.primary,
-        fontSize: 16,
-    },
     buttonError: {
         borderColor: customTheme.colors.error,
         borderWidth: 2,
     },
-    tipoOcorrenciaButton: {
-        marginBottom: 12,
-        borderColor: customTheme.colors.primary,
-        borderWidth: 1,
-    },
-    ocorrenciaDetalhes: {
-        backgroundColor: customTheme.colors.surfaceVariant,
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 12,
-    },
-    saveButton: {
-        backgroundColor: customTheme.colors.primary,
-        marginBottom: 24,
-        paddingVertical: 8,
-    },
-    dialog: {
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 28,
-        marginHorizontal: 24,
-    },
-    dialogTitle: {
-        textAlign: 'center',
-        color: customTheme.colors.primary,
-        fontSize: 20,
-        fontWeight: 'bold',
-    },
     tiposGrid: {
         gap: 12,
-    },
-    tipoCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surfaceVariant,
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 8,
-    },
-    tipoIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: customTheme.colors.surface,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    tipoText: {
-        flex: 1,
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-    },
-    photoButtons: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-        gap: 12,
-    },
-    photoButton: {
-        flex: 1,
-        backgroundColor: customTheme.colors.secondaryContainer,
-    },
-    photoList: {
-        flexDirection: 'row',
-        marginBottom: 16,
-    },
-    photoContainer: {
-        marginRight: 12,
-        alignItems: 'center',
-        width: 120,
-    },
-    photoThumbnail: {
-        width: 120,
-        height: 120,
-        borderRadius: 8,
-        marginBottom: 4,
-    },
-    photoName: {
-        fontSize: 12,
-        color: customTheme.colors.onSurface,
-        textAlign: 'center',
-        width: '100%',
-    },
-    modalContainer: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        justifyContent: 'center',
-        alignItems: 'center',
     },
     modalContent: {
         width: '100%',
         height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    modalHeader: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        padding: 16,
-    },
-    modalPhotoName: {
-        color: 'white',
-        fontSize: 16,
-        textAlign: 'center',
     },
     fullScreenImage: {
         width: '100%',
@@ -1120,8 +1564,5 @@ const styles = StyleSheet.create({
     deleteButton: {
         backgroundColor: 'rgba(255, 0, 0, 0.5)',
     },
-    observacoesInput: {
-        minHeight: 120,
-        textAlignVertical: 'top',
-    },
 });
+

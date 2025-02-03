@@ -59,7 +59,7 @@ export const useAppUpdater = () => {
             setUpdateState({ checking: true });
 
             const versionsRef = firestore()
-                .collection('versoes_app_compostagem')
+                .collection('versoes_app_controladoria')
                 .orderBy('data_lancamento', 'desc')
                 .limit(1);
 
@@ -103,7 +103,7 @@ export const useAppUpdater = () => {
     // Verificar atualizações ao iniciar e periodicamente
     useEffect(() => {
         checkForUpdates();
-        const interval = setInterval(checkForUpdates, 3600000); // Verifica a cada 1 hora
+        const interval = setInterval(checkForUpdates, 60000); // Verifica a cada 1 hora
         return () => clearInterval(interval);
     }, []);
 

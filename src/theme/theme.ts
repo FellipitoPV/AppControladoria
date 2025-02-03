@@ -208,19 +208,7 @@ export const customTheme: CustomTheme = {
         scale: 1.0,
     },
     isV3: true,
-};
-
-
-// Tema escuro (caso queira usar)
-export const darkTheme: MD3Theme = {
-    ...customTheme,
-    dark: true,
-    colors: {
-        ...colors,
-        background: '#191C1B',
-        surface: '#1E1E1E',         // Fundo dos inputs no tema escuro
-        onSurface: '#FFFFFF',       // Texto dos inputs no tema escuro
-        surfaceVariant: '#2C2C2C',  // Fundo dos dropdowns no tema escuro
-        onSurfaceVariant: '#FFFFFF', // Texto nos dropdowns no tema escuro
-    },
+    // Força o tema a sempre ser claro
+    dark: false,
+    mode:'exact'
 };

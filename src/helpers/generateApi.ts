@@ -18,9 +18,21 @@ export interface PhotoItem {
     imgName: string;
 }
 
+const ensureDirectoryExists = async (path: string) => {
+    try {
+        const exists = await RNFS.exists(path);
+        if (!exists) {
+            await RNFS.mkdir(path);
+        }
+    } catch (error) {
+        console.error('Erro ao criar diretório:', error);
+        throw error;
+    }
+};
+
+
 export const generateWordDocument = async (data: RelatorioData): Promise<string> => {
     try {
-        console.log('Iniciando envio dos dados para o servidor');
 
         // Prepara as imagens para envio
         const images = data.images.map(image => ({
@@ -40,7 +52,7 @@ export const generateWordDocument = async (data: RelatorioData): Promise<string>
             images
         };
 
-        console.log('Enviando requisição para o servidor');
+        //console.log('Enviando requisição para o servidor');
         const response = await api.post('/gerar-documento', requestData, {
             responseType: 'arraybuffer',
             headers: {
@@ -55,20 +67,22 @@ export const generateWordDocument = async (data: RelatorioData): Promise<string>
             throw new Error('Resposta vazia do servidor');
         }
 
-        // Salva o arquivo recebido
-        const fileName = `relatorio-${data.num}.docx`;
-        const downloadPath = Platform.select({
-            android: (Number(Platform.Version)) >= 29
-                ? RNFS.DownloadDirectoryPath
-                : `${RNFS.ExternalStorageDirectoryPath}/Download`,
+        // Opção 1: Usando uma constante local com regex
+        const cleanClientName = data.cliente.replace(/\s*\([^)]*\)/, '').trim();
+        const fileName = `RO-${data.num}-${cleanClientName}.pdf`;
+        const documentsPath = Platform.select({
+            android: RNFS.ExternalStorageDirectoryPath + '/Documents',
             ios: RNFS.DocumentDirectoryPath
         });
 
-        if (!downloadPath) {
-            throw new Error('Caminho de download não encontrado');
+        if (!documentsPath) {
+            throw new Error('Caminho de documentos não encontrado');
         }
 
-        const outputPath = `${downloadPath}/${fileName}`;
+        const relatoriosPath = `${documentsPath}/Relatorios`;
+        await ensureDirectoryExists(relatoriosPath);
+
+        const outputPath = `${relatoriosPath}/${fileName}`;
 
         // Convertendo o arraybuffer para base64 de forma mais segura
         const uint8Array = new Uint8Array(response.data);

@@ -22,11 +22,11 @@ const DateFilter: React.FC<DateFilterProps> = ({ onFilterChange }) => {
     const [showStartPicker, setShowStartPicker] = useState<boolean>(false);
     const [showEndPicker, setShowEndPicker] = useState<boolean>(false);
     const [startDate, setStartDate] = useState<Date | null>(null);
-    const [endDate, setEndDate] = useState<Date | null>(null);
+    const [endDate, setEndDate] = useState<Date | null>(new Date());
     const [isFilterActive, setIsFilterActive] = useState<boolean>(false);
 
-    const formatDate = (date: Date | null): string => {
-        if (!date) return '';
+    const formatDateForFirestore = (date: Date): string => {
+        // Formata a data para dd/mm/yyyy para corresponder ao formato salvo no Firestore
         const day = String(date.getDate()).padStart(2, '0');
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const year = date.getFullYear();
@@ -38,6 +38,7 @@ const DateFilter: React.FC<DateFilterProps> = ({ onFilterChange }) => {
         if (selectedDate) {
             selectedDate.setHours(0, 0, 0, 0);
             setStartDate(selectedDate);
+            console.log('Data inicial selecionada:', selectedDate);
         }
     };
 
@@ -46,14 +47,23 @@ const DateFilter: React.FC<DateFilterProps> = ({ onFilterChange }) => {
         if (selectedDate) {
             selectedDate.setHours(23, 59, 59, 999);
             setEndDate(selectedDate);
+            console.log('Data final selecionada:', selectedDate);
         }
     };
 
     const applyFilter = (): void => {
         if (startDate && endDate) {
+            const formattedStartDate = formatDateForFirestore(startDate);
+            const formattedEndDate = formatDateForFirestore(endDate);
+
+            console.log('Aplicando filtro com datas:', {
+                startDate: formattedStartDate,
+                endDate: formattedEndDate
+            });
+
             onFilterChange({
-                startDate: startDate.toISOString().split('T')[0],
-                endDate: endDate.toISOString().split('T')[0]
+                startDate: formattedStartDate,
+                endDate: formattedEndDate
             });
             setIsFilterActive(true);
         }
@@ -74,21 +84,21 @@ const DateFilter: React.FC<DateFilterProps> = ({ onFilterChange }) => {
                     style={styles.dateButton}
                     onPress={() => setShowStartPicker(true)}
                 >
-                    <Icon name="calendar" size={18} color={customTheme.colors.primary} />
+                    <Icon name="event" size={18} color={customTheme.colors.primary} />
                     <Text style={styles.dateText}>
-                        {startDate ? formatDate(startDate) : 'Data Inicial'}
+                        {startDate ? formatDateForFirestore(startDate) : 'Data Inicial'}
                     </Text>
                 </TouchableOpacity>
 
-                <Icon name="arrow-right" size={16} color={customTheme.colors.primary} />
+                <Icon name="arrow-forward" size={16} color={customTheme.colors.primary} />
 
                 <TouchableOpacity
                     style={styles.dateButton}
                     onPress={() => setShowEndPicker(true)}
                 >
-                    <Icon name="calendar" size={18} color={customTheme.colors.primary} />
+                    <Icon name="event" size={18} color={customTheme.colors.primary} />
                     <Text style={styles.dateText}>
-                        {endDate ? formatDate(endDate) : 'Data Final'}
+                        {endDate ? formatDateForFirestore(endDate) : 'Data Final'}
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -106,6 +116,7 @@ const DateFilter: React.FC<DateFilterProps> = ({ onFilterChange }) => {
                         Aplicar Filtro
                     </Text>
                 </Button>
+
                 {isFilterActive && (
                     <Button
                         mode="outlined"
