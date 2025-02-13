@@ -1,11 +1,10 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import HomeScreen from './src/screens/HomeScreen';
 import FormularioMedicaoCompostagem from './src/screens/Pessagem/FormularioOcorrencia';
 import FlashMessage from "react-native-flash-message";
 import CompostagemList from './src/screens/Pessagem/RelatoriosLista';
-import LoginScreen from './src/screens/LoginScreen';
+import LoginScreen from './src/screens/Login/LoginScreen';
 import Toast, { ToastConfig } from 'react-native-toast-message';
 import { StyleSheet, Text, View } from 'react-native';
 import { UserProvider } from './src/contexts/userContext';
@@ -13,6 +12,10 @@ import { NetworkProvider } from './src/contexts/NetworkContext';
 import FormularioOcorrencia from './src/screens/Pessagem/FormularioOcorrencia';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RelatorioOcorrenciaList from './src/screens/Pessagem/RelatoriosLista';
+import WelcomeScreen from './src/screens/Login/WelcomeScreen';
+import HomeScreen from './src/screens/HomeScreen/HomeScreen';
+import { BackgroundSyncProvider } from './src/contexts/backgroundSyncContext';
+import NovaLavagem from './src/screens/Formularios/Lavagem/LavagemForm';
 
 const Stack = createStackNavigator();
 
@@ -117,21 +120,26 @@ const toastConfig: ToastConfig = {
 };
 
 export default function App() {
-
   return (
-    <NetworkProvider>
-      <UserProvider>
-        <NavigationContainer>
-          <Stack.Navigator initialRouteName="Login">
-            <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false, gestureEnabled: false }} />
-            <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false, gestureEnabled: false }} />
-            <Stack.Screen name="NewP" component={FormularioOcorrencia} options={{ headerShown: false, gestureEnabled: false }} />
-            <Stack.Screen name="List" component={RelatorioOcorrenciaList} options={{ headerShown: false, gestureEnabled: false }} />
-          </Stack.Navigator>
-        </NavigationContainer>
-        <Toast config={toastConfig} position='top' />
-        <FlashMessage position="top" />
-      </UserProvider>
-    </NetworkProvider>
+    <BackgroundSyncProvider>
+      <NavigationContainer>
+        <UserProvider>
+          <NetworkProvider>
+            <Stack.Navigator initialRouteName="Login">
+              <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="NewP" component={FormularioOcorrencia} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="List" component={RelatorioOcorrenciaList} options={{ headerShown: false, gestureEnabled: false }} />
+            
+              <Stack.Screen name="LavagemForm" component={NovaLavagem} options={{ headerShown: false, gestureEnabled: false }} />
+
+            
+            </Stack.Navigator>
+            <Toast config={toastConfig} position='top' />
+            <FlashMessage position="top" />
+          </NetworkProvider>
+        </UserProvider>
+      </NavigationContainer>
+    </BackgroundSyncProvider>
   );
 }

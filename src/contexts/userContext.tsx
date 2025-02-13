@@ -2,6 +2,8 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../helpers/Types';
+import { showGlobalToast } from '../helpers/GlobalApi';
+import { useNavigation } from '@react-navigation/native';
 
 // Interface do contexto
 interface UserContextData {
@@ -18,6 +20,7 @@ const UserContext = createContext<UserContextData>({} as UserContextData);
 export function UserProvider({ children }: { children: React.ReactNode }) {
     const [userInfo, setUserInfo] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const navigation = useNavigation();
 
     // Carregar informações salvas ao iniciar o app
     useEffect(() => {

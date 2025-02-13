@@ -7,7 +7,7 @@ import { customTheme } from './src/theme/theme'; // Ajuste o caminho conforme su
 export default function Main() {
     return (
         <PaperProvider
-            theme={customTheme} // Adicione o tema customizado aqui
+            theme={customTheme}
             settings={{
                 detectedTheme: false
             }}
