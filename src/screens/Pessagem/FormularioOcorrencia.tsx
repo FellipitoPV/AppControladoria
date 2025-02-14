@@ -33,10 +33,8 @@ import ImageResizer from 'react-native-image-resizer';
 import RNFS from 'react-native-fs';
 import storage from '@react-native-firebase/storage';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { DropdownClientes } from '../../assets/components/DropdownClientes';
 import Share from 'react-native-share';
 import { Dropdown } from 'react-native-element-dropdown';
-import PhotoViewerModal from '../../assets/components/PhotoViewerModal';
 
 
 const inputTheme = {
@@ -674,7 +672,7 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
             // Opcionalmente, navegue para a tela inicial
             // navigation.navigate('Home');
 
-        } catch (error:any) {
+        } catch (error: any) {
             console.error('Erro detalhado:', {
                 message: error.message,
                 code: error.code,
@@ -1080,13 +1078,13 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
                     photos[selectedPhotoIndex].imgName.split(' - ')[2] : ''} // Pega apenas a parte do nome personalizado
             />
 
-            <PhotoViewerModal
+            {/* <PhotoViewerModal
                 visible={photoModalVisible}
                 photo={selectedPhotoIndex !== null ? photos[selectedPhotoIndex] : null}
                 onClose={handleClosePhotoViewer}
                 onDelete={() => handleDeletePhoto(selectedPhotoIndex!)}
                 onEdit={handleEditPhotoName}
-            />
+            /> */}
 
         </Surface>
     );

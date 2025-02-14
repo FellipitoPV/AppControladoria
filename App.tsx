@@ -16,6 +16,10 @@ import WelcomeScreen from './src/screens/Login/WelcomeScreen';
 import HomeScreen from './src/screens/HomeScreen/HomeScreen';
 import { BackgroundSyncProvider } from './src/contexts/backgroundSyncContext';
 import NovaLavagem from './src/screens/Formularios/Lavagem/LavagemForm';
+import LavagemScreen from './src/screens/Formularios/Lavagem/LavagemScreen';
+import ContatosScreen from './src/screens/Contatos/ContatosScreen';
+import AgendamentoLavagem from './src/screens/Formularios/Lavagem/AgendamentoLavagem';
+import HistoricoLavagem from './src/screens/Formularios/Lavagem/HistoricoLavagem';
 
 const Stack = createStackNavigator();
 
@@ -130,10 +134,17 @@ export default function App() {
               <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false, gestureEnabled: false }} />
               <Stack.Screen name="NewP" component={FormularioOcorrencia} options={{ headerShown: false, gestureEnabled: false }} />
               <Stack.Screen name="List" component={RelatorioOcorrenciaList} options={{ headerShown: false, gestureEnabled: false }} />
-            
-              <Stack.Screen name="LavagemForm" component={NovaLavagem} options={{ headerShown: false, gestureEnabled: false }} />
 
-            
+              {/* Lavagem */}
+              <Stack.Screen name="LavagemScreen" component={LavagemScreen} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="LavagemForm" component={NovaLavagem} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="LavagemAgend" component={AgendamentoLavagem} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="LavagemHist" component={HistoricoLavagem} options={{ headerShown: false, gestureEnabled: false }} />
+
+              {/* Contatos */}
+              <Stack.Screen name="Contatos" component={ContatosScreen} options={{ headerShown: false, gestureEnabled: false }} />
+
+
             </Stack.Navigator>
             <Toast config={toastConfig} position='top' />
             <FlashMessage position="top" />

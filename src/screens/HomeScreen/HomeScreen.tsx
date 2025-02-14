@@ -31,7 +31,7 @@ import { useAppUpdater } from '../../helpers/AppUpdater';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import FeedbackFloatingButton from '../../assets/components/FeedbackFloatingButton';
 import { useNetwork } from '../../contexts/NetworkContext';
-import QuickActionsGrid from './components/QuickActionsGrid';
+import QuickActionsGrid from '../Formularios/Lavagem/Components/QuickActionsGrid';
 
 interface CarouselItem {
     id: string;

@@ -18,7 +18,6 @@ import {
     Divider,
 } from 'react-native-paper';
 import { customTheme } from '../../theme/theme';
-import DateFilter from '../../assets/components/DateFilter';
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -255,7 +254,7 @@ const RelatorioOcorrenciaList: React.FC = () => {
             </View>
 
             {/* Filtros */}
-            <DateFilter onFilterChange={setDateFilter} />
+            {/* <DateFilter onFilterChange={setDateFilter} /> */}
 
             {/* Ordenação */}
             <Surface style={styles.orderToggleContainer}>

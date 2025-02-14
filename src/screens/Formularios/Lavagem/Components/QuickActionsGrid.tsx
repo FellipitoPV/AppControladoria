@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { customTheme } from '../../../theme/theme';
+import { customTheme } from '../../../../theme/theme';
 import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
 
 const QuickActionsGrid = () => {
@@ -17,18 +17,10 @@ const QuickActionsGrid = () => {
     const navigation = useNavigation<NavigationProp<ParamListBase>>();
 
     const quickActions = [
-        { id: '1', title: 'Lavagem', icon: 'local-car-wash', color: '#6B7AFF', route: 'LavagemForm' },
+        { id: '1', title: 'Lavagem', icon: 'local-car-wash', color: '#6B7AFF', route: 'LavagemScreen' },
         { id: '2', title: 'The Movie', icon: 'movie', color: '#FF6B6B', route: 'TheMovie' },
         { id: '3', title: 'Professional', icon: 'work', color: '#6BCB77', route: 'Professional' },
-        { id: '4', title: 'All Rent', icon: 'home', color: '#4CACBC', route: 'AllRent' },
-        { id: '5', title: 'Seriously', icon: 'sentiment-satisfied', color: '#9D65C9', route: 'Seriously' },
-        { id: '6', title: 'Brand', icon: 'star', color: '#F4A261', route: 'Brand' },
-        { id: '7', title: 'Nearby', icon: 'location-on', color: '#2A9D8F', route: 'Nearby' },
-        { id: '8', title: 'Refresh', icon: 'refresh', color: '#E76F51', route: 'Refresh' },
-        { id: '9', title: 'Settings', icon: 'settings', color: '#457B9D', route: 'Settings' },
-        { id: '10', title: 'Help', icon: 'help', color: '#E9C46A', route: 'Help' },
-        { id: '11', title: 'Profile', icon: 'person', color: '#2A9D8F', route: 'Profile' },
-        { id: '12', title: 'Messages', icon: 'message', color: '#E76F51', route: 'Messages' },
+        { id: '4', title: 'Contatos', icon: 'phone', color: '#f279a0', route: 'Contatos' },
     ];
 
     // Divide os quickActions em grupos de 4
@@ -61,7 +53,7 @@ const QuickActionsGrid = () => {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.sectionTitle}>Quick Actions</Text>
+                <Text style={styles.sectionTitle}>Atalhos</Text>
                 <Text style={styles.pageIndicator}>
                     {currentPage + 1}/{pages.length}
                 </Text>
