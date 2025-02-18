@@ -22,19 +22,9 @@ import ModernHeader from '../../assets/components/ModernHeader';
 import { customTheme } from '../../theme/theme';
 import { getDatabase } from '@react-native-firebase/database';
 import firestore from '@react-native-firebase/firestore';
+import { User } from '../../helpers/Types';
 
 const { width } = Dimensions.get('window');
-
-interface User {
-    id: string;
-    user: string;
-    email: string;
-    telefone: string;
-    cargo: string;
-    ramal: string;
-    area: string;
-    photoURL?: string;
-}
 
 const SHOW_ONLY_ECOLOGIKA_EMAILS = true;
 
@@ -85,7 +75,7 @@ export default function ContatosScreen({ navigation }: any) {
             const filteredData = users.filter((item) =>
                 item.user.toLowerCase().includes(lowerCaseFilter) ||
                 item.cargo.toLowerCase().includes(lowerCaseFilter) ||
-                item.area.toLowerCase().includes(lowerCaseFilter)
+                item.area?.toLowerCase().includes(lowerCaseFilter)
             );
             setFilteredUsers(filteredData);
         }
@@ -160,7 +150,7 @@ export default function ContatosScreen({ navigation }: any) {
                     {/* Telefone */}
                     {user.telefone && (
                         <TouchableOpacity
-                            onPress={() => handlePhonePress(user.telefone)}
+                            onPress={() => user.telefone && handlePhonePress(user.telefone)}
                             style={[styles.contactItem, styles.phoneItem]}
                         >
                             <Icon

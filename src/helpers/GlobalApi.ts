@@ -20,7 +20,7 @@ const STORAGE_KEYS = {
 };
 
 // Tipos e Enums
- enum NotificationType {
+enum NotificationType {
     SUCCESS = "success",
     ERROR = "danger",
     WARNING = "warning",
@@ -55,17 +55,29 @@ export const showNotification = ({
     });
 };
 
-// Função para salvar dados (seja no Firebase ou localmente)
-export const saveCompostagemData = async (compostagemData: Compostagem): Promise<{
+
+// Modificação na assinatura da função para aceitar o cargo
+// Repsonsavel pelo ID final salvo no firebase
+export const saveCompostagemData = async (
+    compostagemData: Compostagem,
+    cargo?: string
+): Promise<{
     success: boolean;
     isOffline: boolean;
     message: string;
 }> => {
     try {
-        // Verifica a conexão com internet
+        // Gera um timestamp único para o ID
+        const timestamp = Date.now();
+
+        // Modifica o ID baseado no cargo
+        compostagemData.id = cargo?.toLowerCase() === 'administrador'
+            ? `0_ADM_${timestamp}`
+            : timestamp.toString();
+
+        // Resto do código permanece igual...
         const hasConnection = await checkInternetConnection();
 
-        // Se tiver conexão, tenta enviar para o Firebase
         if (hasConnection) {
             try {
                 const success = await sendDataToFirebase(compostagemData);
@@ -78,7 +90,6 @@ export const saveCompostagemData = async (compostagemData: Compostagem): Promise
                 }
             } catch (error) {
                 console.error("Erro ao enviar para o Firebase:", error);
-                // Se falhar o envio para o Firebase, salva localmente
                 await addToPendingData(compostagemData);
                 return {
                     success: true,
@@ -88,7 +99,6 @@ export const saveCompostagemData = async (compostagemData: Compostagem): Promise
             }
         }
 
-        // Se não tiver conexão, salva localmente
         await addToPendingData(compostagemData);
         return {
             success: true,
@@ -106,11 +116,9 @@ export const saveCompostagemData = async (compostagemData: Compostagem): Promise
     }
 };
 
-
 export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<boolean> => {
     const abortController = new AbortController();
     let docRef: FirebaseFirestoreTypes.DocumentReference | null = null;
-    let docId: string | null = null;
 
     try {
         // Verifica conexão inicial
@@ -120,22 +128,26 @@ export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<
             return false;
         }
 
-        // Não verifica duplicatas aqui - já foi verificado antes
+        if (!compostagemData.id) {
+            throw new Error('ID da compostagem não definido');
+        }
 
-        // Cria o documento
-        docRef = await firestore().collection('compostagens').add({
+        // Usa o ID customizado ao criar o documento
+        docRef = firestore().collection('compostagens').doc(compostagemData.id);
+
+        // Cria o documento com o ID específico
+        await docRef.set({
             ...compostagemData,
             photoUrls: [],
             createdAt: new Date().toISOString()
         });
 
-        docId = docRef.id;
-        console.log('Documento criado com ID:', docId);
+        console.log('Documento criado com ID:', compostagemData.id);
 
         // Upload de imagens se houver
         if (compostagemData.photoUris?.length) {
             try {
-                const imageUrls = await uploadImages(docId, compostagemData.photoUris);
+                const imageUrls = await uploadImages(compostagemData.id, compostagemData.photoUris);
                 if (imageUrls.length > 0) {
                     await docRef.update({ photoUrls: imageUrls });
                 }
@@ -157,7 +169,7 @@ export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<
     } catch (error) {
         console.error('Erro no processo de salvamento:', error);
 
-        if (docRef && docId) {
+        if (docRef) {
             try {
                 await docRef.delete();
                 console.log('Documento excluído após erro');

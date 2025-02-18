@@ -9,7 +9,8 @@ import {
     Platform,
     SafeAreaView,
     ActivityIndicator,
-    Dimensions
+    Dimensions,
+    BackHandler
 } from 'react-native';
 import { TextInput, Text, Button } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
@@ -21,6 +22,7 @@ import { User } from '../../helpers/Types';
 import { customTheme } from '../../theme/theme';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import WelcomeScreen from './WelcomeScreen';
+import { useFocusEffect } from '@react-navigation/native';
 
 
 const inputTheme = {
@@ -41,6 +43,103 @@ export default function LoginScreen({ navigation }: any) {
     const [isLoading, setIsLoading] = useState(false);
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
+    useFocusEffect(
+        React.useCallback(() => {
+            const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+                if (!welcomeIsOpen) {
+                    setWelcomeIsOpen(true);
+                    return true; // Previne o comportamento padrão
+                }
+                return false; // Permite o comportamento padrão
+            });
+
+            return () => backHandler.remove();
+        }, [welcomeIsOpen])
+    );
+
+    // Primeiro, modifique os useEffects de navegação
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+            // Só previne a navegação se não for uma navegação de replace
+            if (!welcomeIsOpen && e.data.action.type !== 'REPLACE') {
+                e.preventDefault();
+                setWelcomeIsOpen(true);
+            }
+        });
+
+        return unsubscribe;
+    }, [navigation, welcomeIsOpen]);
+
+    // Modifique a função handleLogin
+    const handleLogin = async (loginEmail: string, loginPassword: string, isAutoLogin = false) => {
+        setIsLoading(true);
+
+        try {
+            // Autenticação no Firebase
+            await auth().signInWithEmailAndPassword(
+                loginEmail.toLowerCase(),
+                loginPassword
+            );
+
+            // Salva as credenciais
+            await AsyncStorage.setItem('userEmail', loginEmail.toLowerCase());
+            await AsyncStorage.setItem('userPassword', loginPassword);
+
+            // Atualiza as informações do usuário e aguarda a conclusão
+            await updateUserInfo();
+
+            // Verifica se o userInfo foi atualizado corretamente
+            const savedUserInfo = await AsyncStorage.getItem('@UserInfo');
+            if (!savedUserInfo) {
+                throw new Error('Falha ao carregar informações do usuário');
+            }
+
+            // Desativa o welcomeIsOpen antes de navegar
+            setWelcomeIsOpen(false);
+
+            // Pequeno timeout para garantir que o estado foi atualizado
+            setTimeout(() => {
+                // Navegar para Home usando replace
+                navigation.replace('Home');
+            }, 100);
+
+            if (!isAutoLogin) {
+                showGlobalToast(
+                    'success',
+                    'Login realizado com sucesso!',
+                    '',
+                    2000
+                );
+            }
+        } catch (error: any) {
+            console.error('Erro completo no login:', error);
+
+            if (!isAutoLogin) {
+                let errorMessage = 'Erro ao fazer login';
+
+                if (error.code === 'auth/user-not-found') {
+                    errorMessage = 'Usuário não encontrado';
+                } else if (error.code === 'auth/wrong-password') {
+                    errorMessage = 'Senha incorreta';
+                } else if (error.code === 'auth/invalid-email') {
+                    errorMessage = 'Email inválido';
+                } else if (error.message === 'Falha ao carregar informações do usuário') {
+                    errorMessage = 'Não foi possível carregar suas informações';
+                }
+
+                showGlobalToast(
+                    'error',
+                    'Erro no login',
+                    errorMessage,
+                    4000
+                );
+            }
+            throw error;
+        } finally {
+            setIsLoading(false)
+        }
+    };
+
     // Verificar autenticação ao iniciar
     useEffect(() => {
         checkAuthentication();
@@ -58,62 +157,6 @@ export default function LoginScreen({ navigation }: any) {
             console.error('Erro na verificação de autenticação:', error);
         } finally {
             setIsCheckingAuth(false);
-        }
-    };
-
-    const handleLogin = async (loginEmail: string, loginPassword: string, isAutoLogin = false) => {
-        setIsLoading(true);
-        try {
-            // Autenticação no Firebase
-            const userCredential = await auth().signInWithEmailAndPassword(
-                loginEmail.toLowerCase(),
-                loginPassword
-            );
-
-            // Primeiro salva as credenciais
-            await AsyncStorage.setItem('userEmail', loginEmail.toLowerCase());
-            await AsyncStorage.setItem('userPassword', loginPassword);
-
-            // Depois atualiza as informações do usuário
-            await updateUserInfo();
-
-            // Salvar credenciais para auto-login
-            await AsyncStorage.setItem('userEmail', loginEmail.toLowerCase());
-            await AsyncStorage.setItem('userPassword', loginPassword);
-
-            // Navegar para Home
-            navigation.replace('Home');
-
-            if (!isAutoLogin) {
-                showGlobalToast(
-                    'success',
-                    'Login realizado com sucesso!',
-                    '',
-                    2000
-                );
-            }
-        } catch (error: any) {
-            if (!isAutoLogin) {
-                let errorMessage = 'Erro ao fazer login';
-
-                if (error.code === 'auth/user-not-found') {
-                    errorMessage = 'Usuário não encontrado';
-                } else if (error.code === 'auth/wrong-password') {
-                    errorMessage = 'Senha incorreta';
-                } else if (error.code === 'auth/invalid-email') {
-                    errorMessage = 'Email inválido';
-                }
-
-                showGlobalToast(
-                    'error',
-                    'Erro no login',
-                    errorMessage,
-                    4000
-                );
-            }
-            throw error;
-        } finally {
-            setIsLoading(false);
         }
     };
 
@@ -197,15 +240,15 @@ export default function LoginScreen({ navigation }: any) {
                         </Text>
                     </TouchableOpacity>
 
-                    <Button
-                        mode="contained"
-                        onPress={() => handleLogin(email, password)}
-                        loading={isLoading}
-                        disabled={isLoading}
+                    <TouchableOpacity
                         style={styles.loginButton}
+                        onPress={() => handleLogin(email, password)}
                     >
-                        {isLoading ? 'Entrando...' : 'Login'}
-                    </Button>
+                        <Text style={styles.loginText}>
+                            {isLoading ? 'Entrando...' : 'Login'}
+                        </Text>
+                    </TouchableOpacity>
+
                 </View>
 
                 {/* Footer */}
@@ -280,10 +323,13 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
     loginButton: {
-        marginTop: 24,
-        paddingVertical: 8,
+        paddingVertical: 20,
         borderRadius: 12,
         backgroundColor: customTheme.colors.primary,
+    },
+    loginText: {
+        textAlign: 'center',
+        color: customTheme.colors.onPrimary,
     },
     footer: {
         position: 'absolute',

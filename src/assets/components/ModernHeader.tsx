@@ -1,12 +1,12 @@
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity, StyleProp, ViewStyle } from 'react-native';
 import { Surface, Text, useTheme, MD3Theme } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface ModernHeaderProps {
     /** Título a ser exibido no header */
     title: string;
-    /** Nome do ícone do Material Icons (opcional) */
+    /** Nome do ícone do MaterialCommunityIcons (opcional) */
     iconName?: string;
     /** Função chamada ao pressionar o botão de voltar */
     onBackPress?: () => void;
@@ -26,7 +26,7 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
     onBackPress,
     showBackButton = true,
     rightAction,
-    rightIcon = 'close',
+    rightIcon = 'close-circle', // Ícone padrão corrigido
     style,
 }) => {
     const theme = useTheme<MD3Theme>();
@@ -76,7 +76,7 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
                         style={[styles.icon, styles.iconContainer]}
                     >
                         <Icon
-                            name="arrow-back"
+                            name="arrow-left" // Nome correto do ícone de voltar
                             size={24}
                             color={theme.colors.primary}
                         />

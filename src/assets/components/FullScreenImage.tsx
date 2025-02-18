@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Modal,
     View,
@@ -7,6 +7,7 @@ import {
     Image,
     SafeAreaView,
     Dimensions,
+    ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { customTheme } from '../../theme/theme';
@@ -22,6 +23,8 @@ const FullScreenImage: React.FC<FullScreenImageProps> = ({
     photo,
     onClose
 }) => {
+    const [isLoading, setIsLoading] = useState(true);
+
     if (!photo) return null;
 
     return (
@@ -52,10 +55,22 @@ const FullScreenImage: React.FC<FullScreenImageProps> = ({
                         source={{ uri: photo.uri }}
                         style={styles.image}
                         resizeMode="contain"
+                        onLoadStart={() => setIsLoading(true)}
+                        onLoadEnd={() => setIsLoading(false)}
                     />
+
+                    {/* Indicador de carregamento */}
+                    {isLoading && (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator
+                                size="large"
+                                color="white"
+                            />
+                        </View>
+                    )}
                 </View>
 
-                {/* Footer com ações (opcional) */}
+                {/* Footer com ações */}
                 <View style={styles.footer}>
                     <TouchableOpacity style={styles.actionButton}>
                         <Icon
@@ -77,9 +92,30 @@ const FullScreenImage: React.FC<FullScreenImageProps> = ({
     );
 };
 
+
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
+    loadingContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    },
+    image: {
+        width: screenWidth,
+        height: screenHeight * 0.7,
+    },
+
+    highQualityImage: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+    },
     container: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.75)',
@@ -104,10 +140,6 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    image: {
-        width: screenWidth,
-        height: screenHeight * 0.7,
     },
     footer: {
         height: 64,

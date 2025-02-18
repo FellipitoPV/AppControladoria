@@ -64,10 +64,10 @@ export interface RelatorioData {
 }
 
 export type Compostagem = {
+    id?: string;
     timestamp?: any;
     isMedicaoRotina?: boolean;
     leira: string;
-    id: string;
     data: string;
     hora: string;
     responsavel: string;
@@ -93,11 +93,17 @@ export interface User {
     ramal?: string | null;     // Agora aceita null
     area?: string | null;      // Agora aceita null
     acesso?: string[];
+    photoURL?: string;
 }
 
 export interface ClienteInterface {
     cnpjCpf: string;
     razaoSocial: string;
+}
+
+export interface DropdownRef {
+    open: () => void;
+    close: () => void;
 }
 
 export const clientes: ClienteInterface[] = [

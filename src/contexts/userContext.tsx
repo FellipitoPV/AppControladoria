@@ -11,6 +11,7 @@ interface UserContextData {
     isLoading: boolean;
     updateUserInfo: () => Promise<void>;
     clearUserInfo: () => Promise<void>;
+    updateUserPhoto: (photoURL: string) => Promise<void>;
 }
 
 // Criação do contexto
@@ -20,12 +21,132 @@ const UserContext = createContext<UserContextData>({} as UserContextData);
 export function UserProvider({ children }: { children: React.ReactNode }) {
     const [userInfo, setUserInfo] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const navigation = useNavigation();
+    const [userListener, setUserListener] = useState<(() => void) | null>(null);
+
 
     // Carregar informações salvas ao iniciar o app
     useEffect(() => {
         loadSavedUserInfo();
     }, []);
+
+    // Função para configurar o listener do usuário
+    const setupUserListener = async (email: string) => {
+        const usersSnapshot = await firestore()
+            .collection('users')
+            .get();
+
+        const userDoc = usersSnapshot.docs.find(doc => {
+            const userData = doc.data();
+            return userData.email?.toLowerCase() === email.toLowerCase();
+        });
+
+        if (!userDoc) {
+            throw new Error('Usuário não encontrado');
+        }
+
+        const unsubscribe = firestore()
+            .collection('users')
+            .doc(userDoc.id)
+            .onSnapshot(
+                (doc) => {
+                    if (doc.exists) {
+                        const userData = doc.data();
+                        if (userData) { // Verificação adicional
+                            const userWithId: User = {
+                                id: doc.id,
+                                user: userData.user || '',
+                                email: userData.email || '',
+                                cargo: userData.cargo || '',
+                                photoURL: userData.photoURL || null,
+                                telefone: userData.telefone || null,
+                                ramal: userData.ramal || null,
+                                area: userData.area || null,
+                                acesso: userData.acesso || [],
+                            };
+
+                            setUserInfo(userWithId);
+                            AsyncStorage.setItem('@UserInfo', JSON.stringify(userWithId));
+                        }
+                    }
+                },
+                (error) => {
+                    console.error('Erro no listener:', error);
+                }
+            );
+
+        setUserListener(unsubscribe);
+    };
+
+    // Função para atualizar informações do usuário
+    const updateUserInfo = async () => {
+        try {
+            setIsLoading(true);
+            console.log('1. Iniciando updateUserInfo');
+
+            const userEmail = await AsyncStorage.getItem('userEmail');
+            console.log('2. Email recuperado:', userEmail);
+
+            if (!userEmail) {
+                throw new Error('Email do usuário não encontrado');
+            }
+
+            const email = userEmail.replace(/"/g, "").toLowerCase();
+            console.log('3. Email formatado:', email);
+
+            // Buscar os dados do usuário diretamente
+            const usersSnapshot = await firestore()
+                .collection('users')
+                .get();
+
+            const userDoc = usersSnapshot.docs.find(doc => {
+                const userData = doc.data();
+                return userData.email?.toLowerCase() === email.toLowerCase();
+            });
+
+            if (!userDoc) {
+                throw new Error('Usuário não encontrado');
+            }
+
+            // Criar objeto do usuário
+            const userData = userDoc.data();
+            const userWithId: User = {
+                id: userDoc.id,
+                user: userData.user || '',
+                email: userData.email || '',
+                cargo: userData.cargo || '',
+                photoURL: userData.photoURL || null,
+                telefone: userData.telefone || null,
+                ramal: userData.ramal || null,
+                area: userData.area || null,
+                acesso: userData.acesso || [],
+            };
+
+            // Salvar no AsyncStorage primeiro
+            await AsyncStorage.setItem('@UserInfo', JSON.stringify(userWithId));
+
+            // Atualizar o estado
+            setUserInfo(userWithId);
+
+            // Configurar o listener após salvar os dados
+            await setupUserListener(email);
+            console.log('4. Listener configurado e dados salvos com sucesso');
+
+        } catch (error: any) {
+            console.error('Erro em updateUserInfo:', error);
+            throw error;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Limpar o listener quando o componente for desmontado
+    useEffect(() => {
+        return () => {
+            if (userListener) {
+                userListener();
+            }
+        };
+    }, [userListener]);
 
     // Função para carregar informações salvas
     const loadSavedUserInfo = async () => {
@@ -41,67 +162,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Função para atualizar informações do usuário
-    const updateUserInfo = async () => {
-        try {
-            setIsLoading(true);
-            const userEmail = await AsyncStorage.getItem('userEmail');
-
-
-            if (!userEmail) {
-                throw new Error('Email do usuário não encontrado');
-            }
-
-            const email = userEmail.replace(/"/g, "").toLowerCase();
-
-            const usersSnapshot = await firestore()
-                .collection('users')
-                .get();
-
-            const userDoc = usersSnapshot.docs.find(doc => {
-                const userData = doc.data();
-                return userData.email.toLowerCase() === email.toLowerCase();
-            });
-
-            if (!userDoc) {
-                throw new Error('Usuário não encontrado');
-            }
-
-            const userData = userDoc.data();
-
-            const userWithId: User = {
-                id: userDoc.id,
-                user: userData.user || '',
-                email: userData.email,
-                cargo: userData.cargo || '',
-                ...(userData.telefone && { telefone: userData.telefone }),
-                ...(userData.ramal && { ramal: userData.ramal }),
-                ...(userData.area && { area: userData.area }),
-                ...(userData.acesso && { acesso: userData.acesso }),
-            };
-
-            setUserInfo(userWithId);
-
-            await AsyncStorage.setItem('@UserInfo', JSON.stringify(userWithId));
-
-        } catch (error: any) {
-            console.error('Erro detalhado em updateUserInfo:', {
-                message: error?.message || 'Erro desconhecido',
-                code: error?.code,
-                stack: error?.stack
-            });
-            throw error;
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Nova função para limpar informações do usuário
     const clearUserInfo = async () => {
         try {
-            console.log('1. Iniciando processo de logout');
+            // Remove o listener se existir
+            if (userListener) {
+                userListener();
+                setUserListener(null);
+            }
 
-            // Lista de todas as chaves que precisam ser removidas
             const keysToRemove = [
                 '@UserInfo',
                 'userEmail',
@@ -109,23 +177,37 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                 'password',
                 'rememberMe',
                 '@cameraPermissionRequested'
-                // Adicione outras chaves que seu app possa usar
             ];
 
-            // Remove todas as chaves do AsyncStorage
             await Promise.all(keysToRemove.map(key => AsyncStorage.removeItem(key)));
-            console.log('2. Dados removidos do AsyncStorage');
-
-            // Limpa o estado do usuário
             setUserInfo(null);
-            console.log('3. Estado do usuário limpo');
 
-            console.log('4. Logout concluído com sucesso');
         } catch (error) {
             console.error('Erro ao fazer logout:', error);
             throw new Error('Falha ao fazer logout');
         }
     };
+
+    // Adicione esta função ao UserContext
+    const updateUserPhoto = async (photoURL: string) => {
+        try {
+            if (!userInfo?.id) throw new Error('Usuário não encontrado');
+
+            await firestore()
+                .collection('users')
+                .doc(userInfo.id)
+                .update({
+                    photoURL,
+                    updatedAt: firestore.FieldValue.serverTimestamp()
+                });
+
+            // Não precisa atualizar o state manualmente pois o listener fará isso
+        } catch (error) {
+            console.error('Erro ao atualizar foto:', error);
+            throw error;
+        }
+    };
+
 
     return (
         <UserContext.Provider
@@ -133,7 +215,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                 userInfo,
                 isLoading,
                 updateUserInfo,
-                clearUserInfo
+                clearUserInfo,
+                updateUserPhoto
             }}
         >
             {children}

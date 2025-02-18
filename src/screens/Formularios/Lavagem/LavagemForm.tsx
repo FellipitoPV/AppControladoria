@@ -77,6 +77,9 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
     const [selectedPhoto, setSelectedPhoto] = useState<{ uri: string; id: string } | null>(null);
     const [isFullScreenVisible, setIsFullScreenVisible] = useState(false);
 
+    const [numeroEquipamento, setNumeroEquipamento] = useState('');
+    const [showEquipmentNumber, setShowEquipmentNumber] = useState(false);
+
     const [customItems, setCustomItems] = useState<Array<{
         label: string;
         value: string;
@@ -126,7 +129,14 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
     const handleSelectItem = (item: any) => {
         setVeiculoSelecionado(item.value);
         setTipoVeiculo(item.tipo);
-        setSearchText(''); // Limpa o texto de busca após a seleção
+        setSearchText('');
+
+        // Controla a visibilidade do input de número do equipamento
+        setShowEquipmentNumber(item.tipo === 'equipamento');
+        // Reseta o número do equipamento se não for um equipamento
+        if (item.tipo !== 'equipamento') {
+            setNumeroEquipamento('');
+        }
     };
 
     const formatarDadosDropdown = () => {
@@ -236,26 +246,26 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
             errors.push("Selecione um veículo");
         }
 
+        // Validação do número do equipamento
+        if (tipoVeiculo === 'equipamento' && !numeroEquipamento) {
+            errors.push("Informe o número do equipamento");
+        }
+
         // Validação do tipo de lavagem
         if (!tipoLavagemSelecionado) {
             errors.push("Selecione o tipo de lavagem");
         }
 
         // Validação dos produtos
-        if (produtosSelecionados.length === 0) {
-            errors.push("Adicione pelo menos um produto");
-        } else {
+        if (produtosSelecionados.length > 0) {
             const produtosInvalidos = produtosSelecionados.some(
-                p => !p.produto || !p.quantidade || p.quantidade === '0'
+                p => (p.produto && (!p.quantidade || p.quantidade === '0')) || // Se tem produto, precisa ter quantidade
+                    (!p.produto && p.quantidade) // Se tem quantidade, precisa ter produto
             );
-            if (produtosInvalidos) {
-                errors.push("Preencha produto e quantidade para todos os produtos");
-            }
-        }
 
-        // Validação das fotos
-        if (photos.length === 0) {
-            errors.push("Adicione pelo menos uma foto");
+            if (produtosInvalidos) {
+                errors.push("Preencha a quantidade para os produtos selecionados");
+            }
         }
 
         setFormErrors(errors);
@@ -313,7 +323,8 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                 hora: formatTime(selectedDate),
                 veiculo: {
                     placa: veiculoSelecionado,
-                    tipo: tipoVeiculo
+                    tipo: tipoVeiculo,
+                    numeroEquipamento: tipoVeiculo === 'equipamento' ? numeroEquipamento : null
                 },
                 tipoLavagem: tipoLavagemSelecionado,
                 produtos: produtosSelecionados.map(p => ({
@@ -523,7 +534,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
             {/* Header */}
             <ModernHeader
                 title="Nova Lavagem"
-                iconName="local-car-wash"
+                iconName="car-wash"
                 onBackPress={() => navigation?.goBack()}
             />
 
@@ -708,6 +719,22 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                                 )}
                             />
                         </TouchableOpacity>
+
+                        {/* Novo input condicional para número do equipamento */}
+                        {showEquipmentNumber && (
+                            <TextInput
+                                mode="outlined"
+                                placeholder="Número do Equipamento"
+                                value={numeroEquipamento}
+                                onChangeText={setNumeroEquipamento}
+                                keyboardType="numeric"
+                                style={[styles.input, styles.equipmentNumberInput]}
+                                left={<TextInput.Icon icon={() => (
+                                    <Icon name="pin" size={24} color={customTheme.colors.primary} />
+                                )} />}
+                            />
+                        )}
+
                     </View>
 
                     {/* Tipo de Lavagem */}
@@ -1012,6 +1039,13 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 }
 
 const styles = StyleSheet.create({
+    vehicleInputsContainer: {
+        gap: 16,
+    },
+    equipmentNumberInput: {
+        backgroundColor: '#FFFFFF',
+        marginTop: 8,
+    },
     disabledDropdown: {
         backgroundColor: customTheme.colors.surfaceDisabled,
         opacity: 0.7,

@@ -8,8 +8,8 @@ import {
     Dimensions,
 } from 'react-native';
 import { Text } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import { customTheme } from '../../../../theme/theme';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { customTheme } from '../../../theme/theme';
 import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
 
 const QuickActionsGrid = () => {
@@ -17,9 +17,8 @@ const QuickActionsGrid = () => {
     const navigation = useNavigation<NavigationProp<ParamListBase>>();
 
     const quickActions = [
-        { id: '1', title: 'Lavagem', icon: 'local-car-wash', color: '#6B7AFF', route: 'LavagemScreen' },
-        { id: '2', title: 'The Movie', icon: 'movie', color: '#FF6B6B', route: 'TheMovie' },
-        { id: '3', title: 'Professional', icon: 'work', color: '#6BCB77', route: 'Professional' },
+        { id: '1', title: 'Lavagem', icon: 'car-wash', color: '#6B7AFF', route: 'LavagemScreen' },
+        { id: '2', title: 'Compostagem', icon: 'sprout', color: '#FF6B6B', route: 'CompostagemScreen' },
         { id: '4', title: 'Contatos', icon: 'phone', color: '#f279a0', route: 'Contatos' },
     ];
 

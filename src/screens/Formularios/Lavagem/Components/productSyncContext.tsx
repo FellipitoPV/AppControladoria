@@ -79,6 +79,8 @@ export function ProductSyncProvider({ children }: { children: React.ReactNode })
                         });
                     });
 
+                    console.log(produtosData)
+
                     setProdutos(produtosData);
                     saveProdutosLocally(produtosData);
                     setLastSyncTime(new Date());
@@ -139,6 +141,7 @@ export function ProductSyncProvider({ children }: { children: React.ReactNode })
         if (netInfo.isConnected) {
             setSyncStatus('syncing');
             startFirestoreSync();
+            console.log("Atualizando")
         }
     };
 

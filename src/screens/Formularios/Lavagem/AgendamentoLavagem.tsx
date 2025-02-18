@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View,
     ScrollView,
@@ -17,6 +17,8 @@ import {
     Avatar,
     Chip,
     Divider,
+    Dialog,
+    Portal,
 } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import DropDownPicker from 'react-native-dropdown-picker';
@@ -31,6 +33,8 @@ import { PLACAS_VEICULOS, EQUIPAMENTOS, TIPOS_LAVAGEM, IAgendamentoLavagem } fro
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
 import LocalAgendamentoCard from './Components/LocalAgendamentoCard';
+import { Dropdown } from 'react-native-element-dropdown';
+import { DropdownRef } from '../../../helpers/Types';
 
 export default function AgendamentoLavagem({ navigation }: any) {
     const { isOnline } = useNetwork();
@@ -53,6 +57,9 @@ export default function AgendamentoLavagem({ navigation }: any) {
     // Estados para os DropDownPickers
     const [openPlacas, setOpenPlacas] = useState(false);
     const [openTipoLavagem, setOpenTipoLavagem] = useState(false);
+
+    const veiculoRef = useRef<DropdownRef>(null);
+    const tipoLavagemRef = useRef<DropdownRef>(null);
 
     // Formatando os dados para o formato do DropDownPicker
     const placasItems = [...PLACAS_VEICULOS, ...EQUIPAMENTOS].map(item => ({
@@ -136,98 +143,152 @@ export default function AgendamentoLavagem({ navigation }: any) {
         setIsEquipamento(false);
     };
 
-    const AgendamentoCard = ({ item, onPress }: { item: IAgendamentoLavagem; onPress: () => void }) => (
-        <Surface style={[styles.card, item.concluido && styles.cardConcluido]}>
-            <TouchableOpacity
-                onPress={onPress}
-                disabled={item.concluido}
-                style={styles.cardTouchable}
-            >
-                {/* Barra de gradiente superior */}
-                <View style={[
-                    styles.cardGradient,
-                    { backgroundColor: item.concluido ? customTheme.colors.surfaceVariant : customTheme.colors.primary }
-                ]} />
+    const AgendamentoCard = ({ item, onPress }: { item: IAgendamentoLavagem; onPress: () => void }) => {
+        const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-                <View style={styles.cardContent}>
+        const handleDelete = async () => {
+            try {
+                await firestore().collection('agendamentos').doc(item.id).delete();
+                await forceSync('agendamentos');
+                showGlobalToast('success', 'Sucesso', 'Agendamento excluído com sucesso', 4000);
+            } catch (error) {
+                console.error('Erro ao excluir agendamento:', error);
+                showGlobalToast('error', 'Erro', 'Não foi possível excluir o agendamento', 4000);
+            }
+        };
 
-                    {/* Cabeçalho do Card */}
-                    <View style={styles.cardHeader}>
-                        <View style={styles.headerLeft}>
-                            <Avatar.Icon
-                                size={48}
-                                icon={() => (
-                                    <Icon
-                                        name={item.tipoVeiculo === 'equipamento' ? 'build' : 'directions-car'}
-                                        size={24}
-                                        color="#FFF"
-                                    />
-                                )}
-                                style={[
-                                    styles.avatar,
-                                    { backgroundColor: item.concluido ? customTheme.colors.surfaceVariant : customTheme.colors.primary }
-                                ]}
-                            />
-                            <View style={styles.headerInfo}>
-                                <Text variant="titleMedium" style={styles.plateText}>
-                                    {item.placa}
-                                </Text>
-                                <View style={styles.chipContainer}>
-                                    <Chip
-                                        mode="flat"
+        return (
+            <>
+                <Surface style={[styles.card, item.concluido && styles.cardConcluido]}>
+                    <TouchableOpacity
+                        onPress={onPress}
+                        disabled={item.concluido}
+                        style={styles.cardTouchable}
+                    >
+                        {/* Barra de gradiente superior */}
+                        <View style={[
+                            styles.cardGradient,
+                            { backgroundColor: item.concluido ? customTheme.colors.surfaceVariant : customTheme.colors.primary }
+                        ]} />
+
+                        <View style={styles.cardContent}>
+                            {/* Cabeçalho do Card */}
+                            <View style={styles.cardHeader}>
+                                <View style={styles.headerLeft}>
+                                    <Avatar.Icon
+                                        size={48}
+                                        icon={() => (
+                                            <Icon
+                                                name={item.tipoVeiculo === 'equipamento' ? 'build' : 'directions-car'}
+                                                size={24}
+                                                color="#FFF"
+                                            />
+                                        )}
                                         style={[
-                                            item.concluido ? styles.concludedChip : styles.pendingChip
+                                            styles.avatar,
+                                            { backgroundColor: item.concluido ? customTheme.colors.surfaceVariant : customTheme.colors.primary }
                                         ]}
-                                        textStyle={styles.chipText}
-                                    >
-                                        {item.concluido ? 'Concluído' : 'Pendente'}
-                                    </Chip>
+                                    />
+                                    <View style={styles.headerInfo}>
+                                        <Text variant="titleMedium" style={styles.plateText}>
+                                            {item.placa}
+                                        </Text>
+                                        <View style={styles.chipContainer}>
+                                            <Chip
+                                                mode="flat"
+                                                style={[
+                                                    item.concluido ? styles.concludedChip : styles.pendingChip
+                                                ]}
+                                                textStyle={styles.chipText}
+                                            >
+                                                {item.concluido ? 'Concluído' : 'Pendente'}
+                                            </Chip>
+                                        </View>
+                                    </View>
                                 </View>
+
+                                {/* Botão de exclusão para administradores */}
+                                {canScheduleWash && !item.concluido && (
+                                    <TouchableOpacity
+                                        style={styles.deleteButton}
+                                        onPress={() => setShowDeleteConfirm(true)}
+                                    >
+                                        <Icon
+                                            name="delete-outline"
+                                            size={24}
+                                            color={customTheme.colors.error}
+                                        />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            <Divider style={styles.divider} />
+
+                            {/* Informações da Lavagem */}
+                            <View style={styles.cardFooter}>
+                                <View style={styles.footerInfo}>
+                                    <Icon
+                                        name="local-car-wash"
+                                        size={20}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.footerText}>
+                                        Lavagem {item.tipoLavagem === 'simples' ? 'Simples' : 'Completa'}
+                                    </Text>
+                                </View>
+                                <View style={styles.footerInfo}>
+                                    <Icon
+                                        name="calendar-today"
+                                        size={20}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.footerText}>
+                                        {new Date(item.data).toLocaleDateString()}
+                                    </Text>
+                                </View>
+                                {!item.concluido && (
+                                    <View style={styles.footerInfo}>
+                                        <Icon
+                                            name="touch-app"
+                                            size={20}
+                                            color={customTheme.colors.primary}
+                                        />
+                                        <Text style={[styles.footerText, styles.actionText]}>
+                                            Toque para registrar
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
                         </View>
-                    </View>
+                    </TouchableOpacity>
+                </Surface>
 
-                    <Divider style={styles.divider} />
-
-                    {/* Informações da Lavagem */}
-                    <View style={styles.cardFooter}>
-                        <View style={styles.footerInfo}>
-                            <Icon
-                                name="local-car-wash"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                            <Text style={styles.footerText}>
-                                Lavagem {item.tipoLavagem === 'simples' ? 'Simples' : 'Completa'}
+                {/* Modal de confirmação de exclusão */}
+                <Portal>
+                    <Dialog visible={showDeleteConfirm} onDismiss={() => setShowDeleteConfirm(false)}>
+                        <Dialog.Title>Confirmar exclusão</Dialog.Title>
+                        <Dialog.Content>
+                            <Text variant="bodyMedium">
+                                Tem certeza que deseja excluir este agendamento? Esta ação não pode ser desfeita.
                             </Text>
-                        </View>
-                        <View style={styles.footerInfo}>
-                            <Icon
-                                name="calendar-today"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                            <Text style={styles.footerText}>
-                                {new Date(item.data).toLocaleDateString()}
-                            </Text>
-                        </View>
-                        {!item.concluido && (
-                            <View style={styles.footerInfo}>
-                                <Icon
-                                    name="touch-app"
-                                    size={20}
-                                    color={customTheme.colors.primary}
-                                />
-                                <Text style={[styles.footerText, styles.actionText]}>
-                                    Toque para registrar
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                </View>
-            </TouchableOpacity>
-        </Surface>
-    );
+                        </Dialog.Content>
+                        <Dialog.Actions>
+                            <Button onPress={() => setShowDeleteConfirm(false)}>Cancelar</Button>
+                            <Button
+                                onPress={() => {
+                                    handleDelete();
+                                    setShowDeleteConfirm(false);
+                                }}
+                                textColor={customTheme.colors.error}
+                            >
+                                Excluir
+                            </Button>
+                        </Dialog.Actions>
+                    </Dialog>
+                </Portal>
+            </>
+        );
+    };
 
     const handleCardPress = (item: IAgendamentoLavagem) => {
         if (item.concluido) return;
@@ -296,68 +357,155 @@ export default function AgendamentoLavagem({ navigation }: any) {
             >
                 <View style={styles.modalContainer}>
                     <Surface style={styles.modalContent}>
+                        {/* Header com ícone */}
                         <View style={styles.modalHeader}>
-                            <Text variant="titleLarge">Novo Agendamento</Text>
-                            <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                <Icon name="close" size={24} color={customTheme.colors.onSurface} />
+                            <View style={styles.modalHeaderContent}>
+                                <Icon name="my-library-add" size={28} color={customTheme.colors.primary} />
+                                <Text variant="headlineSmall" style={styles.modalTitle}>Novo Agendamento</Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => setModalVisible(false)}
+                                style={styles.closeButton}
+                            >
+                                <Icon name="close" size={24} color={customTheme.colors.onSurfaceVariant} />
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView>
-                            <DropDownPicker
-                                open={openPlacas}
-                                value={placaSelecionada}
-                                items={placasItems}
-                                setOpen={setOpenPlacas}
-                                setValue={setPlacaSelecionada}
-                                placeholder="Selecione a placa ou equipamento"
-                                style={styles.dropdown}
-                                dropDownContainerStyle={styles.dropdownContainer}
-                                placeholderStyle={styles.dropdownPlaceholder}
-                                listItemContainerStyle={styles.dropdownItemContainer}
-                                onChangeValue={(value) => {
-                                    setIsEquipamento(EQUIPAMENTOS.some(equip => equip.value === value));
-                                }}
-                                zIndex={3000}
-                                zIndexInverse={1000}
-                            />
+                        {/* Substitua a View do formulário por este código */}
+                        <View style={styles.modalFormContainer}>
+                            {/* Substitua a seção de Veículo/Equipamento por este código */}
+                            <View style={styles.inputSection}>
+                                <Text variant="titleSmall" style={styles.sectionTitle}>
+                                    <Icon name="directions-car" size={18} color={customTheme.colors.primary} /> Veículo/Equipamento
+                                </Text>
 
-                            {isEquipamento && (
-                                <TextInput
-                                    mode="outlined"
-                                    label="Número do Equipamento"
-                                    value={numeroEquipamento}
-                                    onChangeText={setNumeroEquipamento}
-                                    keyboardType="numeric"
-                                    style={[styles.input, { marginTop: 16 }]}
-                                    left={<TextInput.Icon icon={() => (
-                                        <Icon name="123" size={24} color={customTheme.colors.primary} />
-                                    )} />}
-                                />
-                            )}
+                                <TouchableOpacity
+                                    style={styles.dropdownContainer}
+                                    activeOpacity={0.7}
+                                    onPress={() => veiculoRef.current?.open()}
+                                >
+                                    <Dropdown
+                                        ref={veiculoRef}
+                                        autoScroll={false}
+                                        style={styles.dropdown}
+                                        placeholderStyle={styles.placeholderStyle}
+                                        selectedTextStyle={styles.selectedTextStyle}
+                                        inputSearchStyle={styles.inputSearchStyle}
+                                        iconStyle={styles.iconStyle}
+                                        data={placasItems}
+                                        search
+                                        maxHeight={300}
+                                        labelField="label"
+                                        valueField="value"
+                                        placeholder="Selecione a placa ou equipamento"
+                                        searchPlaceholder="Digite para buscar..."
+                                        value={placaSelecionada}
+                                        onChange={item => {
+                                            setPlacaSelecionada(item.value);
+                                            setIsEquipamento(EQUIPAMENTOS.some(equip => equip.value === item.value));
+                                        }}
+                                        renderLeftIcon={() => (
+                                            <Icon
+                                                style={styles.dropdownIcon}
+                                                name={isEquipamento ? 'build' : 'directions-car'}
+                                                size={20}
+                                                color={customTheme.colors.primary}
+                                            />
+                                        )}
+                                        renderItem={item => (
+                                            <View style={styles.dropdownItem}>
+                                                <Icon
+                                                    name={EQUIPAMENTOS.some(equip => equip.value === item.value) ? 'build' : 'directions-car'}
+                                                    size={20}
+                                                    color={customTheme.colors.primary}
+                                                />
+                                                <Text style={styles.dropdownLabel}>
+                                                    {item.label}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    />
+                                </TouchableOpacity>
 
-                            <View style={{ marginTop: 16 }}>
-                                <DropDownPicker
-                                    open={openTipoLavagem}
-                                    value={tipoLavagemSelecionado}
-                                    items={tiposLavagemItems}
-                                    setOpen={setOpenTipoLavagem}
-                                    setValue={setTipoLavagemSelecionado}
-                                    placeholder="Selecione o tipo de lavagem"
-                                    style={styles.dropdown}
-                                    dropDownContainerStyle={styles.dropdownContainer}
-                                    placeholderStyle={styles.dropdownPlaceholder}
-                                    listItemContainerStyle={styles.dropdownItemContainer}
-                                    zIndex={2000}
-                                    zIndexInverse={2000}
-                                />
+                                {isEquipamento && (
+                                    <TextInput
+                                        mode="outlined"
+                                        label="Número do Equipamento"
+                                        value={numeroEquipamento}
+                                        onChangeText={setNumeroEquipamento}
+                                        keyboardType="numeric"
+                                        style={styles.input}
+                                        left={<TextInput.Icon icon={() => (
+                                            <Icon name="123" size={24} color={customTheme.colors.primary} />
+                                        )} />}
+                                    />
+                                )}
+                            </View>
+
+                            {/* Substitua a seção de Tipo de Lavagem por este código */}
+                            <View style={styles.inputSection}>
+                                <Text variant="titleSmall" style={styles.sectionTitle}>
+                                    <Icon name="local-car-wash" size={18} color={customTheme.colors.primary} /> Tipo de Lavagem
+                                </Text>
+
+                                <TouchableOpacity
+                                    style={styles.dropdownContainer}
+                                    activeOpacity={0.7}
+                                    onPress={() => tipoLavagemRef.current?.open()}
+                                >
+                                    <Dropdown
+                                        ref={tipoLavagemRef}
+                                        style={styles.dropdown}
+                                        placeholderStyle={styles.placeholderStyle}
+                                        selectedTextStyle={styles.selectedTextStyle}
+                                        inputSearchStyle={styles.inputSearchStyle}
+                                        iconStyle={styles.iconStyle}
+                                        data={tiposLavagemItems}
+                                        maxHeight={300}
+                                        labelField="label"
+                                        valueField="value"
+                                        placeholder="Selecione o tipo de lavagem"
+                                        value={tipoLavagemSelecionado}
+                                        onChange={item => {
+                                            setTipoLavagemSelecionado(item.value);
+                                        }}
+                                        renderLeftIcon={() => (
+                                            <Icon
+                                                style={styles.dropdownIcon}
+                                                name="local-car-wash"
+                                                size={20}
+                                                color={customTheme.colors.primary}
+                                            />
+                                        )}
+                                        renderItem={item => (
+                                            <View style={styles.dropdownItem}>
+                                                <Icon
+                                                    name="local-car-wash"
+                                                    size={20}
+                                                    color={customTheme.colors.primary}
+                                                />
+                                                <Text style={styles.dropdownLabel}>
+                                                    {item.label}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Seção de Data */}
+                            <View style={styles.inputSection}>
+                                <Text variant="titleSmall" style={styles.sectionTitle}>
+                                    <Icon name="event" size={18} color={customTheme.colors.primary} /> Data do Agendamento
+                                </Text>
 
                                 <TouchableOpacity
                                     style={styles.datePickerButton}
                                     onPress={() => setMostrarDatePicker(true)}
                                 >
                                     <Icon name="calendar-month" size={20} color={customTheme.colors.primary} />
-                                    <Text>{dataSelecionada.toLocaleDateString()}</Text>
+                                    <Text style={styles.dateText}>{dataSelecionada.toLocaleDateString()}</Text>
+                                    <Icon name="arrow-drop-down" size={24} color={customTheme.colors.primary} />
                                 </TouchableOpacity>
 
                                 {mostrarDatePicker && (
@@ -373,25 +521,193 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                         }}
                                     />
                                 )}
-
-                                <Button
-                                    mode="contained"
-                                    onPress={handleAgendar}
-                                    style={styles.agendarButton}
-                                    disabled={!placaSelecionada || !tipoLavagemSelecionado || (isEquipamento && !numeroEquipamento)}
-                                >
-                                    Agendar Lavagem
-                                </Button>
                             </View>
-                        </ScrollView>
+                        </View>
+
+                        {/* Footer com botões */}
+                        <View style={styles.modalFooter}>
+                            <Button
+                                mode="outlined"
+                                onPress={() => setModalVisible(false)}
+                                style={styles.cancelButton}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                mode="contained"
+                                onPress={handleAgendar}
+                                style={styles.agendarButton}
+                                disabled={!placaSelecionada || !tipoLavagemSelecionado || (isEquipamento && !numeroEquipamento)}
+                                icon="check"
+                            >
+                                Agendar Lavagem
+                            </Button>
+                        </View>
+
                     </Surface>
                 </View>
             </Modal>
+
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
+    deleteButton: {
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: `${customTheme.colors.error}10`,
+    },
+    dropdownContainer: {
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+        borderRadius: 8,
+        backgroundColor: '#FFFFFF',
+    },
+    dropdown: {
+        height: 56,
+        borderColor: customTheme.colors.outline,
+        borderRadius: 8,
+        paddingHorizontal: 16,
+        backgroundColor: '#FFFFFF',
+    },
+    dropdownIcon: {
+        marginRight: 12,
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        gap: 12,
+    },
+    placeholderStyle: {
+        fontSize: 16,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    selectedTextStyle: {
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
+    },
+    inputSearchStyle: {
+        height: 48,
+        fontSize: 16,
+        borderRadius: 8,
+    },
+    iconStyle: {
+        width: 20,
+        height: 20,
+    },
+    dropdownLabel: {
+        flex: 1,
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
+    },
+
+    modalContent: {
+        backgroundColor: customTheme.colors.surface,
+        borderRadius: 28,
+        padding: 24,
+        elevation: 5,
+        // Removido maxHeight para permitir que o conteúdo defina a altura
+    },
+    modalFormContainer: {
+        gap: 16, // Reduzido o espaçamento entre as seções
+    },
+    inputSection: {
+        gap: 8, // Reduzido o espaçamento interno das seções
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+        borderRadius: 12,
+        padding: 12, // Reduzido o padding
+        backgroundColor: customTheme.colors.surface,
+        height: 50, // Altura fixa para manter consistência
+    },
+
+    input: {
+        backgroundColor: customTheme.colors.surface,
+        height: 50, // Altura fixa para o input
+    },
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        padding: 16,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    modalHeaderContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    modalTitle: {
+        color: customTheme.colors.onSurface,
+        fontWeight: '600',
+    },
+    closeButton: {
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: `${customTheme.colors.onSurfaceVariant}10`,
+    },
+    modalScroll: {
+        maxHeight: '100%',
+    },
+    modalBody: {
+        gap: 24,
+    },
+    sectionTitle: {
+        color: customTheme.colors.onSurfaceVariant,
+        marginBottom: 4,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    dropdownPlaceholder: {
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    dropdownItemContainer: {
+        height: 56,
+        padding: 14,
+    },
+    dateText: {
+        flex: 1,
+        marginLeft: 12,
+        color: customTheme.colors.onSurface,
+        fontSize: 16,
+    },
+    modalFooter: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+        marginTop: 24,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: customTheme.colors.outlineVariant,
+    },
+    cancelButton: {
+        flex: 1,
+    },
+    agendarButton: {
+        flex: 2,
+    },
+    emptyList: {
+        padding: 16,
+        alignItems: 'center',
+    },
+    emptyListText: {
+        color: customTheme.colors.onSurfaceVariant,
+    },
+
     // Estilos do Card
     cardTouchable: {
         width: '100%',
@@ -526,9 +842,6 @@ const styles = StyleSheet.create({
     plateText: {
         fontWeight: '600',
     },
-    dateText: {
-        color: customTheme.colors.onSurfaceVariant,
-    },
     concludedChip: {
         backgroundColor: `${customTheme.colors.primary}15`,
     },
@@ -560,57 +873,5 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         elevation: 4,
-    },
-    modalContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        padding: 16,
-    },
-    modalContent: {
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 16,
-        padding: 20,
-        maxHeight: '80%',
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    input: {
-        backgroundColor: customTheme.colors.surface,
-        marginBottom: 16,
-    },
-    dropdown: {
-        borderColor: customTheme.colors.outline,
-        borderRadius: 8,
-        backgroundColor: customTheme.colors.surface,
-        minHeight: 50,
-    },
-    dropdownContainer: {
-        borderColor: customTheme.colors.outline,
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 8,
-    },
-    dropdownPlaceholder: {
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    dropdownItemContainer: {
-        height: 50,
-    },
-    datePickerButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 16,
-    },
-    agendarButton: {
-        marginTop: 8,
     },
 });

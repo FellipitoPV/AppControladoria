@@ -20,6 +20,10 @@ import LavagemScreen from './src/screens/Formularios/Lavagem/LavagemScreen';
 import ContatosScreen from './src/screens/Contatos/ContatosScreen';
 import AgendamentoLavagem from './src/screens/Formularios/Lavagem/AgendamentoLavagem';
 import HistoricoLavagem from './src/screens/Formularios/Lavagem/HistoricoLavagem';
+import ControleEstoque from './src/screens/Formularios/Lavagem/ControleEstoque';
+import CompostagemScreen from './src/screens/Formularios/Compostagem/CompostagemScreen';
+import CompostagemForm from './src/screens/Formularios/Compostagem/CompostagemForm';
+import CompostagemHistory from './src/screens/Formularios/Compostagem/CompostagemHistory';
 
 const Stack = createStackNavigator();
 
@@ -140,6 +144,12 @@ export default function App() {
               <Stack.Screen name="LavagemForm" component={NovaLavagem} options={{ headerShown: false, gestureEnabled: false }} />
               <Stack.Screen name="LavagemAgend" component={AgendamentoLavagem} options={{ headerShown: false, gestureEnabled: false }} />
               <Stack.Screen name="LavagemHist" component={HistoricoLavagem} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="LavagemEstoq" component={ControleEstoque} options={{ headerShown: false, gestureEnabled: false }} />
+
+              {/* Compostagem */}
+              <Stack.Screen name="CompostagemScreen" component={CompostagemScreen} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="CompostagemForm" component={CompostagemForm} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="CompostagemHistory" component={CompostagemHistory} options={{ headerShown: false, gestureEnabled: false }} />
 
               {/* Contatos */}
               <Stack.Screen name="Contatos" component={ContatosScreen} options={{ headerShown: false, gestureEnabled: false }} />

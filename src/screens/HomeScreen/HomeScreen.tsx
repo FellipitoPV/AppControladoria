@@ -28,10 +28,11 @@ import { customTheme } from '../../theme/theme';
 import { useUser } from '../../contexts/userContext';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 import { useAppUpdater } from '../../helpers/AppUpdater';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import FeedbackFloatingButton from '../../assets/components/FeedbackFloatingButton';
 import { useNetwork } from '../../contexts/NetworkContext';
-import QuickActionsGrid from '../Formularios/Lavagem/Components/QuickActionsGrid';
+import QuickActionsGrid from './components/QuickActionsGrid';
+import UserInfoModal from '../../assets/components/UserInfoModal';
 
 interface CarouselItem {
     id: string;
@@ -45,6 +46,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     const [logoutModalVisible, setLogoutModalVisible] = useState(false);
     const [updateModalVisible, setUpdateModalVisible] = useState(false);
     const permissionsChecked = useRef(false);
+    const [isUserModalVisible, setIsUserModalVisible] = useState(false);
 
     const [backPressedOnce, setBackPressedOnce] = useState(false);
 
@@ -220,20 +222,43 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 {/* Novo Header */}
                 <View style={styles.header}>
                     <View style={styles.headerContent}>
+                        <TouchableOpacity
+                            style={styles.avatarContainer}
+                            onPress={() => setIsUserModalVisible(true)}
+                        >
+                            {userInfo?.photoURL ? (
+                                <Image
+                                    source={{ uri: userInfo.photoURL }}
+                                    style={styles.avatar}
+                                />
+                            ) : (
+                                <Icon
+                                    name="account"
+                                    size={40}
+                                    color={customTheme.colors.primary}
+                                />
+                            )}
+                        </TouchableOpacity>
+
                         <View style={styles.searchContainer}>
-                            <Icon name="search" size={24} color={customTheme.colors.onSurfaceVariant} />
+                            <Icon
+                                name="magnify"
+                                size={24}
+                                color={customTheme.colors.onSurfaceVariant}
+                            />
                             <TextInput
                                 placeholder="Pesquisar recurso..."
                                 style={styles.searchInput}
                                 placeholderTextColor={customTheme.colors.onSurfaceVariant}
                             />
                         </View>
+
                         <TouchableOpacity
                             style={styles.contactButton}
                             onPress={() => {/* Função para contato */ }}
                         >
                             <Icon
-                                name="chat-bubble-outline"
+                                name="message-outline"
                                 size={24}
                                 color={customTheme.colors.primary}
                             />
@@ -247,6 +272,15 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                     {/* Resto do conteúdo ... */}
                 </ScrollView>
 
+                {userInfo && (
+                    <UserInfoModal
+                        visible={isUserModalVisible}
+                        onLogout={() => handleLogout()}
+                        onClose={() => setIsUserModalVisible(false)}
+                        userInfo={userInfo}
+                    />
+                )}
+
             </Surface>
         </SafeAreaView>
     );
@@ -254,6 +288,19 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
 const { width } = Dimensions.get('window');
 const styles = StyleSheet.create({
+    avatarContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: customTheme.colors.primaryContainer,
+        justifyContent: 'center',
+        alignItems: 'center',
+        overflow: 'hidden', // Importante para garantir que a imagem respeite o borderRadius
+    },
+    avatar: {
+        width: '100%',
+        height: '100%',
+    },    
     offlinePlaceholder: {
         height: 200, // Mesma altura do carrossel
         marginHorizontal: 16,
@@ -470,14 +517,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-    },
-    avatarContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: customTheme.colors.primaryContainer,
-        justifyContent: 'center',
-        alignItems: 'center',
     },
     userTextContainer: {
         marginLeft: 12,

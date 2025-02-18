@@ -5,6 +5,7 @@ import {
     StyleSheet,
     SafeAreaView,
     Dimensions,
+    TouchableOpacity,
 } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import { customTheme } from '../../theme/theme';
@@ -27,36 +28,38 @@ export default function WelcomeScreen({ onClose }: { onClose: () => void }) {
             {/* Área dos Botões */}
             <View style={styles.buttonContainer}>
                 <Text variant="headlineMedium" style={styles.welcomeText}>
-                    Bem-vindo ao Sistema Integrado de Gestão Corporativa
+                    Bem-vindo ao Sistema Integrado de Gestão da Ecologika
                 </Text>
 
-                <Button
-                    mode="contained"
+                <TouchableOpacity
                     style={styles.loginButton}
                     onPress={() => onClose()}
                 >
-                    Login
-                </Button>
+                    <Text style={styles.loginText}>
+                        Login
+                    </Text>
+                </TouchableOpacity>
 
-                <Button
-                    mode="outlined"
+                <TouchableOpacity
                     style={styles.registerButton}
-                    textColor={customTheme.colors.primary}
                     onPress={() => console.log('Register')}
                 >
-                    Registrar
-                </Button>
+                    <Text style={styles.registerText}>
+                        Registrar
+                    </Text>
+                </TouchableOpacity>
 
-                <Button
-                    mode="text"
+                <TouchableOpacity
                     style={styles.guestButton}
-                    textColor={customTheme.colors.primary}
                     onPress={() => console.log('GuestLogin')}
                 >
-                    Continuar como convidado
-                </Button>
+                    <Text style={styles.guestText}>
+                        Continuar como convidado
+                    </Text>
+                </TouchableOpacity>
+
             </View>
-        </SafeAreaView>
+        </SafeAreaView >
     );
 }
 
@@ -88,17 +91,29 @@ const styles = StyleSheet.create({
         color: customTheme.colors.primary,
     },
     loginButton: {
-        paddingVertical: 8,
+        paddingVertical: 20,
         borderRadius: 12,
         backgroundColor: customTheme.colors.primary,
     },
+    loginText: {
+        textAlign: 'center',
+        color: customTheme.colors.onPrimary,
+    },
     registerButton: {
-        paddingVertical: 8,
+        paddingVertical: 20,
         borderRadius: 12,
-        borderWidth: 2,
-        borderColor: customTheme.colors.primary,
+        backgroundColor: customTheme.colors.surface,
+        borderWidth: 1
+    },
+    registerText: {
+        textAlign: 'center',
+        color: customTheme.colors.onSurface,
     },
     guestButton: {
         marginTop: 8,
+    },
+    guestText: {
+        textAlign: 'center',
+        color: customTheme.colors.primary,
     },
 });
