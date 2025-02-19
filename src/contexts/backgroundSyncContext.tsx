@@ -153,7 +153,6 @@ export function BackgroundSyncProvider({ children }: { children: React.ReactNode
         }
     };
 
-
     // Inicialização
     useEffect(() => {
         const initialize = async () => {

@@ -27,7 +27,7 @@ interface LavagemStats {
     total: number;
 }
 
-export default function LavagemScreen({ navigation }: any) {
+export default function OperacaoScreen({ navigation }: any) {
     const [stats, setStats] = useState<LavagemStats>({
         hoje: 0,
         semana: 0,
@@ -225,7 +225,7 @@ export default function LavagemScreen({ navigation }: any) {
             
             {/* Header */}
             <ModernHeader
-                title="Gestão de Lavagens"
+                title="Operação"
                 iconName="car-wash"
                 onBackPress={() => navigation.goBack()}
             />
@@ -320,16 +320,6 @@ export default function LavagemScreen({ navigation }: any) {
                                 <Icon name="history" size={24} color={customTheme.colors.tertiary} />
                             </View>
                             <Text style={styles.actionText}>Histórico</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('LavagemRelat')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.tertiaryContainer }]}>
-                                <Icon name="history" size={24} color={customTheme.colors.tertiary} />
-                            </View>
-                            <Text style={styles.actionText}>Gerar Relatório</Text>
                         </TouchableOpacity>
 
                         {/* TODO Pegar um exemplo de relatorio de lavagem deles */}

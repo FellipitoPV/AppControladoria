@@ -32,12 +32,16 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import FeedbackFloatingButton from '../../assets/components/FeedbackFloatingButton';
 import { useNetwork } from '../../contexts/NetworkContext';
 import QuickActionsGrid from './components/QuickActionsGrid';
-import UserInfoModal from '../../assets/components/UserInfoModal';
+import UserInfoModal from './components/UserInfoModal';
+import storage from '@react-native-firebase/storage';
 
 interface CarouselItem {
     id: string;
     imageUrl: string;
 }
+
+const { width } = Dimensions.get('window');
+const CARD_WIDTH = width - 32; // Mesma largura útil que o QuickActionsGrid
 
 export default function HomeScreen({ navigation }: { navigation: any }) {
     const { userInfo, isLoading, clearUserInfo } = useUser();
@@ -52,17 +56,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
     const [currentIndex, setCurrentIndex] = useState(0);
     const scrollViewRef = useRef<ScrollView>(null);
-    const [carouselData, setCarouselData] = useState<CarouselItem[]>([
-        {
-            id: '1',
-            imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR2XpyBvqRYDHa_95P5myrUcYHnMKeKk4T0TKs9tRy3e7FSs0Z7EN2hRh8QUsAMQ9mhtqA&usqp=CAU'
-        },
-        {
-            id: '2',
-            imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSI6ycAmETA2kerr7WxrBH4zFWTAZAY-78xmw&s'
-        },
-        // ... mais itens
-    ]);
+    const [carouselData, setCarouselData] = useState<CarouselItem[]>([]);
+    const [carouselLoading, setCarouselLoading] = useState(true);
 
     const {
         updateInfo,
@@ -76,6 +71,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             checkPermissions();
             permissionsChecked.current = true;
         }
+
+        console.log(userInfo?.acesso)
+        console.log(userInfo?.cargo)
 
         const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
             // Verifica se é uma ação de reset (logout) ou uma navegação normal
@@ -170,6 +168,41 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         return () => clearInterval(interval);
     }, [scrollToNextItem]);
 
+    const fetchCarouselImages = async () => {
+        try {
+            // Referência para a pasta no Storage
+            const storageRef = storage().ref('carrosel_Mobile');
+
+            // Lista todos os itens na pasta
+            const result = await storageRef.list();
+
+            // Obtém as URLs de download para cada imagem
+            const imagePromises = result.items.map(async (item) => {
+                const url = await item.getDownloadURL();
+                const metadata = await item.getMetadata();
+
+                return {
+                    id: item.name, // Usa o nome do arquivo como ID
+                    imageUrl: url,
+                    createdAt: metadata.timeCreated // Para ordenação
+                };
+            });
+
+            const images = await Promise.all(imagePromises);
+
+            // Ordena as imagens por data de criação (mais recentes primeiro)
+            const sortedImages = images.sort((a, b) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+
+            setCarouselData(sortedImages);
+        } catch (error) {
+            console.error('Erro ao carregar imagens do carrossel:', error);
+        } finally {
+            setCarouselLoading(false);
+        }
+    };
+
     //Renders
     const renderCarouselContent = () => {
         if (!isOnline) {
@@ -190,30 +223,99 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             );
         }
 
+        if (carouselLoading) {
+            return (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator
+                        size="large"
+                        color={customTheme.colors.primary}
+                    />
+                </View>
+            );
+        }
+
+        if (carouselData.length === 0) {
+            return (
+                <View style={styles.emptyContainer}>
+                    <Icon
+                        name="image-off"
+                        size={40}
+                        color={customTheme.colors.onSurfaceVariant}
+                    />
+                    <Text style={styles.emptyText}>
+                        Nenhuma imagem disponível
+                    </Text>
+                </View>
+            );
+        }
+
         return (
             <ScrollView
                 ref={scrollViewRef}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 decelerationRate="fast"
-                snapToInterval={width - 32}
+                snapToInterval={width}
                 snapToAlignment="center"
-                contentContainerStyle={styles.carouselContainer}
-                onMomentumScrollEnd={handleScrollEnd}
                 pagingEnabled
+                onMomentumScrollEnd={handleScrollEnd}
             >
                 {carouselData.map((item) => (
-                    <View key={item.id} style={styles.carouselItem}>
-                        <Image
-                            source={{ uri: item.imageUrl }}
-                            style={styles.carouselImage}
-                            resizeMode="cover"
-                        />
+                    <View
+                        key={item.id}
+                        style={[styles.carouselItemWrapper, { width }]}
+                    >
+                        <View style={styles.carouselItem}>
+                            <Image
+                                source={{ uri: item.imageUrl }}
+                                style={styles.carouselImage}
+                                resizeMode="cover"
+                            />
+                        </View>
                     </View>
                 ))}
             </ScrollView>
         );
     };
+
+
+    useEffect(() => {
+        fetchCarouselImages();
+    }, []);
+
+
+    const DevelopmentAlert = () => (
+        <Card style={styles.developmentCard}>
+            <View style={styles.developmentContent}>
+                <View style={styles.iconContainer}>
+                    <Icon
+                        name="tools"
+                        size={32}
+                        color={customTheme.colors.onPrimary}
+                    />
+                </View>
+
+                <Text style={styles.developmentTitle}>
+                    Em Desenvolvimento
+                </Text>
+
+                <Text style={styles.developmentText}>
+                    Novas funcionalidades serão adicionadas em breve!
+                </Text>
+
+                <View style={styles.buildingContainer}>
+                    <Icon
+                        name="clock-outline"
+                        size={16}
+                        color={customTheme.colors.onPrimary}
+                    />
+                    <Text style={styles.buildingText}>
+                        Recursos em construção
+                    </Text>
+                </View>
+            </View>
+        </Card>
+    );
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -234,7 +336,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                             ) : (
                                 <Icon
                                     name="account"
-                                    size={40}
+                                    size={30}
                                     color={customTheme.colors.primary}
                                 />
                             )}
@@ -253,22 +355,13 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                             />
                         </View>
 
-                        <TouchableOpacity
-                            style={styles.contactButton}
-                            onPress={() => {/* Função para contato */ }}
-                        >
-                            <Icon
-                                name="message-outline"
-                                size={24}
-                                color={customTheme.colors.primary}
-                            />
-                        </TouchableOpacity>
                     </View>
                 </View>
 
                 <ScrollView style={styles.content}>
                     {renderCarouselContent()}
-                    {QuickActionsGrid()}
+                    <QuickActionsGrid />
+                    <DevelopmentAlert />
                     {/* Resto do conteúdo ... */}
                 </ScrollView>
 
@@ -286,8 +379,102 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     );
 }
 
-const { width } = Dimensions.get('window');
 const styles = StyleSheet.create({
+    carouselItemWrapper: {
+        paddingHorizontal: 16, // Mesmo padding do QuickActionsGrid
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    carouselItem: {
+        width: '100%',
+        height: 180,
+        borderRadius: 16,
+        overflow: 'hidden',
+        backgroundColor: customTheme.colors.surfaceVariant,
+    },
+    carouselImage: {
+        width: '100%',
+        height: '100%',
+    },
+
+    carousel: {
+        flexGrow: 0,
+        height: 200, // Ajuste conforme necessário
+    },
+    carouselItemContainer: {
+        width: width,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingContainer: {
+        height: 200,
+        marginHorizontal: 16,
+        backgroundColor: customTheme.colors.surfaceVariant,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    emptyContainer: {
+        height: 200,
+        marginHorizontal: 16,
+        backgroundColor: customTheme.colors.surfaceVariant,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+    },
+    emptyText: {
+        fontSize: 16,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    developmentCard: {
+        marginHorizontal: 16,
+        marginTop: 16,
+        marginBottom: 24,
+        borderRadius: 16,
+        backgroundColor: customTheme.colors.surfaceVariant,
+        overflow: 'hidden',
+    },
+    developmentContent: {
+        padding: 20,
+        alignItems: 'center',
+    },
+    iconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: customTheme.colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    developmentTitle: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+        marginBottom: 8,
+    },
+    developmentText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurfaceVariant,
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: 16,
+    },
+    buildingContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: customTheme.colors.primary,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        gap: 6,
+    },
+    buildingText: {
+        fontSize: 12,
+        color: customTheme.colors.onPrimary,
+        fontWeight: '500',
+    },
     avatarContainer: {
         width: 40,
         height: 40,
@@ -300,7 +487,7 @@ const styles = StyleSheet.create({
     avatar: {
         width: '100%',
         height: '100%',
-    },    
+    },
     offlinePlaceholder: {
         height: 200, // Mesma altura do carrossel
         marginHorizontal: 16,
@@ -320,22 +507,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: customTheme.colors.onSurfaceVariant,
         opacity: 0.8,
-    },
-    carouselContainer: {
-        paddingHorizontal: 16,
-        paddingBottom: 16,
-        gap: 12,
-    },
-    carouselItem: {
-        width: width * 0.8, // 80% da largura da tela
-        height: 180,
-        borderRadius: 16,
-        overflow: 'hidden',
-        backgroundColor: customTheme.colors.surfaceVariant,
-    },
-    carouselImage: {
-        width: '100%',
-        height: '100%',
     },
     carouselTextContainer: {
         position: 'absolute',

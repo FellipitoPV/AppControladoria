@@ -12,7 +12,12 @@ import { customTheme } from '../../theme/theme';
 
 const { width, height } = Dimensions.get('window');
 
-export default function WelcomeScreen({ onClose }: { onClose: () => void }) {
+interface WelcomeScreenProps {
+    onClose: () => void;
+    navigation: any; // Idealmente você deveria usar o tipo correto do react-navigation
+}
+
+export default function WelcomeScreen({ onClose, navigation }: WelcomeScreenProps) {
 
     return (
         <SafeAreaView style={styles.container}>
@@ -42,19 +47,10 @@ export default function WelcomeScreen({ onClose }: { onClose: () => void }) {
 
                 <TouchableOpacity
                     style={styles.registerButton}
-                    onPress={() => console.log('Register')}
+                    onPress={() => navigation.navigate('Register')}
                 >
                     <Text style={styles.registerText}>
                         Registrar
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.guestButton}
-                    onPress={() => console.log('GuestLogin')}
-                >
-                    <Text style={styles.guestText}>
-                        Continuar como convidado
                     </Text>
                 </TouchableOpacity>
 

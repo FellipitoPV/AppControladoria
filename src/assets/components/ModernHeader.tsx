@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, View, TouchableOpacity, StyleProp, ViewStyle } from 'react-native';
 import { Surface, Text, useTheme, MD3Theme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { customTheme } from '../../theme/theme';
 
 interface ModernHeaderProps {
     /** Título a ser exibido no header */
@@ -29,17 +30,17 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
     rightIcon = 'close-circle', // Ícone padrão corrigido
     style,
 }) => {
-    const theme = useTheme<MD3Theme>();
 
     const styles = StyleSheet.create({
         header: {
-            padding: 16,
+            padding: 12,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
             elevation: 2,
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.surfaceVariant,
+            backgroundColor: customTheme.colors.surface,
+            borderBottomColor: customTheme.colors.surfaceVariant,
+            borderColor: customTheme.colors.inverseSurface,
             borderBottomWidth: 1,
         },
         headerContent: {
@@ -49,7 +50,7 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
         },
         headerTitle: {
             marginLeft: 12,
-            color: theme.colors.onSurface,
+            color: customTheme.colors.onSurface,
             fontWeight: '600',
         },
         icon: {
@@ -78,16 +79,16 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
                         <Icon
                             name="arrow-left" // Nome correto do ícone de voltar
                             size={24}
-                            color={theme.colors.primary}
+                            color={customTheme.colors.primary}
                         />
                     </TouchableOpacity>
                 )}
                 {iconName && (
-                    <View style={[styles.icon, { backgroundColor: theme.colors.primaryContainer }]}>
+                    <View style={[styles.icon, { backgroundColor: customTheme.colors.primaryContainer }]}>
                         <Icon
                             name={iconName}
                             size={24}
-                            color={theme.colors.primary}
+                            color={customTheme.colors.primary}
                         />
                     </View>
                 )}
@@ -103,7 +104,7 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
                     <Icon
                         name={rightIcon}
                         size={24}
-                        color={theme.colors.primary}
+                        color={customTheme.colors.primary}
                     />
                 </TouchableOpacity>
             )}

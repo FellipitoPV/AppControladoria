@@ -13,29 +13,39 @@ import {
     Button,
     ProgressBar,
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import firestore from '@react-native-firebase/firestore';
-import { Compostagem } from '../../../helpers/Types';
 
 const { width } = Dimensions.get('window');
 
-interface CompostagemStats {
+interface LavagemStats {
     hoje: number;
     semana: number;
     mes: number;
     total: number;
 }
 
-export default function CompostagemScreen({ navigation }: any) {
-    const [stats, setStats] = useState<CompostagemStats>({
+export default function LogisticaScreen({ navigation }: any) {
+    const [stats, setStats] = useState<LavagemStats>({
         hoje: 0,
         semana: 0,
         mes: 0,
         total: 0
     });
 
+    const [lavagensRecentes, setLavagensRecentes] = useState<any[]>([]);
+    const [lavagensAgendadas, setLavagensAgendadas] = useState<any[]>([]);
+
+    const [agendamentosPendentes, setAgendamentosPendentes] = useState(0);
+
+    // Primeiro, vamos criar funções auxiliares para datas
+    const getStartOfDay = () => {
+        const date = new Date();
+        date.setHours(0, 0, 0, 0);
+        return date;
+    };
 
     const getStartOfWeek = () => {
         const date = new Date();
@@ -58,90 +68,93 @@ export default function CompostagemScreen({ navigation }: any) {
         return date.toLocaleDateString('pt-BR');
     };
 
-    const fetchCompostagemStats = async () => {
+    const fetchLavagemStats = async () => {
         try {
-            // Datas de referência
+            // Datas de referência como timestamps
             const hoje = new Date();
             hoje.setHours(0, 0, 0, 0);
 
             const inicioSemana = getStartOfWeek();
             const inicioMes = getStartOfMonth();
 
-            // Buscar todas as compostagens
-            const querySnapshot = await firestore()
-                .collection('compostagens')
-                .where('isMedicaoRotina', '==', false)
+            // Buscar todos os registros da coleção registroLavagens
+            const snapshot = await firestore()
+                .collection('registroLavagens')
                 .get();
 
             let statsHoje = 0;
             let statsSemana = 0;
             let statsMes = 0;
 
-            querySnapshot.docs.forEach(doc => {
-                const compostagem = doc.data() as Compostagem;
+            // Função auxiliar para processar documentos
+            const processarDocumento = (doc: any) => {
+                const dados = doc.data();
 
-                // Log para compostagens sem responsável ou com responsável vazio
-                if (!compostagem.responsavel || compostagem.responsavel.trim() === '') {
-                    console.warn('Compostagem sem responsável:', {
-                        id: doc.id,
-                        data: compostagem.data,
-                        leira: compostagem.leira
-                    });
-                }
-
-                if (!compostagem.data) {
+                // Verifica se o documento tem o campo data
+                if (!dados || !dados.data) {
                     console.warn('Documento sem data encontrado:', doc.id);
                     return;
                 }
 
+                let dataLavagem: Date;
+
                 try {
-                    // Pegar a data original no formato YYYY-MM-DD
-                    const [ano, mes, dia] = compostagem.data.split('-');
+                    // Tenta primeiro parsear como string DD/MM/YYYY
+                    if (typeof dados.data === 'string' && dados.data.includes('/')) {
+                        const [dia, mes, ano] = dados.data.split('/');
+                        dataLavagem = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+                    }
+                    // Se for um timestamp do Firestore
+                    else if (dados.data && dados.data.toDate) {
+                        dataLavagem = dados.data.toDate();
+                    }
+                    // Se for uma data JavaScript
+                    else if (dados.data instanceof Date) {
+                        dataLavagem = dados.data;
+                    }
+                    else {
+                        console.warn('Formato de data não reconhecido:', dados.data);
+                        return;
+                    }
 
-                    // Criar a data usando o timezone local
-                    const dataCompostagem = new Date(
-                        parseInt(ano),
-                        parseInt(mes) - 1,
-                        parseInt(dia)
-                    );
-                    dataCompostagem.setHours(0, 0, 0, 0);
+                    // Normaliza a hora para meia-noite
+                    dataLavagem.setHours(0, 0, 0, 0);
 
-                    // Debug
-                    // console.log('Processando compostagem:', {
-                    //     id: doc.id,
-                    //     dataOriginal: compostagem.data,
-                    //     dataCompostagem: dataCompostagem.toLocaleDateString('pt-BR'),
-                    //     hoje: hoje.toLocaleDateString('pt-BR'),
-                    //     comparacaoHoje: dataCompostagem.getTime() === hoje.getTime() ? 'IGUAL' : 'DIFERENTE',
-                    //     timestampCompostagem: dataCompostagem.getTime(),
-                    //     timestampHoje: hoje.getTime()
-                    // });
-
-                    // Comparação por timestamp para maior precisão
-                    if (dataCompostagem.getTime() === hoje.getTime()) {
+                    // Comparar usando timestamps
+                    if (dataLavagem.getTime() === hoje.getTime()) {
                         statsHoje++;
                     }
-                    if (dataCompostagem >= inicioSemana) {
+                    if (dataLavagem >= inicioSemana) {
                         statsSemana++;
                     }
-                    if (dataCompostagem >= inicioMes) {
+                    if (dataLavagem >= inicioMes) {
                         statsMes++;
                     }
-                } catch (error) {
-                    console.error('Erro ao processar data:', compostagem.data, error);
-                }
-            });
 
-            // Debug final
-            // console.log('Estatísticas finais:', {
+                    // Para debug - identificar o tipo de registro (antigo ou novo)
+                    // const tipoRegistro = dados.createdBy ? 'novo' : 'antigo';
+                    // console.log(`Processado registro ${tipoRegistro} - Data: ${dataLavagem.toLocaleDateString()} - ID: ${doc.id}`);
+
+                } catch (error) {
+                    console.warn('Erro ao processar data do documento:', doc.id, error);
+                }
+            };
+
+            // Processar todos os documentos
+            snapshot.docs.forEach(processarDocumento);
+
+            const total = snapshot.size;
+
+            // Para debug
+            // console.log('Estatísticas de Lavagem:', {
             //     hoje: statsHoje,
             //     semana: statsSemana,
             //     mes: statsMes,
-            //     total: querySnapshot.size,
-            //     referencias: {
-            //         hoje: hoje.toLocaleDateString('pt-BR'),
-            //         inicioSemana: inicioSemana.toLocaleDateString('pt-BR'),
-            //         inicioMes: inicioMes.toLocaleDateString('pt-BR')
+            //     total,
+            //     dataReferencia: {
+            //         hoje: hoje.toLocaleDateString(),
+            //         inicioSemana: inicioSemana.toLocaleDateString(),
+            //         inicioMes: inicioMes.toLocaleDateString()
             //     }
             // });
 
@@ -149,7 +162,7 @@ export default function CompostagemScreen({ navigation }: any) {
                 hoje: statsHoje,
                 semana: statsSemana,
                 mes: statsMes,
-                total: querySnapshot.size
+                total
             };
         } catch (error) {
             console.error('Erro ao buscar estatísticas:', error);
@@ -162,19 +175,44 @@ export default function CompostagemScreen({ navigation }: any) {
         }
     };
 
+    const fetchAgendamentosPendentes = async () => {
+        try {
+            const snapshot = await firestore()
+                .collection('agendamentos')
+                .where('concluido', '==', false)
+                .get();
+
+            setAgendamentosPendentes(snapshot.size);
+        } catch (error) {
+            console.error('Erro ao buscar agendamentos pendentes:', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchAgendamentosPendentes();
+
+        // Atualiza quando a tela receber foco
+        const unsubscribe = navigation.addListener('focus', () => {
+            fetchAgendamentosPendentes();
+        });
+
+        return unsubscribe;
+    }, [navigation]);
+
     // Aqui você implementará a lógica para buscar os dados do Firebase
     useEffect(() => {
-        fetchCompostagemStats();
+        // Implementar busca de dados
     }, []);
 
     useEffect(() => {
         const loadStats = async () => {
-            const novasStats = await fetchCompostagemStats();
+            const novasStats = await fetchLavagemStats();
             setStats(novasStats);
         };
 
         loadStats();
 
+        // Opcional: Atualizar stats quando o app voltar do background
         const unsubscribe = navigation.addListener('focus', () => {
             loadStats();
         });
@@ -184,10 +222,11 @@ export default function CompostagemScreen({ navigation }: any) {
 
     return (
         <Surface style={styles.container}>
+            
             {/* Header */}
             <ModernHeader
-                title="Compostagem"
-                iconName="sprout"
+                title="Logistica"
+                iconName="car-wash"
                 onBackPress={() => navigation.goBack()}
             />
 
@@ -201,7 +240,7 @@ export default function CompostagemScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="calendar-today" size={24} color={customTheme.colors.primary} />
+                                <Icon name="today" size={24} color={customTheme.colors.primary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.hoje}</Text>
                             <Text style={styles.statsLabel}>Hoje</Text>
@@ -211,7 +250,7 @@ export default function CompostagemScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="calendar-week" size={24} color={customTheme.colors.secondary} />
+                                <Icon name="date-range" size={24} color={customTheme.colors.secondary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.semana}</Text>
                             <Text style={styles.statsLabel}>Esta Semana</Text>
@@ -227,45 +266,84 @@ export default function CompostagemScreen({ navigation }: any) {
                             <Text style={styles.statsLabel}>Este Mês</Text>
                         </Card.Content>
                     </Card>
+
                 </View>
 
                 {/* Ações */}
                 <View style={styles.actionsContainer}>
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
-                        {/* Novo Registro */}
                         <TouchableOpacity
                             style={styles.actionButton}
-                            onPress={() => navigation.navigate('CompostagemForm')}
+                            onPress={() => navigation.navigate('LogisticaProgram')}
                         >
                             <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.primaryContainer }]}>
-                                <Icon
-                                    name="plus-circle-outline"
-                                    size={32}
-                                    color={customTheme.colors.primary}
-                                />
+                                <Icon name="add" size={24} color={customTheme.colors.primary} />
                             </View>
-                            <Text style={styles.actionText}>Novo Registro</Text>
+                            <Text style={styles.actionText}>Nova Programação</Text>
                         </TouchableOpacity>
 
-                        {/* Lista de Compostagens */}
                         <TouchableOpacity
                             style={styles.actionButton}
-                            onPress={() => navigation.navigate('CompostagemHistory')}
+                            onPress={() => navigation.navigate('OperacaoProgram')}
                         >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.secondaryContainer }]}>
-                                <Icon
-                                    name="format-list-bulleted"
-                                    size={32}
-                                    color={customTheme.colors.secondary}
-                                />
+                            <View style={styles.actionIconContainer}>
+                                <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.secondaryContainer }]}>
+                                    <Icon name="event-available" size={24} color={customTheme.colors.secondary} />
+                                </View>
+                                {agendamentosPendentes > 0 && (
+                                    <View style={styles.badgeContainer}>
+                                        <Text style={styles.badgeText}>
+                                            {agendamentosPendentes > 99 ? '99+' : agendamentosPendentes}
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
-                            <Text style={styles.actionText}>Histórico de Compostagens</Text>
+                            <Text style={styles.actionText}>Agendamentos</Text>
                         </TouchableOpacity>
 
+                        {/* TODO Pegar um exemplo de relatorio de Programação/Operacional */}
+                        {/* <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => navigation.navigate('RelatorioLavagens')}
+                        >
+                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.primaryContainer }]}>
+                                <Icon name="bar-chart" size={24} color={customTheme.colors.primary} />
+                            </View>
+                            <Text style={styles.actionText}>Relatórios</Text>
+                        </TouchableOpacity> */}
                     </View>
                 </View>
 
+                {/* Próximas Lavagens Agendadas */}
+                {lavagensAgendadas.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Próximas Lavagens</Text>
+                        {lavagensAgendadas.map((lavagem, index) => (
+                            <Card key={index} style={styles.agendamentoCard}>
+                                <Card.Content>
+                                    <></>
+                                    {/* Implementar card de agendamento */}
+                                </Card.Content>
+                            </Card>
+                        ))}
+                    </View>
+                )}
+
+                {/* Lavagens Recentes */}
+                {lavagensRecentes.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Lavagens Recentes</Text>
+                        {lavagensRecentes.map((lavagem, index) => (
+                            <Card key={index} style={styles.lavagemCard}>
+                                <Card.Content>
+                                    <></>
+                                    {/* Implementar card de lavagem recente */}
+                                </Card.Content>
+                            </Card>
+                        ))}
+                    </View>
+                )}
             </ScrollView>
         </Surface>
     );

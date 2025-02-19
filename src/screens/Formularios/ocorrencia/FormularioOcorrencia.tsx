@@ -21,11 +21,11 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { PERMISSIONS, check, request, RESULTS } from 'react-native-permissions';
 import DropDownPicker from 'react-native-dropdown-picker';
-import { customTheme } from '../../theme/theme';
-import { useUser } from '../../contexts/userContext';
-import { showGlobalToast } from '../../helpers/GlobalApi';
-import { clientes, RelatorioData } from '../../helpers/Types';
-import api, { generateWordDocument } from '../../helpers/generateApi';
+import { customTheme } from '../../../theme/theme';
+import { useUser } from '../../../contexts/userContext';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
+import { clientes, RelatorioData } from '../../../helpers/Types';
+import api, { generateWordDocument } from '../../../helpers/generateApi';
 import { Asset, launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { getStorage, ref, uploadBytes, getDownloadURL, uploadString } from '@react-native-firebase/storage';
 import firestore from '@react-native-firebase/firestore';

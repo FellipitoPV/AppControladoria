@@ -115,10 +115,3 @@ export const TIPOS_LAVAGEM = [
     { label: 'Simples', value: 'simples' as TipoLavagem },
     { label: 'Completa', value: 'completa' as TipoLavagem }
 ];
-
-export const PRODUTOS = [
-    { label: 'Shampoo Automotivo', value: 'shampoo' },
-    { label: 'Cera', value: 'cera' },
-    { label: 'Limpa Pneus', value: 'limpa_pneus' },
-    { label: 'Limpa Vidros', value: 'limpa_vidros' }
-];

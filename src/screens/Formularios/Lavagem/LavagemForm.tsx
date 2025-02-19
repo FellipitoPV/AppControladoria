@@ -57,7 +57,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
     const { userInfo } = useUser(); // Usando o contexto do usuário
     const { placa, lavagem, agendamentoId } = route?.params || {}; // Pegando os parâmetros corretamente
     const {
-        agendamentos,
+        produtos,
         forceSync,
         marcarAgendamentoComoConcluido
     } = useBackgroundSync();
@@ -80,6 +80,12 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
     const [numeroEquipamento, setNumeroEquipamento] = useState('');
     const [showEquipmentNumber, setShowEquipmentNumber] = useState(false);
 
+    const [produtosSelecionados, setProdutosSelecionados] = useState<Array<{
+        produto: string;
+        quantidade: string;
+        id?: string;
+    }>>([]);
+
     const [customItems, setCustomItems] = useState<Array<{
         label: string;
         value: string;
@@ -98,19 +104,6 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
     const TIPOS_LAVAGEM = [
         { label: 'Completa', value: 'completa', icon: 'local-car-wash' },
         { label: 'Simples', value: 'simples', icon: 'local-car-wash' }
-    ];
-
-    const [produtosSelecionados, setProdutosSelecionados] = useState<Array<{
-        produto: string;
-        quantidade: string;
-    }>>([]);
-
-    // Lista de produtos disponíveis (exemplo)
-    const PRODUTOS_ESTOQUE = [
-        { nome: 'Shampoo Automotivo', quantidade: '50' },
-        { nome: 'Cera Líquida', quantidade: '30' },
-        { nome: 'Limpa Pneus', quantidade: '25' },
-        { nome: 'Silicone', quantidade: '40' },
     ];
 
     const handleAddCustomItem = (searchValue: string) => {
@@ -274,15 +267,13 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 
     const handleSave = async () => {
         // Primeiro, valide o formulário
-        if (!validateForm()) {
-            return;
-        }
+        if (!validateForm()) return;
 
         try {
-            // Mostrar toast de carregamento
+            // Mostrar toast de carregamento inicial
             showGlobalToast('info', 'Aguarde', 'Fazendo upload das fotos...', 15000);
 
-            // Primeiro fazer o upload das fotos e obter as URLs
+            // Upload das fotos para o Firebase Storage
             const uploadPromises = photos.map(async (photo) => {
                 try {
                     const timestamp = Date.now();
@@ -313,10 +304,40 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
             // Aguardar todos os uploads terminarem
             const fotosUpload = await Promise.all(uploadPromises);
 
-            // Mostrar toast de salvamento
-            showGlobalToast('info', 'Aguarde', 'Salvando informações...', 2000);
+            // Atualizar toast para próxima etapa
+            showGlobalToast('info', 'Aguarde', 'Atualizando estoque de produtos...', 2000);
 
-            // Agora preparar os dados para salvar no Firestore com as URLs das fotos
+            // Atualizar estoque dos produtos
+            for (const produtoSelecionado of produtosSelecionados) {
+                const produtoEstoque = produtos.find(p => p.nome === produtoSelecionado.produto);
+
+                if (produtoEstoque) {
+                    const quantidadeAtual = parseInt(produtoEstoque.quantidade);
+                    const quantidadeUsada = parseInt(produtoSelecionado.quantidade);
+                    const novaQuantidade = quantidadeAtual - quantidadeUsada;
+
+                    if (novaQuantidade < 0) {
+                        throw new Error(`Quantidade insuficiente do produto ${produtoEstoque.nome}`);
+                    }
+
+                    // Atualizar no Firestore
+                    await firestore()
+                        .collection('produtos')
+                        .doc(produtoEstoque.id)
+                        .update({
+                            quantidade: novaQuantidade.toString(),
+                            updatedAt: new Date().toISOString()
+                        });
+                }
+            }
+
+            // Forçar sincronização dos produtos após as atualizações
+            await forceSync('produtos');
+
+            // Mostrar toast de salvamento
+            showGlobalToast('info', 'Aguarde', 'Salvando informações da lavagem...', 2000);
+
+            // Preparar dados completos da lavagem
             const registroLavagem = {
                 responsavel: formData.responsavel,
                 data: formatDate(selectedDate),
@@ -345,7 +366,9 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 
             // Criar ID customizado com prefixo e timestamp
             const timestamp = Date.now();
-            const customId = `0_ADM_${timestamp}`;
+            const customId = userInfo?.cargo.toLowerCase() === 'administrador'
+                ? `0_ADM_${timestamp}`
+                : timestamp.toString();
 
             // Salvar no Firestore com ID customizado
             await firestore()
@@ -353,26 +376,29 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                 .doc(customId)
                 .set(registroLavagem);
 
-            // Se um agendamentoId foi passado, vamos marcar como concluído
+            // Se tiver um agendamento associado, marcar como concluído
             if (agendamentoId && marcarAgendamentoComoConcluido) {
                 await marcarAgendamentoComoConcluido(agendamentoId);
             }
 
-            // Após salvar, navegue de volta
+            // Navegação de volta e toast de sucesso
             navigation?.goBack();
-
-            // Exiba um toast de sucesso
             showGlobalToast('success', 'Sucesso', 'Lavagem registrada com sucesso', 4000);
 
         } catch (error: any) {
             console.error('Erro ao finalizar lavagem:', error);
 
-            // Exiba um toast de erro mais específico baseado no tipo de erro
+            // Toast de erro específico baseado no tipo de erro
             const errorMessage = error.message === 'Falha no upload da foto'
                 ? 'Erro no upload das fotos. Verifique sua conexão.'
-                : 'Não foi possível finalizar a lavagem';
+                : error.message || 'Não foi possível finalizar a lavagem';
 
-            showGlobalToast('error', 'Erro', errorMessage, 4000);
+            showGlobalToast(
+                'error',
+                'Erro',
+                errorMessage,
+                4000
+            );
         }
     };
 
@@ -415,8 +441,29 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         setDropdownRefs(novasRefs);
     };
 
-    const atualizarProduto = (index: number, atualizacoes: Partial<{ produto: string; quantidade: string }>) => {
+    // Modifique a função atualizarProduto para validar com o estoque real
+    const atualizarProduto = async (index: number, atualizacoes: Partial<{ produto: string; quantidade: string }>) => {
         const novosProdutos = [...produtosSelecionados];
+        const produtoAtual = produtos.find(p => p.nome === atualizacoes.produto || p.nome === novosProdutos[index].produto);
+
+        if (produtoAtual && atualizacoes.quantidade) {
+            const quantidadeEstoque = parseInt(produtoAtual.quantidade);
+            let quantidadeDigitada = parseInt(atualizacoes.quantidade) || 0;
+            console.log("Quantidade maxima selecionada")
+
+            if (quantidadeDigitada > quantidadeEstoque) {
+                quantidadeDigitada = quantidadeEstoque;
+                atualizacoes.quantidade = quantidadeEstoque.toString();
+                showGlobalToast(
+                    'info',
+                    'Quantidade Excedida',
+                    `Quantidade máxima disponível: ${quantidadeEstoque}`,
+                    3000
+                );
+                console.log("Quantidade maxima alcançada")
+            }
+        }
+
         novosProdutos[index] = {
             ...novosProdutos[index],
             ...atualizacoes
@@ -827,9 +874,10 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                                                 placeholderStyle={styles.placeholderStyle}
                                                 selectedTextStyle={styles.selectedTextStyle}
                                                 iconStyle={styles.iconStyle}
-                                                data={PRODUTOS_ESTOQUE.filter(p =>
-                                                    !produtosSelecionados.some(ps => ps.produto === p.nome) ||
-                                                    p.nome === item.produto
+                                                data={produtos.filter(p =>
+                                                    !produtosSelecionados.some(ps =>
+                                                        ps.produto === p.nome && ps !== item
+                                                    )
                                                 )}
                                                 labelField="nome"
                                                 valueField="nome"
@@ -857,7 +905,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                                                             color={customTheme.colors.primary}
                                                         />
                                                         <Text style={styles.dropdownLabel}>
-                                                            {item.nome}
+                                                            {item.nome} {`(${item.quantidade})`}
                                                         </Text>
                                                     </View>
                                                 )}
@@ -869,7 +917,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                                             placeholder="Qtd"
                                             value={item.quantidade}
                                             onChangeText={value => {
-                                                const produtoEstoque = PRODUTOS_ESTOQUE.find(p => p.nome === item.produto);
+                                                const produtoEstoque = produtos.find(p => p.nome === item.produto);
                                                 if (produtoEstoque) {
                                                     const quantidadeEstoque = parseInt(produtoEstoque.quantidade);
                                                     let quantidadeDigitada = parseInt(value) || 0;

@@ -54,6 +54,8 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
     const [hasMoreData, setHasMoreData] = useState<boolean>(true);
     const ITEMS_PER_PAGE = 15;
 
+    const [showRotina, setShowRotina] = useState(false);
+
     useEffect(() => {
         setLastVisible(null);
         setCompostagens([]);
@@ -83,17 +85,20 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
                 return;
             }
 
-            // Busca todos os dados e ordena
+            // Busca todos os dados e filtra baseado no tipo de medição
             let dados = snapshot.docs
                 .map(doc => ({
                     id: doc.id,
                     ...doc.data()
                 } as Compostagem))
                 .filter(compostagem => {
-                    return !('isMedicaoRotina' in compostagem) || compostagem.isMedicaoRotina === false;
+                    // Se showRotina for true, mostra apenas medições de rotina
+                    // Se showRotina for false, mostra apenas medições completas
+                    return showRotina ?
+                        compostagem.isMedicaoRotina === true :
+                        !compostagem.isMedicaoRotina;
                 })
                 .sort((a, b) => {
-                    // Combina data e hora para ordenação
                     const timestampA = `${a.data}T${a.hora}`;
                     const timestampB = `${b.data}T${b.hora}`;
                     return isDescending ?
@@ -102,8 +107,6 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
                 });
 
             setCompostagens(dados);
-
-            // Configura a primeira página
             setDisplayedCompostagens(dados.slice(0, ITEMS_PER_PAGE));
             setHasMoreData(dados.length > ITEMS_PER_PAGE);
             setCurrentPage(0);
@@ -113,6 +116,49 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
             setLoading(false);
         }
     };
+
+    // Função para alternar o tipo de visualização
+    const toggleTipoVisualizacao = async () => {
+        setLoading(true); // Ativa o loading
+
+        try {
+            // Mostra o toast de alteração
+            showGlobalToast(
+                'info',
+                `Alterando visualização`,
+                `Mostrando medições ${!showRotina ? 'de rotina' : 'completas'}`,
+                2000
+            );
+
+            // Altera o estado
+            setShowRotina(!showRotina);
+
+            // Pequeno delay para garantir uma transição suave
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+        } catch (error) {
+            console.error('Erro ao alternar visualização:', error);
+            showGlobalToast(
+                'error',
+                'Erro',
+                'Não foi possível alternar o modo de visualização',
+                3000
+            );
+        } finally {
+            setLoading(false); // Desativa o loading independente do resultado
+        }
+    };
+
+    useEffect(() => {
+        setLastVisible(null);
+        setCompostagens([]);
+        setHasMoreData(true);
+        fetchCompostagens();
+    }, [dateFilter, isDescending, showRotina]); // Adicione showRotina aqui
+
+    useEffect(() => {
+        fetchCompostagens();
+    }, []);
 
     // Função para carregar mais dados
     const loadMore = () => {
@@ -237,18 +283,29 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={customTheme.colors.primary} />
-            </View>
+            <SafeAreaView style={styles.safeArea}>
+                <ModernHeader
+                    title={showRotina ? "Medições de Rotina" : "Medições Completas"}
+                    iconName={showRotina ? "clipboard-outline" : "clipboard-list"}
+                    onBackPress={() => navigation.goBack()}
+                    rightAction={toggleTipoVisualizacao}
+                    rightIcon={showRotina ? "clipboard-list" : "clipboard-outline"}
+                />
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={customTheme.colors.primary} />
+                </View>
+            </SafeAreaView>
         );
     }
 
     return (
         <SafeAreaView style={styles.safeArea}>
             <ModernHeader
-                title="Medições Completas"
-                iconName="clipboard-list"
+                title={showRotina ? "Medições de Rotina" : "Medições Completas"}
+                iconName={showRotina ? "clipboard-outline" : "clipboard-list"}
                 onBackPress={() => navigation.goBack()}
+                rightAction={toggleTipoVisualizacao}
+                rightIcon={showRotina ? "clipboard-list" : "clipboard-outline"}
             />
 
             {loading ? (
@@ -286,7 +343,7 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
                                             </Text>
                                             <View style={styles.headerRight}>
                                                 <Text style={styles.dataHora}>
-                                                    {`${item.data} às ${item.hora.split(':').slice(0, 2).join(':')}`}
+                                                    {`${formatDate(item.data)} às ${item.hora.split(':').slice(0, 2).join(':')}`}
                                                 </Text>
                                             </View>
                                         </View>
@@ -389,7 +446,6 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
                 </ScrollView>
             )}
 
-
             {/* Modal de Detalhes */}
             <Modal
                 visible={detalhesModalVisible}
@@ -432,7 +488,7 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
                                             <View style={styles.infoContent}>
                                                 <Text style={styles.infoLabel}>Data e Hora</Text>
                                                 <Text style={styles.infoValue}>
-                                                    {`${selectedCompostagem.data} às ${selectedCompostagem.hora}`}
+                                                    {`${formatDate(selectedCompostagem.data)} às ${selectedCompostagem.hora}`}
                                                 </Text>
                                             </View>
                                         </View>

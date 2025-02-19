@@ -2,7 +2,8 @@ import React from 'react';
 import { Modal, View, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { customTheme } from '../../theme/theme';
+import { customTheme } from '../../../theme/theme';
+import { useNavigation } from '@react-navigation/native';
 
 interface ProfileMenuItem {
     icon: string;
@@ -29,13 +30,20 @@ interface UserModalProps {
 }
 
 const UserProfileModal = ({ visible, onClose, userInfo, onLogout }: UserModalProps) => {
+    const navigation = useNavigation<any>();
+
     const menuItems: ProfileMenuItem[] = [
         {
             icon: 'account-edit',
             label: 'Editar Perfil',
-            onPress: () => console.log('Editar perfil'),
+            onPress: () => handleNavigate("Profile"),
         },
     ];
+
+    const handleNavigate = (screen: string) => {
+        onClose()
+        navigation.navigate(screen)
+    }
 
     const renderMenuItem = ({ icon, label, onPress, color }: ProfileMenuItem) => (
         <TouchableOpacity
@@ -82,7 +90,7 @@ const UserProfileModal = ({ visible, onClose, userInfo, onLogout }: UserModalPro
                     </View>
 
                     <ScrollView style={styles.scrollContent}>
-                        
+
                         {/* Seção do perfil */}
                         <View style={styles.profileSection}>
                             <View style={styles.avatarContainer}>

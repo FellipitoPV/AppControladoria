@@ -169,7 +169,10 @@ export default function LoginScreen({ navigation }: any) {
     }
 
     if (welcomeIsOpen) {
-        return <WelcomeScreen onClose={() => setWelcomeIsOpen(false)} />;
+        return <WelcomeScreen
+            onClose={() => setWelcomeIsOpen(false)}
+            navigation={navigation}
+        />;
     }
 
     return (

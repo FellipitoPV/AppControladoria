@@ -17,7 +17,7 @@ import {
     Button,
     Divider,
 } from 'react-native-paper';
-import { customTheme } from '../../theme/theme';
+import { customTheme } from '../../../theme/theme';
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';

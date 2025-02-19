@@ -11,28 +11,97 @@ import { Text } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
+import { useUser } from '../../../contexts/userContext';
+
+interface QuickAction {
+    id: string;
+    title: string;
+    icon: string;
+    color: string;
+    route: string;
+    acesso?: string;
+    adminView?: boolean;
+}
+
 
 const QuickActionsGrid = () => {
     const [currentPage, setCurrentPage] = useState(0);
     const navigation = useNavigation<NavigationProp<ParamListBase>>();
+    const { userInfo } = useUser(); // Importando userInfo do contexto
 
-    const quickActions = [
-        { id: '1', title: 'Lavagem', icon: 'car-wash', color: '#6B7AFF', route: 'LavagemScreen' },
-        { id: '2', title: 'Compostagem', icon: 'sprout', color: '#FF6B6B', route: 'CompostagemScreen' },
-        { id: '4', title: 'Contatos', icon: 'phone', color: '#f279a0', route: 'Contatos' },
-    ];
-
-    // Divide os quickActions em grupos de 4
-    const pages = quickActions.reduce((acc, item, index) => {
-        const pageIndex = Math.floor(index / 4);
-        if (!acc[pageIndex]) {
-            acc[pageIndex] = [];
-        }
-        acc[pageIndex].push(item);
-        return acc;
-    }, [] as typeof quickActions[]);
+    const quickActions = React.useMemo((): QuickAction[] => [
+        {
+            id: '1',
+            title: 'Lavagem',
+            icon: 'car-wash',
+            color: customTheme.colors.primary,
+            route: 'LavagemScreen',
+            acesso: 'lavagem' // Ação restrita
+        },
+        {
+            id: '2',
+            title: 'Compostagem',
+            icon: 'sprout',
+            color: '#8b79f2',
+            route: 'CompostagemScreen',
+            acesso: 'compostagem' // Ação restrita
+        },
+        {
+            id: '3',
+            title: 'Logística',
+            icon: 'clipboard',
+            color: '#e679f2',
+            route: 'LogisticaScreen',
+            acesso: 'logistica' // Ação restrita
+        },
+        {
+            id: '99',
+            title: 'Contatos',
+            icon: 'phone',
+            color: '#79a2f2',
+            route: 'Contatos'
+            // Sem acesso = público
+        },
+    ], []);
 
     const { width } = Dimensions.get('window');
+
+    // Mova a criação das páginas para depois do filteredActions
+    const filteredActions = React.useMemo(() => {
+        const isAdmin = userInfo?.cargo === 'Administrador';
+        console.log('\n=== DIAGNÓSTICO DE ACESSOS ===');
+        console.log('Acessos do usuário:', userInfo?.acesso || 'Nenhum acesso definido');
+        console.log('Cargo:', userInfo?.cargo);
+        console.log('É administrador:', isAdmin);
+
+        const acoesPermitidas = quickActions.filter(action => {
+            // Se é admin, permite todos os acessos
+            if (isAdmin) return true;
+
+            // Lógica original para não-admins
+            if (!action.acesso) return true;
+            if (!userInfo?.acesso || userInfo.acesso.length === 0) return false;
+            return userInfo.acesso.includes(action.acesso);
+        });
+
+        // Adiciona flag para identificar atalhos que o admin não teria acesso normalmente
+        return acoesPermitidas.map(action => ({
+            ...action,
+            adminView: isAdmin && action.acesso ? !userInfo?.acesso?.includes(action.acesso) : undefined
+        }));
+    }, [quickActions, userInfo?.acesso, userInfo?.cargo]);
+
+    // Agora use filteredActions para criar as páginas
+    const pages = React.useMemo(() => {
+        return filteredActions.reduce((acc, item, index) => {
+            const pageIndex = Math.floor(index / 4);
+            if (!acc[pageIndex]) {
+                acc[pageIndex] = [];
+            }
+            acc[pageIndex].push(item);
+            return acc;
+        }, [] as QuickAction[][]); // Aqui mudamos para array de arrays de QuickAction
+    }, [filteredActions]);
 
     const handleScroll = (event: any) => {
         const offsetX = event.nativeEvent.contentOffset.x;
@@ -51,78 +120,115 @@ const QuickActionsGrid = () => {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.sectionTitle}>Atalhos</Text>
-                <Text style={styles.pageIndicator}>
-                    {currentPage + 1}/{pages.length}
-                </Text>
-            </View>
-
-            <ScrollView
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onMomentumScrollEnd={handleScroll}
-                decelerationRate="fast"
-                snapToInterval={width}
-            >
-                {pages.map((page, pageIndex) => (
-                    <View
-                        key={`page-${pageIndex}`}
-                        style={[styles.page, { width }]}
-                    >
-                        <View style={styles.gridContainer}>
-                            {page.map((action) => (
-                                <TouchableOpacity
-                                    key={action.id}
-                                    style={styles.actionButton}
-                                    onPress={() => handleNavigation(action.route)}
-                                >
-                                    <View
-                                        style={[
-                                            styles.iconContainer,
-                                            { backgroundColor: `${action.color}20` }
-                                        ]}
-                                    >
-                                        <Icon
-                                            name={action.icon}
-                                            size={24}
-                                            color={action.color}
-                                        />
-                                    </View>
-                                    <Text
-                                        style={styles.actionText}
-                                        numberOfLines={1}
-                                    >
-                                        {action.title}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
+            {filteredActions.length > 0 ? (
+                <>
+                    <View style={styles.header}>
+                        <Text style={styles.sectionTitle}>Atalhos</Text>
+                        <Text style={styles.pageIndicator}>
+                            {currentPage + 1}/{pages.length}
+                        </Text>
                     </View>
-                ))}
-            </ScrollView>
 
-            <View style={styles.paginationDots}>
-                {pages.map((_, index) => (
-                    <View
-                        key={`dot-${index}`}
-                        style={[
-                            styles.dot,
-                            {
-                                backgroundColor: currentPage === index
-                                    ? customTheme.colors.primary
-                                    : customTheme.colors.surfaceVariant
-                            }
-                        ]}
-                    />
-                ))}
-            </View>
+                    <ScrollView
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        onMomentumScrollEnd={handleScroll}
+                        decelerationRate="fast"
+                        snapToInterval={width}
+                    >
+                        {pages.map((page, pageIndex) => (
+                            <View
+                                key={`page-${pageIndex}`}
+                                style={[styles.page, { width }]}
+                            >
+                                <View style={styles.gridContainer}>
+                                    {page.map((action) => (
+                                        <TouchableOpacity
+                                            key={action.id}
+                                            style={styles.actionButton}
+                                            onPress={() => handleNavigation(action.route)}
+                                        >
+                                            <View style={styles.iconWrapper}>
+                                                <View
+                                                    style={[
+                                                        styles.iconContainer,
+                                                        { backgroundColor: `${action.color}20` }
+                                                    ]}
+                                                >
+                                                    <Icon
+                                                        name={action.icon}
+                                                        size={24}
+                                                        color={action.color}
+                                                    />
+                                                </View>
+                                                {action.adminView && (
+                                                    <View style={styles.adminBadge}>
+                                                        <Icon
+                                                            name="shield-crown"
+                                                            size={12}
+                                                            color={customTheme.colors.primary}
+                                                        />
+                                                    </View>
+                                                )}
+                                            </View>
+                                            <Text
+                                                style={[
+                                                    styles.actionText,
+                                                    action.adminView && styles.adminText
+                                                ]}
+                                                numberOfLines={1}
+                                            >
+                                                {action.title}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        ))}
+                    </ScrollView>
+
+                    <View style={styles.paginationDots}>
+                        {pages.map((_, index) => (
+                            <View
+                                key={`dot-${index}`}
+                                style={[
+                                    styles.dot,
+                                    {
+                                        backgroundColor: currentPage === index
+                                            ? customTheme.colors.primary
+                                            : customTheme.colors.surfaceVariant
+                                    }
+                                ]}
+                            />
+                        ))}
+                    </View>
+                </>
+            ) : null}
         </View>
     );
 };
 
 const styles = StyleSheet.create({
+    iconWrapper: {
+        position: 'relative',
+    },
+    adminBadge: {
+        position: 'absolute',
+        right: 0,
+        backgroundColor: customTheme.colors.primaryContainer,
+        borderRadius: 12,
+        width: 18,
+        height: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: customTheme.colors.primary,
+    },
+    adminText: {
+        color: customTheme.colors.primary,
+        fontWeight: '500',
+    },
     container: {
         marginVertical: 16,
     },

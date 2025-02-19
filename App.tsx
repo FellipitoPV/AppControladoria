@@ -1,17 +1,17 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import FormularioMedicaoCompostagem from './src/screens/Pessagem/FormularioOcorrencia';
+import FormularioMedicaoCompostagem from './src/screens/Formularios/ocorrencia/FormularioOcorrencia';
 import FlashMessage from "react-native-flash-message";
-import CompostagemList from './src/screens/Pessagem/RelatoriosLista';
+import CompostagemList from './src/screens/Formularios/ocorrencia/RelatoriosLista';
 import LoginScreen from './src/screens/Login/LoginScreen';
 import Toast, { ToastConfig } from 'react-native-toast-message';
 import { StyleSheet, Text, View } from 'react-native';
 import { UserProvider } from './src/contexts/userContext';
 import { NetworkProvider } from './src/contexts/NetworkContext';
-import FormularioOcorrencia from './src/screens/Pessagem/FormularioOcorrencia';
+import FormularioOcorrencia from './src/screens/Formularios/ocorrencia/FormularioOcorrencia';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import RelatorioOcorrenciaList from './src/screens/Pessagem/RelatoriosLista';
+import RelatorioOcorrenciaList from './src/screens/Formularios/ocorrencia/RelatoriosLista';
 import WelcomeScreen from './src/screens/Login/WelcomeScreen';
 import HomeScreen from './src/screens/HomeScreen/HomeScreen';
 import { BackgroundSyncProvider } from './src/contexts/backgroundSyncContext';
@@ -24,6 +24,13 @@ import ControleEstoque from './src/screens/Formularios/Lavagem/ControleEstoque';
 import CompostagemScreen from './src/screens/Formularios/Compostagem/CompostagemScreen';
 import CompostagemForm from './src/screens/Formularios/Compostagem/CompostagemForm';
 import CompostagemHistory from './src/screens/Formularios/Compostagem/CompostagemHistory';
+import LogisticaScreen from './src/screens/Formularios/Logistica/LogisticaScreen';
+import RegisterScreen from './src/screens/Login/RegisterScreen';
+import ProfileScreen from './src/screens/HomeScreen/components/ProfileScreen';
+import OperacaoScreen from './src/screens/Formularios/Operacao/OperacaoScreen';
+import ListaProgramacoes from './src/screens/Formularios/Logistica/ListaProgramacoes';
+import FormularioProgramacao from './src/screens/Formularios/Logistica/Components/FormularioProgramacao';
+import RelatorioLavagens from './src/screens/Formularios/Lavagem/Components/RelatorioLavagens';
 
 const Stack = createStackNavigator();
 
@@ -129,38 +136,53 @@ const toastConfig: ToastConfig = {
 
 export default function App() {
   return (
-    <BackgroundSyncProvider>
-      <NavigationContainer>
-        <UserProvider>
+    <UserProvider>
+      <BackgroundSyncProvider>
+        <NavigationContainer>
           <NetworkProvider>
             <Stack.Navigator initialRouteName="Login">
-              <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="NewP" component={FormularioOcorrencia} options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="List" component={RelatorioOcorrenciaList} options={{ headerShown: false, gestureEnabled: false }} />
+              {/* LOGIN */}
+              <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
+
+              <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="NewP" component={FormularioOcorrencia} options={{ headerShown: false }} />
+              <Stack.Screen name="List" component={RelatorioOcorrenciaList} options={{ headerShown: false }} />
+
+              {/* Perfil */}
+              <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
 
               {/* Lavagem */}
-              <Stack.Screen name="LavagemScreen" component={LavagemScreen} options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="LavagemForm" component={NovaLavagem} options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="LavagemAgend" component={AgendamentoLavagem} options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="LavagemHist" component={HistoricoLavagem} options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="LavagemEstoq" component={ControleEstoque} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="LavagemScreen" component={LavagemScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="LavagemForm" component={NovaLavagem} options={{ headerShown: false }} />
+              <Stack.Screen name="LavagemAgend" component={AgendamentoLavagem} options={{ headerShown: false }} />
+              <Stack.Screen name="LavagemHist" component={HistoricoLavagem} options={{ headerShown: false }} />
+              <Stack.Screen name="LavagemEstoq" component={ControleEstoque} options={{ headerShown: false }} />
+              <Stack.Screen name="LavagemRelat" component={RelatorioLavagens} options={{ headerShown: false }} />
 
               {/* Compostagem */}
-              <Stack.Screen name="CompostagemScreen" component={CompostagemScreen} options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="CompostagemForm" component={CompostagemForm} options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="CompostagemHistory" component={CompostagemHistory} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="CompostagemScreen" component={CompostagemScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="CompostagemForm" component={CompostagemForm} options={{ headerShown: false }} />
+              <Stack.Screen name="CompostagemHistory" component={CompostagemHistory} options={{ headerShown: false }} />
+
+              {/* Logistica */}
+              <Stack.Screen name="LogisticaScreen" component={LogisticaScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="LogisticaProgram" component={FormularioProgramacao} options={{ headerShown: false }} />
+
+              {/* Operacao */}
+              <Stack.Screen name="OperacaoScreen" component={OperacaoScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="OperacaoProgram" component={ListaProgramacoes} options={{ headerShown: false }} />
 
               {/* Contatos */}
-              <Stack.Screen name="Contatos" component={ContatosScreen} options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="Contatos" component={ContatosScreen} options={{ headerShown: false }} />
 
 
             </Stack.Navigator>
             <Toast config={toastConfig} position='top' />
             <FlashMessage position="top" />
           </NetworkProvider>
-        </UserProvider>
-      </NavigationContainer>
-    </BackgroundSyncProvider>
+        </NavigationContainer>
+      </BackgroundSyncProvider>
+    </UserProvider>
   );
 }

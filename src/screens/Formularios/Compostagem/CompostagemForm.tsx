@@ -10,7 +10,8 @@ import {
     Alert,
     Linking,
     Platform,
-    SafeAreaView
+    SafeAreaView,
+    ActivityIndicator
 } from 'react-native';
 import {
     Text,
@@ -38,6 +39,7 @@ import { Dropdown } from 'react-native-element-dropdown';
 import PhotoGallery from '../Lavagem/Components/PhotoGallery';
 import FullScreenImage from '../../../assets/components/FullScreenImage';
 import storage from '@react-native-firebase/storage';
+import ModernHeader from '../../../assets/components/ModernHeader';
 
 type RootStackParamList = {
     Home: undefined;
@@ -50,9 +52,6 @@ interface Props {
 
 const CompostagemForm: React.FC<Props> = ({ navigation }) => {
     const { userInfo } = useUser();
-
-    const [showTipoMedicaoModal, setShowTipoMedicaoModal] = useState(true);
-    const [isMedicaoRotina, setIsMedicaoRotina] = useState(false);
 
     const [data, setData] = useState<Date>(new Date());
     const [mostrarSeletorData, setMostrarSeletorData] = useState<boolean>(false);
@@ -81,6 +80,10 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
     const [openResponsavel, setOpenResponsavel] = useState(false);
     const [responsavel, setResponsavel] = useState<string>("");
     const [responsavelError, setResponsavelError] = useState(false);
+
+    const [loading, setLoading] = useState(true);
+    const [showTipoMedicaoModal, setShowTipoMedicaoModal] = useState(false);
+    const [isMedicaoRotina, setIsMedicaoRotina] = useState(false);
 
     const [responsaveisList, setResponsaveisList] = useState(allResponsaveis);
 
@@ -287,13 +290,7 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
         }
     };
 
-    // Dentro do componente FormularioMedicaoCompostagem
-    const handleTipoMedicaoSelect = (isRotina: boolean) => {
-        setIsMedicaoRotina(isRotina);
-        setShowTipoMedicaoModal(false);
-    };
-
-    // TODO Corrigir a forma de salvar a compostagem e remover ad uplicidade
+    // Salva a medição
     const salvarMedicaoCompostagem = async () => {
         if (isSaving) return;
         showGlobalToast(
@@ -315,7 +312,7 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                     'error',
                     'Dados obrigatórios faltantes',
                     'Selecione o responsável antes de salvar a medição',
-                    4000
+                    5000
                 );
                 hasError = true;
             } else {
@@ -329,7 +326,7 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                     'info',
                     'Dados obrigatórios faltantes',
                     'Selecione a leira da medição antes de salvar',
-                    4000
+                    5000
                 );
                 hasError = true;
             } else {
@@ -469,23 +466,107 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
         }
     };
 
+    const handleTipoMedicaoSelect = async (isRotina: boolean) => {
+        setLoading(true); // Ativa loading durante a transição
+
+        try {
+            showGlobalToast(
+                'info',
+                'Alterando modo',
+                `Mudando para medição ${isRotina ? 'de rotina' : 'completa'}`,
+                2000
+            );
+
+            // Limpa os campos se estiver mudando para modo rotina
+            if (isRotina) {
+                setTempAmb("");
+                setTempBase("");
+                setTempMeio("");
+                setTempTopo("");
+                setUmidadeAmb("");
+                setUmidadeLeira("");
+                setPh("");
+                setOdor(null);
+            }
+
+            // Pequeno delay para transição suave
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            setIsMedicaoRotina(isRotina);
+            setShowTipoMedicaoModal(false);
+
+        } catch (error) {
+            console.error('Erro ao alterar modo:', error);
+            showGlobalToast(
+                'error',
+                'Erro',
+                'Não foi possível alterar o modo de medição',
+                3000
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Função para inicialização
+    const initializeForm = async () => {
+        setLoading(true);
+        try {
+            // Simula carregamento inicial
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Se tiver userInfo, define o responsável
+            if (userInfo) {
+                setResponsavel(userInfo.user);
+            }
+
+            // Outras inicializações necessárias...
+
+        } catch (error) {
+            console.error('Erro na inicialização:', error);
+            showGlobalToast(
+                'error',
+                'Erro',
+                'Ocorreu um erro ao carregar o formulário',
+                3000
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        initializeForm();
+    }, []);
+
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <ModernHeader
+                    title={isMedicaoRotina ? 'Nova Medição de Rotina' : 'Nova Medição Completa'}
+                    iconName="thermometer"
+                    onBackPress={() => navigation.goBack()}
+                    rightAction={() => handleTipoMedicaoSelect(!isMedicaoRotina)}
+                    rightIcon={isMedicaoRotina ? "clipboard-list" : "clipboard-outline"}
+                />
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={customTheme.colors.primary} />
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.safeArea}>
+
             {/* Header Moderno */}
-            <View style={styles.header}>
-                <View style={styles.headerContent}>
-                    <TouchableOpacity
-                        onPress={() => navigation.goBack()}
-                        style={styles.backButton}
-                    >
-                        <Icon name="arrow-left" size={24} color={customTheme.colors.primary} />
-                    </TouchableOpacity>
-                    <Icon name="thermometer" size={24} color={customTheme.colors.primary} />
-                    <Text variant="titleLarge" style={styles.headerTitle}>
-                        {isMedicaoRotina ? 'Nova Medição de Rotina' : 'Nova Medição Completa'}
-                    </Text>
-                </View>
-            </View>
+            <ModernHeader
+                title={isMedicaoRotina ? 'Nova Medição de Rotina' : 'Nova Medição Completa'}
+                iconName="thermometer"
+                onBackPress={() => navigation.goBack()}
+                rightAction={() => handleTipoMedicaoSelect(!isMedicaoRotina)}
+                rightIcon={isMedicaoRotina ? "clipboard-list" : "clipboard-outline"}
+            />
 
             <FullScreenImage
                 visible={isFullScreenVisible}
@@ -1033,6 +1114,12 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: customTheme.colors.background,
+    },
     photoButtonsContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
