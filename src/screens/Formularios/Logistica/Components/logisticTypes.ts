@@ -33,68 +33,6 @@ export type dropdownType = {
     value: string;
 }
 
-export type GraphType = {
-    name: string;
-    count: number;
-    color: string;
-    quantidade: number;
-    legendFontColor: string;
-    legendFontSize: number;
-    medida: string;
-};
-
-export const allResponsaveis: dropdownType[] = [
-    { label: 'Lucas', value: 'Lucas' },
-    { label: 'Gabriel', value: 'Gabriel' },
-    { label: 'Fernanda', value: 'Fernanda' },
-];
-
-export interface RelatorioData {
-    num: string;
-    resp: string;
-    class: string;
-    cliente: string;
-    ocoOsDia: string;
-    dataOm: string;
-    obs: string;
-    images: {
-        image: string;
-        name: string;
-    }[];
-}
-
-export type Compostagem = {
-    timestamp?: any;
-    isMedicaoRotina?: boolean;
-    leira: string;
-    id: string;
-    data: string;
-    hora: string;
-    responsavel: string;
-    tempAmb: string;
-    tempBase: string;
-    tempMeio: string;
-    tempTopo: string;
-    umidadeAmb: string;
-    umidadeLeira: string;
-    ph: string;
-    odor: string | null;
-    observacao: string;
-    photoUris: string[];
-    photoUrls?: string[];
-};
-
-export interface User {
-    id: string;
-    user: string;
-    email: string;
-    telefone?: string | null;  // Agora aceita null
-    cargo: string;
-    ramal?: string | null;     // Agora aceita null
-    area?: string | null;      // Agora aceita null
-    acesso?: string[];
-}
-
 // Interfaces base
 export interface Equipment {
     id: string;

@@ -13,7 +13,7 @@ import {
     Button,
     ProgressBar,
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import firestore from '@react-native-firebase/firestore';
@@ -240,7 +240,7 @@ export default function LavagemScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="today" size={24} color={customTheme.colors.primary} />
+                                <Icon name="calendar-today" size={24} color={customTheme.colors.primary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.hoje}</Text>
                             <Text style={styles.statsLabel}>Hoje</Text>
@@ -250,7 +250,7 @@ export default function LavagemScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="date-range" size={24} color={customTheme.colors.secondary} />
+                                <Icon name="calendar-week" size={24} color={customTheme.colors.secondary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.semana}</Text>
                             <Text style={styles.statsLabel}>Esta Semana</Text>
@@ -278,7 +278,7 @@ export default function LavagemScreen({ navigation }: any) {
                             onPress={() => navigation.navigate('LavagemForm')}
                         >
                             <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.primaryContainer }]}>
-                                <Icon name="add" size={24} color={customTheme.colors.primary} />
+                                <Icon name="plus" size={24} color={customTheme.colors.primary} />
                             </View>
                             <Text style={styles.actionText}>Nova Lavagem</Text>
                         </TouchableOpacity>
@@ -289,7 +289,7 @@ export default function LavagemScreen({ navigation }: any) {
                         >
                             <View style={styles.actionIconContainer}>
                                 <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.secondaryContainer }]}>
-                                    <Icon name="event-available" size={24} color={customTheme.colors.secondary} />
+                                    <Icon name="calendar-blank-outline" size={24} color={customTheme.colors.secondary} />
                                 </View>
                                 {agendamentosPendentes > 0 && (
                                     <View style={styles.badgeContainer}>
@@ -307,7 +307,7 @@ export default function LavagemScreen({ navigation }: any) {
                             onPress={() => navigation.navigate('LavagemEstoq')}
                         >
                             <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.tertiaryContainer }]}>
-                                <Icon name="inventory" size={24} color={customTheme.colors.tertiary} />
+                                <Icon name="package-variant" size={24} color={customTheme.colors.tertiary} />
                             </View>
                             <Text style={styles.actionText}>Produtos</Text>
                         </TouchableOpacity>
@@ -327,7 +327,7 @@ export default function LavagemScreen({ navigation }: any) {
                             onPress={() => navigation.navigate('LavagemRelat')}
                         >
                             <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.tertiaryContainer }]}>
-                                <Icon name="history" size={24} color={customTheme.colors.tertiary} />
+                                <Icon name="file-chart" size={24} color={customTheme.colors.tertiary} />
                             </View>
                             <Text style={styles.actionText}>Gerar Relatório</Text>
                         </TouchableOpacity>

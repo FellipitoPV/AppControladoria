@@ -23,7 +23,6 @@ interface QuickAction {
     adminView?: boolean;
 }
 
-
 const QuickActionsGrid = () => {
     const [currentPage, setCurrentPage] = useState(0);
     const navigation = useNavigation<NavigationProp<ParamListBase>>();
@@ -42,23 +41,39 @@ const QuickActionsGrid = () => {
             id: '2',
             title: 'Compostagem',
             icon: 'sprout',
-            color: '#8b79f2',
+            color: customTheme.colors.primary,
             route: 'CompostagemScreen',
             acesso: 'compostagem' // Ação restrita
         },
         {
             id: '3',
             title: 'Logística',
-            icon: 'clipboard',
-            color: '#e679f2',
+            icon: 'truck-delivery',
+            color: customTheme.colors.primary,
             route: 'LogisticaScreen',
             acesso: 'logistica' // Ação restrita
         },
         {
+            id: '4',
+            title: 'Operacional',
+            icon: 'clipboard-list',
+            color: customTheme.colors.primary,
+            route: 'LogisticaScreen',
+            acesso: 'operacao' // Ação restrita
+        },
+        {
+            id: '98',
+            title: 'Acessos',
+            icon: 'account-cog',
+            color: customTheme.colors.primary,
+            route: 'UsersEdit',
+            acesso: 'Adm' // Ação restrita
+        },
+        {
             id: '99',
             title: 'Contatos',
-            icon: 'phone',
-            color: '#79a2f2',
+            icon: 'contacts',
+            color: customTheme.colors.primary,
             route: 'Contatos'
             // Sem acesso = público
         },

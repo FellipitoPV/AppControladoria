@@ -29,9 +29,9 @@ export default function RegisterScreen({ navigation }: any) {
     const [nome, setNome] = useState('');
     const [email, setEmail] = useState('');
     const [senha, setSenha] = useState('');
-    const [confirmarSenha, setConfirmarSenha] = useState('');
     const [area, setArea] = useState<'Operacional' | 'Administrativo' | ''>('');
     const [showPassword, setShowPassword] = useState(false);
+    const [confirmarSenha, setConfirmarSenha] = useState('');
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const handleRegister = async () => {
@@ -115,7 +115,7 @@ export default function RegisterScreen({ navigation }: any) {
                     area: area,
                     createdAt: firestore.FieldValue.serverTimestamp(),
                     authUid: userCredential.user.uid,
-                    acesso: []
+                    acesso: area === 'Operacional' ? ['operacional'] : [] // Aqui está a modificação
                 });
 
             showGlobalToast(
@@ -305,6 +305,7 @@ export default function RegisterScreen({ navigation }: any) {
                         </TouchableOpacity>
                     </View>
                 </ScrollView>
+
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

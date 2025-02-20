@@ -444,7 +444,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                             </TouchableOpacity>
                         </View>
                     </View>
-                    
+
                 </Card.Content>
             </Card >
         );
@@ -500,10 +500,6 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
         const [showTimePicker, setShowTimePicker] = useState(false);
         const [searchText, setSearchText] = useState('');
 
-        const isValidPlate = (placa: string) => {
-            return PLACAS_VEICULOS.some(item => item.value === placa);
-        };
-
         // Refs para abrir os dropdowns
         const lavagemRef = useRef<DropdownRef>(null);
         const veiculoRef = useRef<DropdownRef>(null);
@@ -515,6 +511,10 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
             tipo: string;
             isCustom: boolean;
         }>>([]);
+
+        const isValidPlate = (placa: string) => {
+            return PLACAS_VEICULOS.some(item => item.value === placa);
+        };
 
         // Helper function to get vehicle display info
         const getVehicleDisplayInfo = (veiculo: {
@@ -927,7 +927,7 @@ const styles = StyleSheet.create({
     dropdown: {
         height: 56,
         borderColor: customTheme.colors.outline,
-        borderRadius: 8,
+        borderRadius: 10,
         paddingHorizontal: 16,
         backgroundColor: '#FFFFFF',
     },
@@ -965,7 +965,7 @@ const styles = StyleSheet.create({
     inputSearchStyle: {
         height: 48,
         fontSize: 16,
-        borderRadius: 8,
+        borderRadius: 10,
         color: customTheme.colors.onSurface,
     },
     iconStyle: {
@@ -980,7 +980,7 @@ const styles = StyleSheet.create({
     },
     modalContent: {
         backgroundColor: customTheme.colors.surface,
-        borderRadius: 28,
+        borderRadius: 10,
         padding: 20,
         elevation: 5,
     },
@@ -1000,7 +1000,7 @@ const styles = StyleSheet.create({
     },
     infoSection: {
         backgroundColor: customTheme.colors.surfaceVariant,
-        borderRadius: 12,
+        borderRadius: 10,
         padding: 16,
         gap: 12,
     },
@@ -1036,7 +1036,7 @@ const styles = StyleSheet.create({
         flex: 1,
         borderWidth: 1,
         borderColor: customTheme.colors.outline,
-        borderRadius: 8,
+        borderRadius: 10,
         backgroundColor: customTheme.colors.surface,
     },
     modalFooter: {
@@ -1090,7 +1090,7 @@ const styles = StyleSheet.create({
     miniThumbnail: {
         width: 40,
         height: 40,
-        borderRadius: 4,
+        borderRadius: 10,
         marginRight: 4,
     },
     loadMoreWrapper: {
@@ -1103,7 +1103,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         padding: 12,
         backgroundColor: customTheme.colors.primaryContainer,
-        borderRadius: 8,
+        borderRadius: 10,
         gap: 8,
     },
     loadMoreText: {
@@ -1123,6 +1123,7 @@ const styles = StyleSheet.create({
     card: {
         marginBottom: 8,
         elevation: 2,
+        borderRadius: 10,
         overflow: 'hidden',
     },
     cardGradient: {
@@ -1131,6 +1132,7 @@ const styles = StyleSheet.create({
     },
     cardContent: {
         padding: 12,
+        borderRadius: 5,
         gap: 8, // Espaçamento uniforme entre as linhas
     },
     headerRow: {
@@ -1288,7 +1290,7 @@ const styles = StyleSheet.create({
     thumbnail: {
         width: 80,
         height: 80,
-        borderRadius: 8,
+        borderRadius: 10,
         marginRight: 8,
     },
     observacoesContainer: {

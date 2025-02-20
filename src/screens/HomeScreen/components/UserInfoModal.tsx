@@ -1,5 +1,5 @@
-import React from 'react';
-import { Modal, View, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Modal, View, StyleSheet, TouchableOpacity, ScrollView, Image, Linking } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
@@ -31,12 +31,30 @@ interface UserModalProps {
 
 const UserProfileModal = ({ visible, onClose, userInfo, onLogout }: UserModalProps) => {
     const navigation = useNavigation<any>();
+    const [showEasterEgg, setShowEasterEgg] = useState(false);
+
+    useEffect(() => {
+        // 0.5% de chance (0.005)
+        const randomNumber = Math.random();
+        const shouldShowEasterEgg = randomNumber < 0.25;
+        setShowEasterEgg(shouldShowEasterEgg);
+        console.log("Quantidade recebida do esterEgg:", randomNumber)
+    }, []);
+
+    const handleRickRoll = async () => {
+        await Linking.openURL('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    };
 
     const menuItems: ProfileMenuItem[] = [
         {
             icon: 'account-edit',
             label: 'Editar Perfil',
             onPress: () => handleNavigate("Profile"),
+        },
+        {
+            icon: 'shield-key',
+            label: 'Meus acessos',
+            onPress: () => handleNavigate("Acessos"),
         },
     ];
 
@@ -129,6 +147,20 @@ const UserProfileModal = ({ visible, onClose, userInfo, onLogout }: UserModalPro
                             />
                             <Text style={styles.logoutText}>Sair</Text>
                         </TouchableOpacity>
+
+                        {showEasterEgg && (
+                            <TouchableOpacity
+                                style={styles.easterEgg}
+                                onPress={handleRickRoll}
+                            >
+                                <MaterialCommunityIcons
+                                    name="music-note"
+                                    size={24}
+                                    color={customTheme.colors.primary}
+                                />
+                            </TouchableOpacity>
+                        )}
+
                     </ScrollView>
                 </Surface>
             </View>
@@ -137,6 +169,15 @@ const UserProfileModal = ({ visible, onClose, userInfo, onLogout }: UserModalPro
 };
 
 const styles = StyleSheet.create({
+    easterEgg: {
+        position: 'absolute',
+        bottom: 16,
+        right: 16,
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: customTheme.colors.primaryContainer,
+        opacity: 0.7,
+    },
     modalBackground: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',

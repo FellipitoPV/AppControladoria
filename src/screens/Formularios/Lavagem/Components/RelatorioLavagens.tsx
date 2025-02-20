@@ -18,7 +18,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { RegistroLavagem } from './lavagemTypes';
+import { PLACAS_VEICULOS, RegistroLavagem } from './lavagemTypes';
 import ModernHeader from '../../../../assets/components/ModernHeader';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
 import { customTheme } from '../../../../theme/theme';
@@ -88,6 +88,39 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
         }
     };
 
+    const isValidPlate = (placa: string) => {
+        return PLACAS_VEICULOS.some(item => item.value === placa);
+    };
+
+    // Helper function to get vehicle display info
+    const getVehicleDisplayInfo = (veiculo: {
+        placa: string;
+        tipo: string;
+        numeroEquipamento?: string;
+    }) => {
+        if (!veiculo) return null;
+
+        const isEquipment = veiculo.tipo === 'equipamento';
+        const isValidVehicle = isValidPlate(veiculo.placa);
+
+        // Define icon and label based on conditions
+        let icon = 'help-outline'; // Default icon for unknown/other
+        let label = 'Outros';
+
+        if (isEquipment) {
+            icon = 'build';
+            label = 'Equipamento';
+        } else if (isValidVehicle) {
+            icon = 'directions-car';
+            label = 'Veículo';
+        }
+
+        return {
+            icon,
+            label,
+            displayValue: veiculo.placa + (veiculo.numeroEquipamento ? ` (#${veiculo.numeroEquipamento})` : '')
+        };
+    };
 
     // Converte as datas para o formato pt-BR
     const formatarData = (data: Date) => {
@@ -233,6 +266,14 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
         }
     };
 
+    // Função para formatar o horário (remove os segundos)
+    const formatarHorario = (hora: string) => {
+        // Se o horário incluir segundos (HH:mm:ss), remove os segundos
+        if (hora.split(':').length === 3) {
+            return hora.split(':').slice(0, 2).join(':');
+        }
+        return hora; // Retorna o horário original se já estiver no formato HH:mm
+    };
 
     const gerarRelatorioExcel = async () => {
         if (lavagens.length === 0) {
@@ -246,18 +287,22 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
             // Verificar conectividade primeiro
             const conectado = await verificarConectividade();
             if (!conectado) {
-                setLoading(false); // Importante desativar o loading aqui
+                setLoading(false);
                 setIsConnectionModalVisible(true);
                 return;
             }
 
-            console.log("Dados sendo enviados:", {
-                dataInicio: formatarData(dataInicio),
-                dataFim: formatarData(dataFim),
-                lavagens
-            });
+            showGlobalToast('info',
+                'Gerando Relatório',
+                'O servidor está processando seu relatório...',
+                10000);
 
-            // Resto do seu código continua igual...
+            // Formata os horários antes de enviar
+            const lavagensFormatadas = lavagens.map(lavagem => ({
+                ...lavagem,
+                hora: formatarHorario(lavagem.hora)
+            }));
+
             const response = await fetch('http://192.168.1.222:3000/gerar-relatorio-lavagem', {
                 method: 'POST',
                 headers: {
@@ -266,7 +311,7 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                 body: JSON.stringify({
                     dataInicio: formatarData(dataInicio),
                     dataFim: formatarData(dataFim),
-                    lavagens
+                    lavagens: lavagensFormatadas
                 })
             });
 
@@ -275,6 +320,11 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                 console.error('Erro do servidor:', errorText);
                 throw new Error(`Erro na resposta do servidor: ${errorText}`);
             }
+
+            showGlobalToast('success',
+                'Relatório Gerado com Sucesso!',
+                '',
+                5000);
 
             // Criar nome do arquivo com timestamp
             const timestamp = Date.now();
@@ -305,10 +355,11 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                         filename: fileName
                     });
 
+                    showGlobalToast('success', 'Sucesso', 'Relatório gerado com sucesso!', 4000);
+
                     // Limpar arquivo após compartilhar
                     await RNFS.unlink(filePath);
 
-                    showGlobalToast('success', 'Sucesso', 'Relatório gerado com sucesso!', 4000);
                 } catch (error) {
                     console.warn(error);
                 }

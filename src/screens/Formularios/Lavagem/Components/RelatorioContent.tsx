@@ -8,6 +8,7 @@ import {
 import { Surface, Text } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../../theme/theme';
+import { PLACAS_VEICULOS } from './lavagemTypes';
 
 interface Lavagem {
     id: string;
@@ -43,6 +44,40 @@ const RelatorioContent: React.FC<RelatorioContentProps> = ({
         acc[lavagem.tipoLavagem] = (acc[lavagem.tipoLavagem] || 0) + 1;
         return acc;
     }, {} as { [key: string]: number });
+
+    const isValidPlate = (placa: string) => {
+        return PLACAS_VEICULOS.some(item => item.value === placa);
+    };
+
+    // Helper function to get vehicle display info
+    const getVehicleDisplayInfo = (veiculo: {
+        placa: string;
+        tipo: string;
+        numeroEquipamento?: string;
+    }) => {
+        if (!veiculo) return null;
+
+        const isEquipment = veiculo.tipo === 'equipamento';
+        const isValidVehicle = isValidPlate(veiculo.placa);
+
+        // Define icon and label based on conditions
+        let icon = 'help-circle-outline'; // Default icon for unknown/other
+        let label = 'Outros';
+
+        if (isEquipment) {
+            icon = 'wrench';
+            label = 'Equipamento';
+        } else if (isValidVehicle) {
+            icon = 'truck';
+            label = 'Veículo';
+        }
+
+        return {
+            icon,
+            label,
+            displayValue: veiculo.placa + (veiculo.numeroEquipamento ? ` (#${veiculo.numeroEquipamento})` : '')
+        };
+    };
 
     return (
         <View style={styles.container}>
@@ -102,16 +137,30 @@ const RelatorioContent: React.FC<RelatorioContentProps> = ({
                 {lavagens.map(lavagem => (
                     <Surface key={lavagem.id} style={styles.lavagemItem} elevation={1}>
                         <View style={styles.lavagemHeader}>
-                            <View style={styles.placaContainer}>
-                                <Icon
-                                    name={lavagem.veiculo.tipo === 'equipamento' ? 'truck' : 'car'}
-                                    size={20}
-                                    color={customTheme.colors.primary}
-                                    style={styles.placaIcon}
-                                />
-                                <Text variant="titleMedium" style={styles.placaText}>
-                                    {lavagem.veiculo.placa}
-                                </Text>
+                            <View style={styles.headerTopRow}>
+                                <View style={styles.placaContainer}>
+                                    {(() => {
+                                        const vehicleInfo = getVehicleDisplayInfo(lavagem.veiculo);
+                                        return (
+                                            <>
+                                                <Icon
+                                                    name={vehicleInfo?.icon || 'help-circle-outline'}
+                                                    size={20}
+                                                    color={customTheme.colors.primary}
+                                                    style={styles.placaIcon}
+                                                />
+                                                <View style={styles.placaTextContainer}>
+                                                    <Text variant="titleMedium" style={styles.placaText}>
+                                                        {vehicleInfo?.displayValue || lavagem.veiculo.placa}
+                                                    </Text>
+                                                    <Text style={styles.tipoVeiculoText}>
+                                                        {vehicleInfo?.label}
+                                                    </Text>
+                                                </View>
+                                            </>
+                                        );
+                                    })()}
+                                </View>
                             </View>
                             <View style={styles.dataContainer}>
                                 <Icon
@@ -157,6 +206,37 @@ const RelatorioContent: React.FC<RelatorioContentProps> = ({
 };
 
 const styles = StyleSheet.create({
+    lavagemHeader: {
+        marginBottom: 8,
+    },
+    headerTopRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 4,
+    },
+    placaContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        flex: 1,
+    },
+    placaTextContainer: {
+        flex: 1,
+    },
+    placaText: {
+        color: customTheme.colors.onSurface,
+        flexShrink: 1,
+    },
+    dataContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4, // Adiciona espaço entre a placa e a data
+    },
+    tipoVeiculoText: {
+        fontSize: 12,
+        color: customTheme.colors.onSurfaceVariant,
+        marginTop: -2,
+    },
     container: {
         flex: 1,
         backgroundColor: customTheme.colors.background,
@@ -232,25 +312,8 @@ const styles = StyleSheet.create({
         padding: 12,
         marginBottom: 8,
     },
-    lavagemHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    placaContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
     placaIcon: {
         marginRight: 4,
-    },
-    placaText: {
-        color: customTheme.colors.onSurface,
-    },
-    dataContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
     },
     dataIcon: {
         marginRight: 4,
@@ -262,7 +325,6 @@ const styles = StyleSheet.create({
     lavagemDetails: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        paddingHorizontal: 4,
     },
     detailRow: {
         flexDirection: 'row',

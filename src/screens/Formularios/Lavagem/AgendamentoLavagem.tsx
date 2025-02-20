@@ -20,7 +20,7 @@ import {
     Dialog,
     Portal,
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import DropDownPicker from 'react-native-dropdown-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import firestore from '@react-native-firebase/firestore';
@@ -109,6 +109,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                 concluido: false,
                 tipoVeiculo: isEquipamento ? 'equipamento' : 'placa',
                 func: userInfo?.cargo,
+                createBy: userInfo?.user,
             });
 
             await forceSync('agendamentos');
@@ -132,7 +133,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
 
     const canScheduleWash = useMemo(() => {
         if (!userInfo) return false;
-        return userInfo.cargo?.toLowerCase() === 'administrador' || userInfo.acesso?.includes('lavagem') || false;
+        return userInfo.cargo?.toLowerCase() === 'administrador' || userInfo.acesso?.includes('lavagemAdm') || false;
     }, [userInfo]);
 
     const resetForm = () => {
@@ -179,7 +180,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                         size={48}
                                         icon={() => (
                                             <Icon
-                                                name={item.tipoVeiculo === 'equipamento' ? 'build' : 'directions-car'}
+                                                name={item.tipoVeiculo === 'equipamento' ? 'wrench' : 'car'}
                                                 size={24}
                                                 color="#FFF"
                                             />
@@ -214,7 +215,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                         onPress={() => setShowDeleteConfirm(true)}
                                     >
                                         <Icon
-                                            name="delete-outline"
+                                            name="delete"
                                             size={24}
                                             color={customTheme.colors.error}
                                         />
@@ -228,7 +229,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                             <View style={styles.cardFooter}>
                                 <View style={styles.footerInfo}>
                                     <Icon
-                                        name="local-car-wash"
+                                        name="car-wash"
                                         size={20}
                                         color={customTheme.colors.primary}
                                     />
@@ -249,7 +250,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                 {!item.concluido && (
                                     <View style={styles.footerInfo}>
                                         <Icon
-                                            name="touch-app"
+                                            name="gesture-tap"
                                             size={20}
                                             color={customTheme.colors.primary}
                                         />
@@ -312,9 +313,14 @@ export default function AgendamentoLavagem({ navigation }: any) {
                 title="Agendamentos"
                 iconName="calendar-today"
                 onBackPress={() => navigation.goBack()}
+                {...(canScheduleWash && isOnline ? {
+                    rightIcon: 'plus-box',
+                    rightAction: () => setModalVisible(true)
+                } : {})}
             />
 
-            <LocalAgendamentoCard placa={"LMD-4E79"} lavagem={"simples"} />
+            {/* Teste local */}
+            {/* <LocalAgendamentoCard placa={"LMD-4E79"} lavagem={"simples"} /> */}
 
             {agendamentosFiltrados.length === 0 ? (
                 <View style={styles.emptyState}>
@@ -338,16 +344,6 @@ export default function AgendamentoLavagem({ navigation }: any) {
                 </ScrollView>
             )}
 
-            {canScheduleWash && (
-                <TouchableOpacity
-                    style={styles.fab}
-                    onPress={() => isOnline && setModalVisible(true)}
-                    disabled={!isOnline}
-                >
-                    <Icon name="add" size={24} color="#FFFFFF" />
-                </TouchableOpacity>
-            )}
-
             <Modal
                 visible={modalVisible}
                 onDismiss={() => setModalVisible(false)}
@@ -360,7 +356,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                         {/* Header com ícone */}
                         <View style={styles.modalHeader}>
                             <View style={styles.modalHeaderContent}>
-                                <Icon name="my-library-add" size={28} color={customTheme.colors.primary} />
+                                <Icon name="plus-circle" size={28} color={customTheme.colors.primary} />
                                 <Text variant="headlineSmall" style={styles.modalTitle}>Novo Agendamento</Text>
                             </View>
                             <TouchableOpacity
@@ -376,7 +372,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                             {/* Substitua a seção de Veículo/Equipamento por este código */}
                             <View style={styles.inputSection}>
                                 <Text variant="titleSmall" style={styles.sectionTitle}>
-                                    <Icon name="directions-car" size={18} color={customTheme.colors.primary} /> Veículo/Equipamento
+                                    <Icon name="truck" size={18} color={customTheme.colors.primary} /> Veículo/Equipamento
                                 </Text>
 
                                 <TouchableOpacity
@@ -407,7 +403,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                         renderLeftIcon={() => (
                                             <Icon
                                                 style={styles.dropdownIcon}
-                                                name={isEquipamento ? 'build' : 'directions-car'}
+                                                name={isEquipamento ? 'wrench' : 'truck'}
                                                 size={20}
                                                 color={customTheme.colors.primary}
                                             />
@@ -415,7 +411,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                         renderItem={item => (
                                             <View style={styles.dropdownItem}>
                                                 <Icon
-                                                    name={EQUIPAMENTOS.some(equip => equip.value === item.value) ? 'build' : 'directions-car'}
+                                                    name={EQUIPAMENTOS.some(equip => equip.value === item.value) ? 'wrench' : 'truck'}
                                                     size={20}
                                                     color={customTheme.colors.primary}
                                                 />
@@ -445,7 +441,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                             {/* Substitua a seção de Tipo de Lavagem por este código */}
                             <View style={styles.inputSection}>
                                 <Text variant="titleSmall" style={styles.sectionTitle}>
-                                    <Icon name="local-car-wash" size={18} color={customTheme.colors.primary} /> Tipo de Lavagem
+                                    <Icon name="car-wash" size={18} color={customTheme.colors.primary} /> Tipo de Lavagem
                                 </Text>
 
                                 <TouchableOpacity
@@ -472,7 +468,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                         renderLeftIcon={() => (
                                             <Icon
                                                 style={styles.dropdownIcon}
-                                                name="local-car-wash"
+                                                name="car-wash"
                                                 size={20}
                                                 color={customTheme.colors.primary}
                                             />
@@ -480,7 +476,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                         renderItem={item => (
                                             <View style={styles.dropdownItem}>
                                                 <Icon
-                                                    name="local-car-wash"
+                                                    name="car-wash"
                                                     size={20}
                                                     color={customTheme.colors.primary}
                                                 />
@@ -496,7 +492,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                             {/* Seção de Data */}
                             <View style={styles.inputSection}>
                                 <Text variant="titleSmall" style={styles.sectionTitle}>
-                                    <Icon name="event" size={18} color={customTheme.colors.primary} /> Data do Agendamento
+                                    <Icon name="calendar-blank-outline" size={18} color={customTheme.colors.primary} /> Data do Agendamento
                                 </Text>
 
                                 <TouchableOpacity
@@ -505,7 +501,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                 >
                                     <Icon name="calendar-month" size={20} color={customTheme.colors.primary} />
                                     <Text style={styles.dateText}>{dataSelecionada.toLocaleDateString()}</Text>
-                                    <Icon name="arrow-drop-down" size={24} color={customTheme.colors.primary} />
+                                    <Icon name="gesture-tap" size={24} color={customTheme.colors.primary} />
                                 </TouchableOpacity>
 
                                 {mostrarDatePicker && (

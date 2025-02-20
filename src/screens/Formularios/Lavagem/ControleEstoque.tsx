@@ -446,6 +446,8 @@ export default function ControleEstoque({ navigation }: any) {
                 title="Controle de Estoque"
                 iconName="history"
                 onBackPress={() => navigation.goBack()}
+                rightIcon='plus-box'
+                rightAction={() => setModalVisible(true)}
             />
 
             <ScrollView style={styles.content}>
@@ -550,15 +552,6 @@ export default function ControleEstoque({ navigation }: any) {
                     })
                 )}
             </ScrollView>
-
-            {isOnline && (
-                <TouchableOpacity
-                    onPress={() => setModalVisible(true)}
-                    style={styles.fab}
-                >
-                    <Icon name="plus" size={24} color={customTheme.colors.onPrimary} />
-                </TouchableOpacity>
-            )}
 
             {/* Modal para criar novo produto */}
             <Modal
@@ -785,6 +778,7 @@ export default function ControleEstoque({ navigation }: any) {
                             }}
                             icon="camera"
                             style={styles.imagePickerButton}
+                            labelStyle={styles.buttonText}
                         >
                             Tirar Foto
                         </Button>
@@ -796,6 +790,7 @@ export default function ControleEstoque({ navigation }: any) {
                             }}
                             icon="image"
                             style={styles.imagePickerButton}
+                            labelStyle={styles.buttonText}
                         >
                             Escolher da Galeria
                         </Button>
@@ -1925,6 +1920,11 @@ const styles = StyleSheet.create({
     },
     imagePickerButton: {
         marginBottom: 8,
+        backgroundColor: customTheme.colors.primary,
+        color: customTheme.colors.onPrimary,
+    },
+    buttonText: {
+        color: customTheme.colors.onPrimary,
     },
     detalheTitulo: {
         fontSize: 24,

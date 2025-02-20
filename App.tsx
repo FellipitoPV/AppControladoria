@@ -31,6 +31,8 @@ import OperacaoScreen from './src/screens/Formularios/Operacao/OperacaoScreen';
 import ListaProgramacoes from './src/screens/Formularios/Logistica/ListaProgramacoes';
 import FormularioProgramacao from './src/screens/Formularios/Logistica/Components/FormularioProgramacao';
 import RelatorioLavagens from './src/screens/Formularios/Lavagem/Components/RelatorioLavagens';
+import MyAccessScreen from './src/screens/HomeScreen/components/MyAccessScreen';
+import EditUserAccessScreen from './src/screens/Adm/EditUserAccessScreen';
 
 const Stack = createStackNavigator();
 
@@ -145,12 +147,16 @@ export default function App() {
               <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
 
+              {/* ADM */}
+              <Stack.Screen name="UsersEdit" component={EditUserAccessScreen} options={{ headerShown: false }} />
+
               <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
               <Stack.Screen name="NewP" component={FormularioOcorrencia} options={{ headerShown: false }} />
               <Stack.Screen name="List" component={RelatorioOcorrenciaList} options={{ headerShown: false }} />
 
               {/* Perfil */}
               <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Acessos" component={MyAccessScreen} options={{ headerShown: false }} />
 
               {/* Lavagem */}
               <Stack.Screen name="LavagemScreen" component={LavagemScreen} options={{ headerShown: false }} />

@@ -241,6 +241,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 
         // Validação do número do equipamento
         if (tipoVeiculo === 'equipamento' && !numeroEquipamento) {
+            console.log(numeroEquipamento)
             errors.push("Informe o número do equipamento");
         }
 
@@ -572,6 +573,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         veiculoSelecionado,
         tipoLavagemSelecionado,
         produtosSelecionados,
+        numeroEquipamento,
         photos
     ]);
 
@@ -1087,9 +1089,6 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 }
 
 const styles = StyleSheet.create({
-    vehicleInputsContainer: {
-        gap: 16,
-    },
     equipmentNumberInput: {
         backgroundColor: '#FFFFFF',
         marginTop: 8,
@@ -1240,10 +1239,6 @@ const styles = StyleSheet.create({
     scrollView: {
         flex: 1,
     },
-    container: {
-        flex: 1,
-        padding: 20,
-    },
 
     // Estilos das seções
     section: {
@@ -1296,90 +1291,6 @@ const styles = StyleSheet.create({
     buttonContent: {
         height: 56, // Aumentado para melhor toque
         paddingHorizontal: 24,
-    },
-    suggestionItemPressed: {
-        backgroundColor: customTheme.colors.surfaceVariant,
-        opacity: 0.8,
-    },
-    noMatchItemPressed: {
-        opacity: 0.7,
-    },
-    autocompleteContainer: {
-        position: 'relative',
-        zIndex: 1,
-    },
-    suggestionsList: {
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        right: 0,
-        maxHeight: 250,
-        marginTop: 4,
-        borderRadius: 8,
-        backgroundColor: customTheme.colors.surface,
-        overflow: 'hidden',
-    },
-    suggestionsScroll: {
-        flex: 1,
-    },
-    suggestionsSection: {
-        paddingVertical: 8,
-    },
-    suggestionsSectionTitle: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        fontSize: 12,
-        color: customTheme.colors.primary,
-        fontWeight: '600',
-        textTransform: 'uppercase',
-    },
-    suggestionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        gap: 12,
-    },
-    suggestionContent: {
-        flex: 1,
-    },
-    suggestionTitle: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-        fontWeight: '500',
-    },
-    suggestionSubtitle: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    noMatchItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        gap: 12,
-        backgroundColor: customTheme.colors.errorContainer,
-    },
-    noMatchText: {
-        flex: 1,
-        fontSize: 14,
-        color: customTheme.colors.error,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: customTheme.colors.surface,
-        elevation: 2,
-    },
-    headerContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    headerTitle: {
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
     },
     formContainer: {
         padding: 16,

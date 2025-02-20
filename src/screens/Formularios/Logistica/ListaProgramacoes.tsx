@@ -19,6 +19,7 @@ import { useUser } from '../../../contexts/userContext';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { customTheme } from '../../../theme/theme';
 import { Container, ProgramacaoEquipamento, Responsavel } from './Components/logisticTypes';
+import ModernHeader from '../../../assets/components/ModernHeader';
 
 function alpha(color: string, opacity: number): string {
     const opacityHex = Math.round(opacity * 255).toString(16).padStart(2, '0');
@@ -511,14 +512,6 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                                     </View>
                                 )}
 
-                                {/* Mensagem de helper mantida fora da verificação de conexão */}
-                                {(programacao.responsavelOperacao?.nome === userInfo?.user &&
-                                    !programacao.responsavelCarregamento?.nome &&
-                                    isOnline) && (
-                                        <Text style={styles.helperFinalizarText}>
-                                            * Defina o responsável pelo carregamento para poder finalizar a operação
-                                        </Text>
-                                    )}
                             </View>
                         )}
 
@@ -557,39 +550,16 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
     return (
         <View style={styles.container}>
 
-            <View style={styles.header}>
-                <MaterialIcons name="schedule" size={32} color={customTheme.colors.primary} />
-                <Text variant="headlineMedium" style={styles.headerTitle}>
-                    Programações
-                </Text>
-
-                {(userInfo?.acesso?.includes('logistica') || userInfo?.cargo === "Administrador") && (
-                    <TouchableOpacity
-                        style={[
-                            styles.addButton,
-                            userInfo?.cargo === "Administrador" && styles.addButtonAdmin
-                        ]}
-                        onPress={() => navigation.navigate('Form')}
-                    >
-                        {userInfo?.cargo === "Administrador" ? (
-                            // Visual para administrador
-                            <View style={styles.adminButtonContent}>
-                                <MaterialIcons name="add" size={24} color={customTheme.colors.onPrimary} />
-                                <MaterialIcons
-                                    name="admin-panel-settings"
-                                    size={12}
-                                    color={customTheme.colors.onPrimary}
-                                    style={styles.adminIcon}
-                                />
-                            </View>
-                        ) : (
-                            // Visual normal
-                            <MaterialIcons name="add" />
-                        )}
-                    </TouchableOpacity>
-                )}
-
-            </View>
+            {/* Header */}
+            <ModernHeader
+                title="Agendamentos"
+                iconName="clock"
+                onBackPress={() => navigation.goBack()}
+                {...(userInfo?.acesso?.includes('logistica') || userInfo?.cargo === "Administrador" ? {
+                    rightIcon: 'plus-box',
+                    rightAction: () => navigation.navigate('LogisticaProgram')
+                } : {})}
+            />
 
             <ScrollView style={styles.content}>
                 {programacoes.length === 0 ? (
@@ -615,6 +585,46 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
             >
                 <Dialog.Title>Responsabilidades</Dialog.Title>
                 <Dialog.Content>
+                    <View style={[styles.dialogSection, styles.dialogSectionDivider]}>
+                        <Text style={styles.dialogSectionTitle}>Responsável pela Operação</Text>
+
+                        {isOperacaoResponsavel ? (
+                            <View style={styles.successMessage}>
+                                <MaterialIcons name="check-circle" size={20} color={customTheme.colors.primary} />
+                                <Text style={styles.successText}>
+                                    Você é o responsável pela operação
+                                </Text>
+                            </View>
+                        ) : (
+                            <View>
+                                <Text style={styles.userInfoText}>
+                                    Ao assumir esta responsabilidade, você, <Text style={{ fontWeight: 'bold' }}>{userInfo?.user}</Text>,
+                                    será registrado como o responsável oficial pela execução desta operação.
+                                    Isso significa que você estará encarregado de supervisionar e garantir a
+                                    conclusão da operação.
+                                </Text>
+
+                                <TouchableOpacity
+                                    style={[styles.dialogButton, styles.operacaoButton]}
+                                    onPress={async () => {
+                                        if (selectedProgramacao) {
+                                            setLoading(true)
+                                            await assumirResponsabilidade(selectedProgramacao, 'operacao');
+                                            setIsOperacaoResponsavel(true);
+                                            setLoading(false)
+                                        }
+                                    }}
+                                >
+                                    <MaterialIcons name="engineering" size={24} color={customTheme.colors.primary} />
+                                    <Text style={styles.dialogButtonTitle}>
+                                        Confirmar como Responsável pela Operação
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+
+                        )}
+                    </View>
+
                     <View style={styles.dialogSection}>
                         <Text style={styles.dialogSectionTitle}>Responsável pelo Carregamento</Text>
                         <TextInput
@@ -660,50 +670,11 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
 
                         {!isOperacaoResponsavel && (
                             <Text style={styles.helperText}>
-                                * Primeiro assuma a responsabilidade pela operação
+                                * Assuma a responsabilidade para designar o respónsavel pelo carregamento
                             </Text>
                         )}
                     </View>
 
-                    <View style={[styles.dialogSection, styles.dialogSectionDivider]}>
-                        <Text style={styles.dialogSectionTitle}>Responsável pela Operação</Text>
-
-                        {isOperacaoResponsavel ? (
-                            <View style={styles.successMessage}>
-                                <MaterialIcons name="check-circle" size={20} color={customTheme.colors.primary} />
-                                <Text style={styles.successText}>
-                                    Você é o responsável pela operação
-                                </Text>
-                            </View>
-                        ) : (
-                            <View>
-                                <Text style={styles.userInfoText}>
-                                    Ao assumir esta responsabilidade, você, <Text style={{ fontWeight: 'bold' }}>{userInfo?.user}</Text>,
-                                    será registrado como o responsável oficial pela execução desta operação.
-                                    Isso significa que você estará encarregado de supervisionar e garantir a
-                                    conclusão da operação.
-                                </Text>
-
-                                <TouchableOpacity
-                                    style={[styles.dialogButton, styles.operacaoButton]}
-                                    onPress={async () => {
-                                        if (selectedProgramacao) {
-                                            setLoading(true)
-                                            await assumirResponsabilidade(selectedProgramacao, 'operacao');
-                                            setIsOperacaoResponsavel(true);
-                                            setLoading(false)
-                                        }
-                                    }}
-                                >
-                                    <MaterialIcons name="engineering" size={24} color={customTheme.colors.primary} />
-                                    <Text style={styles.dialogButtonTitle}>
-                                        Confirmar como Responsável pela Operação
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-
-                        )}
-                    </View>
                 </Dialog.Content>
             </Dialog>
 
@@ -1022,32 +993,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 12,
     },
-    addButton: {
-        backgroundColor: customTheme.colors.primary,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-
-    addButtonAdmin: {
-        backgroundColor: customTheme.colors.tertiary, // Cor diferente para admin
-        borderWidth: 2,
-        borderColor: alpha(customTheme.colors.onTertiary, 0.2),
-    },
-
-    adminButtonContent: {
-        position: 'relative',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-
-    adminIcon: {
-        position: 'absolute',
-        bottom: -4,
-        right: -4,
-    },
 
     helperFinalizarText: {
         fontSize: 12,
@@ -1129,11 +1074,6 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 14,
         color: customTheme.colors.onSurface,
-    },
-
-    confirmList: {
-        flex: 1,
-        gap: 4,
     },
 
     confirmWarning: {
@@ -1351,97 +1291,6 @@ const styles = StyleSheet.create({
         color: customTheme.colors.primary,
         fontWeight: '500',
     },
-    statusBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        backgroundColor: customTheme.colors.primary,
-        gap: 8,
-    },
-
-    statusBannerAtrasado: {
-        backgroundColor: customTheme.colors.error,
-    },
-
-    statusBannerHoje: {
-        backgroundColor: customTheme.colors.primary,
-    },
-
-    statusBannerText: {
-        color: customTheme.colors.onPrimary,
-        fontSize: 16,
-        fontWeight: '600',
-        flex: 1,
-    },
-
-    statusBannerData: {
-        color: customTheme.colors.onPrimary,
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    section: {
-        backgroundColor: customTheme.colors.surfaceVariant,
-        borderRadius: 12,
-        padding: 12,
-        gap: 8,
-    },
-
-    sectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 4,
-    },
-
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: customTheme.colors.primary,
-    },
-
-    enderecoButton: {
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 8,
-        padding: 12,
-    },
-
-    mapButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-
-    mapButtonText: {
-        fontSize: 12,
-        color: customTheme.colors.primary,
-        fontWeight: '500',
-    },
-
-    gridItem: {
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 8,
-        padding: 12,
-        minWidth: '45%',
-        flex: 1,
-    },
-
-    itemTitle: {
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
-        marginBottom: 4,
-    },
-
-    itemQuantidade: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: customTheme.colors.primary,
-    },
-
-    observacoesSection: {
-        backgroundColor: customTheme.colors.errorContainer,
-        borderWidth: 1,
-        borderColor: customTheme.colors.error,
-    },
     dialogSection: {
         marginBottom: 20,
     },
@@ -1490,159 +1339,9 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurface,
         flex: 1,
     },
-
-    responsaveisSection: {
-        marginTop: 12,
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outlineVariant,
-    },
-    responsavelCarregamentoHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    responsavelCarregamentoTitulo: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: customTheme.colors.onPrimaryContainer,
-        marginLeft: 8,
-    },
-    responsavelCarregamentoInfo: {
-        marginLeft: 32,
-    },
-    responsavelCarregamentoNome: {
-        fontSize: 14,
-        color: customTheme.colors.onPrimaryContainer,
-        fontWeight: '500',
-    },
-    responsavelCarregamentoData: {
-        fontSize: 12,
-        color: customTheme.colors.onPrimaryContainer,
-        opacity: 0.8,
-        marginTop: 2,
-    },
-    responsavelOperacaoHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    responsavelOperacaoTitulo: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: customTheme.colors.onSecondaryContainer,
-        marginLeft: 8,
-    },
-    responsavelOperacaoInfo: {
-        marginLeft: 32,
-    },
-    responsavelOperacaoNome: {
-        fontSize: 14,
-        color: customTheme.colors.onSecondaryContainer,
-        fontWeight: '500',
-    },
-    responsavelOperacaoData: {
-        fontSize: 12,
-        color: customTheme.colors.onSecondaryContainer,
-        opacity: 0.8,
-        marginTop: 2,
-    },
-
-    // Estilos para o botão de assumir responsabilidade
-    assumirResponsabilidadeBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surfaceVariant,
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 8,
-    },
-    assumirResponsabilidadeText: {
-        color: customTheme.colors.primary,
-        fontSize: 14,
-        fontWeight: '500',
-        marginLeft: 8,
-    },
-
-    // Estilos para o status da responsabilidade
-    statusResponsabilidade: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 4,
-    },
-    statusResponsabilidadeText: {
-        fontSize: 12,
-        color: customTheme.colors.onSurfaceVariant,
-        marginLeft: 4,
-    },
-    dialogButtonText: {
-        marginLeft: 12,
-        flex: 1,
-    },
-    dialogButtonSubtitle: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-        marginTop: 4,
-    },
-    responsaveisContainer: {
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outlineVariant,
-        paddingTop: 12,
-        marginTop: 12,
-        gap: 12,
-    },
-    responsavelHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-        gap: 8,
-    },
-    responsavelTitulo: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: customTheme.colors.onSurface,
-    },
-    openIcon: {
-        marginLeft: 4,
-    },
-    containersContainer: {
-        gap: 8,
-        marginTop: 4,
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outlineVariant,
-        paddingTop: 8,
-    },
-    containerItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingVertical: 4,
-    },
-    containerText: {
-        flex: 1,
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
-    },
     container: {
         flex: 1,
         backgroundColor: customTheme.colors.background,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: customTheme.colors.surface,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        elevation: 4,
-        borderBottomWidth: 1,
-        borderBottomColor: customTheme.colors.outline,
-    },
-    headerTitle: {
-        flex: 1,
-        marginLeft: 12,
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
     },
     content: {
         flex: 1,
@@ -1667,23 +1366,6 @@ const styles = StyleSheet.create({
     },
     statusHoje: {
         backgroundColor: customTheme.colors.primaryContainer,
-    },
-    infoText: {
-        flex: 1,
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
-    },
-    equipamentosContainer: {
-        gap: 8,
-    },
-    equipamentoItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    equipamentoText: {
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
     },
     loadingText: {
         fontSize: 16,
