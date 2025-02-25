@@ -19,10 +19,11 @@ import {
 } from 'react-native-paper';
 import { customTheme } from '../../../theme/theme';
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
 
 interface DateFilterValue {
     startDate: string;
@@ -43,6 +44,8 @@ interface RelatorioOcorrencia {
 }
 
 const RelatorioOcorrenciaList: React.FC = () => {
+    const navigation = useNavigation<NavigationProp<ParamListBase>>();
+
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [relatorios, setRelatorios] = useState<RelatorioOcorrencia[]>([]);
@@ -245,13 +248,13 @@ const RelatorioOcorrenciaList: React.FC = () => {
 
     return (
         <Surface style={styles.container}>
+
             {/* Header */}
-            <View style={styles.header}>
-                <MaterialIcons name="description" size={32} color={customTheme.colors.primary} />
-                <Text variant="headlineMedium" style={styles.headerTitle}>
-                    Relatórios de Ocorrência
-                </Text>
-            </View>
+            <ModernHeader
+                title="Relatórios de Ocorrência"
+                iconName="description"
+                onBackPress={() => navigation?.goBack()}
+            />
 
             {/* Filtros */}
             {/* <DateFilter onFilterChange={setDateFilter} /> */}
@@ -518,19 +521,6 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: customTheme.colors.background,
     },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surface,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        elevation: 4,
-    },
-    headerTitle: {
-        marginLeft: 12,
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
-    },
     orderToggleContainer: {
         margin: 8,
         borderRadius: 8,
@@ -699,11 +689,6 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurface,
         lineHeight: 20,
     },
-    shareButton: {
-        marginTop: 8,
-        marginBottom: 24,
-        borderRadius: 8,
-    }
 });
 
 export default RelatorioOcorrenciaList;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     View,
     ScrollView,
@@ -6,13 +6,7 @@ import {
     Dimensions,
     TouchableOpacity,
 } from 'react-native';
-import {
-    Surface,
-    Text,
-    Card,
-    Button,
-    ProgressBar,
-} from 'react-native-paper';
+import { Surface, Text, Card } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
@@ -263,6 +257,21 @@ export default function CompostagemScreen({ navigation }: any) {
                             <Text style={styles.actionText}>Histórico de Compostagens</Text>
                         </TouchableOpacity>
 
+                        {/* Lista de Compostagens */}
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => navigation.navigate('CompostagemRelat')}
+                        >
+                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.secondaryContainer }]}>
+                                <Icon
+                                    name="file-chart"
+                                    size={32}
+                                    color={customTheme.colors.secondary}
+                                />
+                            </View>
+                            <Text style={styles.actionText}>Relátorio</Text>
+                        </TouchableOpacity>
+
                     </View>
                 </View>
 
@@ -290,12 +299,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
 
-    actionIconContainer: {
-        position: 'relative',
-        marginBottom: 8,
-        flex: 0, // Impede que o container se expanda
-    },
-
     actionIcon: {
         width: 48,
         height: 48,
@@ -309,21 +312,6 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurface,
         fontWeight: '500',
         textAlign: 'center', // Garante alinhamento centralizado do texto
-    },
-    badgeContainer: {
-        position: 'absolute',
-        top: -8,
-        right: -8,
-        borderRadius: 10,
-        backgroundColor: customTheme.colors.error,
-        padding: 4,
-        borderWidth: 1.5,
-        borderColor: customTheme.colors.surface,
-    },
-
-    badgeText: {
-        color: customTheme.colors.onError,
-        fontWeight: 'bold',
     },
     container: {
         flex: 1,
@@ -369,18 +357,5 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: customTheme.colors.onSurface,
         marginBottom: 16,
-    },
-    section: {
-        marginBottom: 24,
-    },
-    agendamentoCard: {
-        marginBottom: 12,
-        borderRadius: 12,
-        elevation: 2,
-    },
-    lavagemCard: {
-        marginBottom: 12,
-        borderRadius: 12,
-        elevation: 2,
     },
 });

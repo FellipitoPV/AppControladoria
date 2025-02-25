@@ -11,17 +11,7 @@ import {
     Alert,
     Modal,
 } from 'react-native';
-import {
-    Surface,
-    Button,
-    Text,
-    Divider,
-    IconButton,
-    useTheme,
-    Card,
-    Chip,
-    TextInput,
-} from 'react-native-paper';
+import { Surface, Button, Text, Card, Chip, TextInput, Dialog, Portal } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import firestore from '@react-native-firebase/firestore';
 import { customTheme } from '../../../theme/theme';
@@ -29,9 +19,13 @@ import ModernHeader from '../../../assets/components/ModernHeader';
 import FullScreenImage from '../../../assets/components/FullScreenImage';
 import { Dropdown } from 'react-native-element-dropdown';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
-import { EQUIPAMENTOS, PLACAS_VEICULOS, TIPOS_LAVAGEM } from './Components/lavagemTypes';
+import { PLACAS_VEICULOS, TIPOS_LAVAGEM } from './Components/lavagemTypes';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { DropdownRef } from '../../../helpers/Types';
+import { useUser } from '../../../contexts/userContext';
+import { hasAccess } from '../../Adm/components/admTypes';
+import EditLavagemModal from './Components/EditLavagemModal';
+import ConfirmationModal from '../../../assets/components/ConfirmationModal';
 
 interface Lavagem {
     id: string;
@@ -63,6 +57,8 @@ interface HistoricoLavagemProps {
 }
 
 export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) {
+    const { userInfo } = useUser();
+
     const [lavagens, setLavagens] = useState<Lavagem[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -74,12 +70,15 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
     const [hasMore, setHasMore] = useState(true);
     const LIMIT = 20;
 
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false)
     const [todasLavagens, setTodasLavagens] = useState<Lavagem[]>([]);
     const [lavagensVisiveis, setLavagensVisiveis] = useState<Lavagem[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
 
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [selectedLavagem, setSelectedLavagem] = useState<Lavagem | null>(null);
+
+    const canEditeDelete = () => userInfo && hasAccess(userInfo, 'lavagem', 2);
 
     // Função para normalizar os produtos
     const normalizarProdutos = (produtos: any[]) => {
@@ -431,18 +430,24 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                             </Text>
                         </View>
 
-                        <View style={styles.actionButtons}>
-                            <TouchableOpacity
-                                onPress={() => handleEdit(lavagem)}
-                                style={styles.actionButton}>
-                                <Icon name="edit" size={20} color={customTheme.colors.primary} />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => handleDelete(lavagem.id)}
-                                style={styles.actionButton}>
-                                <Icon name="delete" size={20} color={customTheme.colors.error} />
-                            </TouchableOpacity>
-                        </View>
+                        {canEditeDelete() ?
+                            <View style={styles.actionButtons}>
+                                <TouchableOpacity
+                                    onPress={() => handleEdit(lavagem)}
+                                    style={styles.actionButton}>
+                                    <Icon name="edit" size={20} color={customTheme.colors.primary} />
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setSelectedLavagem(lavagem);
+                                        setShowDeleteConfirm(true);
+                                    }}
+                                    style={styles.actionButton}>
+                                    <Icon name="delete" size={20} color={customTheme.colors.error} />
+                                </TouchableOpacity>
+                            </View>
+                            : null}
                     </View>
 
                 </Card.Content>
@@ -452,391 +457,19 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
 
     const handleDelete = async (id: string) => {
         try {
-            // Mostra um alerta de confirmação
-            Alert.alert(
-                "Confirmar exclusão",
-                "Tem certeza que deseja excluir este registro?",
-                [
-                    {
-                        text: "Cancelar",
-                        style: "cancel"
-                    },
-                    {
-                        text: "Sim, excluir",
-                        style: "destructive",
-                        onPress: async () => {
-                            // Tenta excluir dos dois locais possíveis (novo e antigo)
-                            await firestore().collection('registroLavagens').doc(id).delete();
-                            await firestore().collection('lavagens').doc(id).delete();
+            // Tenta excluir dos dois locais possíveis (novo e antigo)
+            await firestore().collection('registroLavagens').doc(id).delete();
+            await firestore().collection('lavagens').doc(id).delete();
 
-                            // Atualiza a lista local removendo o item
-                            setLavagens(prevLavagens =>
-                                prevLavagens.filter(lavagem => lavagem.id !== id)
-                            );
-                            onRefresh()
-                        }
-                    }
-                ]
+            // Atualiza a lista local removendo o item
+            setLavagens(prevLavagens =>
+                prevLavagens.filter(lavagem => lavagem.id !== id)
             );
+            onRefresh()
         } catch (error) {
             console.error('Erro ao excluir lavagem:', error);
             Alert.alert("Erro", "Não foi possível excluir o registro.");
         }
-    };
-
-    const EditLavagemModal = ({ visible, lavagem, onDismiss, onSave }: any) => {
-        const [loading, setLoading] = useState(false);
-        const [formData, setFormData] = useState({
-            responsavel: lavagem?.responsavel || '',
-            placa: lavagem?.veiculo?.placa || '',
-            tipoVeiculo: lavagem?.veiculo?.tipo || '',
-            numeroEquipamento: lavagem?.veiculo?.numeroEquipamento || '',
-            tipoLavagem: lavagem?.tipoLavagem || '',
-            observacoes: lavagem?.observacoes || '',
-            produtos: lavagem?.produtos || []
-        });
-        const [selectedDate, setSelectedDate] = useState(new Date());
-        const [showDatePicker, setShowDatePicker] = useState(false);
-        const [showTimePicker, setShowTimePicker] = useState(false);
-        const [searchText, setSearchText] = useState('');
-
-        // Refs para abrir os dropdowns
-        const lavagemRef = useRef<DropdownRef>(null);
-        const veiculoRef = useRef<DropdownRef>(null);
-
-        const [customItems, setCustomItems] = useState<Array<{
-            label: string;
-            value: string;
-            icon: string;
-            tipo: string;
-            isCustom: boolean;
-        }>>([]);
-
-        const isValidPlate = (placa: string) => {
-            return PLACAS_VEICULOS.some(item => item.value === placa);
-        };
-
-        // Helper function to get vehicle display info
-        const getVehicleDisplayInfo = (veiculo: {
-            placa: string;
-            tipo: string;
-            numeroEquipamento?: string;
-        }) => {
-            if (!veiculo) return null;
-
-            const isEquipment = veiculo.tipo === 'equipamento';
-            const isValidVehicle = isValidPlate(veiculo.placa);
-
-            // Define icon and label based on conditions
-            let icon = 'help-outline'; // Default icon for unknown/other
-            let label = 'Outros';
-
-            if (isEquipment) {
-                icon = 'build';
-                label = 'Equipamento';
-            } else if (isValidVehicle) {
-                icon = 'directions-car';
-                label = 'Veículo';
-            }
-
-            return {
-                icon,
-                label,
-                displayValue: veiculo.placa + (veiculo.numeroEquipamento ? ` (#${veiculo.numeroEquipamento})` : '')
-            };
-        };
-
-        // Configurar data inicial baseada na lavagem
-        useEffect(() => {
-            if (lavagem) {
-                const [dia, mes, ano] = lavagem.data.split('/');
-                const [hora, minuto] = lavagem.hora.split(':');
-                const data = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-                data.setHours(parseInt(hora), parseInt(minuto));
-                setSelectedDate(data);
-                setFormData({
-                    responsavel: lavagem.responsavel,
-                    placa: lavagem.veiculo.placa,
-                    tipoVeiculo: lavagem.veiculo.tipo,
-                    numeroEquipamento: lavagem.veiculo.numeroEquipamento || '',
-                    tipoLavagem: lavagem.tipoLavagem,
-                    observacoes: lavagem.observacoes,
-                    produtos: lavagem.produtos
-                });
-            }
-        }, [lavagem]);
-
-        const handleSaveEdit = async () => {
-            try {
-                setLoading(true);
-
-                // Verifica se é um registro novo (tem createdBy) ou antigo (tem responsavel)
-                const isFormatoNovo = 'createdBy' in lavagem;
-
-                // Base comum de dados atualizados
-                const dadosBase = {
-                    data: formatDate(selectedDate),
-                    hora: formatTime(selectedDate),
-                    tipoLavagem: formData.tipoLavagem,
-                    observacoes: formData.observacoes,
-                    fotos: lavagem.fotos,
-                    status: lavagem.status,
-                };
-
-                // Prepara dados específicos baseado no formato
-                let dadosAtualizados;
-                if (isFormatoNovo) {
-                    dadosAtualizados = {
-                        ...dadosBase,
-                        createdBy: lavagem.createdBy,
-                        createdAt: lavagem.createdAt,
-                        agendamentoId: lavagem.agendamentoId || null,
-                        veiculo: {
-                            placa: formData.placa,
-                            tipo: formData.tipoVeiculo,
-                            numeroEquipamento: formData.tipoVeiculo === 'equipamento' ? formData.numeroEquipamento : null
-                        }
-                    };
-                } else {
-                    dadosAtualizados = {
-                        ...dadosBase,
-                        responsavel: lavagem.responsavel,
-                        createdAt: lavagem.createdAt,
-                        placaVeiculo: formData.placa, // Formato antigo usa placaVeiculo direto
-                        produtos: formData.produtos || []
-                    };
-                }
-
-                // Determina a coleção correta
-                const colecao = isFormatoNovo ? 'lavagens' : 'registroLavagens';
-
-                // Atualizar no Firestore
-                await firestore()
-                    .collection(colecao)
-                    .doc(lavagem.id)
-                    .update(dadosAtualizados);
-
-                showGlobalToast('success', 'Sucesso', 'Lavagem atualizada com sucesso', 4000);
-                onSave();
-            } catch (error) {
-                console.error('Erro ao atualizar lavagem:', error);
-                showGlobalToast('error', 'Erro', 'Não foi possível atualizar a lavagem', 4000);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        const formatDate = (date: Date) => {
-            return date.toLocaleDateString('pt-BR');
-        };
-
-        const formatTime = (date: Date) => {
-            return date.toLocaleTimeString('pt-BR', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        };
-
-        return (
-            <Modal
-                visible={visible}
-                onDismiss={onDismiss}
-                onRequestClose={onDismiss}
-                transparent
-                animationType="slide"
-            >
-                <View style={styles.modalContainer}>
-                    <Surface style={styles.modalContent}>
-                        {/* Header */}
-                        <View style={styles.modalHeader}>
-                            <View style={styles.modalHeaderContent}>
-                                <Icon name="edit" size={24} color={customTheme.colors.primary} />
-                                <Text variant="titleLarge">Editar Lavagem</Text>
-                            </View>
-
-                            <TouchableOpacity
-                                onPress={onDismiss}
-                                style={styles.actionButton}>
-                                <Icon name="close" size={24} color={customTheme.colors.error} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.formContainer}>
-
-                            {/* Campos Informativos (Não editáveis) */}
-                            {lavagem && (
-                                <View style={styles.infoSection}>
-                                    <View style={styles.infoField}>
-                                        <Icon name="person" size={20} color={customTheme.colors.primary} />
-                                        <View style={styles.infoContent}>
-                                            <Text style={styles.infoLabel}>Responsável</Text>
-                                            <Text style={styles.infoValue}>{lavagem.responsavel || 'Não informado'}</Text>
-                                        </View>
-                                    </View>
-
-                                    {lavagem.veiculo && (() => {
-                                        const vehicleInfo = getVehicleDisplayInfo(lavagem.veiculo);
-                                        if (!vehicleInfo) return null;
-
-                                        return (
-                                            <View style={styles.infoField}>
-                                                <Icon
-                                                    name={vehicleInfo.icon}
-                                                    size={20}
-                                                    color={customTheme.colors.primary}
-                                                />
-                                                <View style={styles.infoContent}>
-                                                    <Text style={styles.infoLabel}>
-                                                        {vehicleInfo.label}
-                                                    </Text>
-                                                    <Text style={styles.infoValue}>
-                                                        {vehicleInfo.displayValue}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                        );
-                                    })()}
-                                </View>
-                            )}
-
-                            {/* Campos Editáveis */}
-                            <View style={styles.editableSection}>
-                                {/* Data e Hora */}
-                                <View style={styles.row}>
-                                    <TouchableOpacity
-                                        style={[styles.input, { flex: 1 }]}
-                                        onPress={() => setShowDatePicker(true)}
-                                    >
-                                        <TextInput
-                                            mode="outlined"
-                                            label="Data"
-                                            value={formatDate(selectedDate)}
-                                            editable={false}
-                                            left={<TextInput.Icon icon={() => (
-                                                <Icon name="calendar-today" size={24} color={customTheme.colors.primary} />
-                                            )} />}
-                                        />
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        style={[styles.input, { flex: 1 }]}
-                                        onPress={() => setShowTimePicker(true)}
-                                    >
-                                        <TextInput
-                                            mode="outlined"
-                                            label="Hora"
-                                            value={formatTime(selectedDate)}
-                                            editable={false}
-                                            left={<TextInput.Icon icon={() => (
-                                                <Icon name="access-time" size={24} color={customTheme.colors.primary} />
-                                            )} />}
-                                        />
-                                    </TouchableOpacity>
-                                </View>
-
-                                {/* Tipo de Lavagem */}
-                                <View style={styles.row}>
-                                    <TouchableOpacity
-                                        style={styles.dropdownContainer}
-                                        activeOpacity={0.7}
-                                        onPress={() => lavagemRef.current?.open()}
-                                    >
-                                        <Dropdown
-                                            ref={lavagemRef}
-                                            style={[
-                                                styles.dropdown
-                                            ]}
-                                            placeholderStyle={[
-                                                styles.placeholderStyle,
-                                            ]}
-                                            selectedTextStyle={[
-                                                styles.selectedTextStyle,
-                                            ]}
-                                            itemTextStyle={[
-                                                styles.dropdownItem,
-                                                { color: customTheme.colors.onSurface }  // Garantindo que o texto dos itens seja visível
-                                            ]}
-                                            data={TIPOS_LAVAGEM}
-                                            labelField="label"
-                                            valueField="value"
-                                            placeholder="Selecione o tipo de lavagem"
-                                            value={formData.tipoLavagem}
-                                            onChange={item => setFormData({ ...formData, tipoLavagem: item.value })}
-                                            renderLeftIcon={() => (
-                                                <Icon
-                                                    style={styles.dropdownIcon}
-                                                    name="local-car-wash"
-                                                    size={20}
-                                                    color={customTheme.colors.primary}
-                                                />
-                                            )}
-                                        />
-                                    </TouchableOpacity>
-                                </View>
-
-                                {/* Observações */}
-                                <View style={styles.row}>
-                                    <TextInput
-                                        mode="outlined"
-                                        label="Observações"
-                                        value={formData.observacoes}
-                                        onChangeText={(text) => setFormData({ ...formData, observacoes: text })}
-                                        style={[styles.input, { height: 80 }]}
-                                        multiline
-                                        numberOfLines={4}
-                                        left={<TextInput.Icon icon={() => (
-                                            <Icon name="comment" size={24} color={customTheme.colors.primary} />
-                                        )} />}
-                                    />
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Botões de Ação */}
-                        <View style={styles.modalFooter}>
-                            <Button
-                                mode="outlined"
-                                onPress={onDismiss}
-                                style={styles.footerButton}
-                            >
-                                Cancelar
-                            </Button>
-                            <Button
-                                mode="contained"
-                                onPress={handleSaveEdit}
-                                loading={loading}
-                                style={styles.footerButton}
-                            >
-                                Salvar
-                            </Button>
-                        </View>
-                    </Surface>
-
-                    {showDatePicker && (
-                        <DateTimePicker
-                            value={selectedDate}
-                            mode="date"
-                            onChange={(event, date) => {
-                                setShowDatePicker(false);
-                                if (date) setSelectedDate(date);
-                            }}
-                        />
-                    )}
-
-                    {showTimePicker && (
-                        <DateTimePicker
-                            value={selectedDate}
-                            mode="time"
-                            onChange={(event, date) => {
-                                setShowTimePicker(false);
-                                if (date) setSelectedDate(date);
-                            }}
-                        />
-                    )}
-                </View>
-            </Modal>
-        );
-
     };
 
     return (
@@ -914,9 +547,24 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                 onSave={() => {
                     setEditModalVisible(false);
                     setSelectedLavagem(null);
-                    // Recarrega a lista de lavagens
-                    buscarLavagens();
+                    buscarLavagens(); // Recarregar dados
                 }}
+            />
+
+            <ConfirmationModal
+                visible={showDeleteConfirm}
+                title="Confirmar exclusão"
+                message="Tem certeza que deseja excluir esta lavagem?"
+                itemToDelete={`Lavagem #${selectedLavagem?.id}`}
+                onCancel={() => setShowDeleteConfirm(false)}
+                onConfirm={() => {
+                    if (selectedLavagem?.id) {
+                        handleDelete(selectedLavagem.id);
+                    }
+                    setShowDeleteConfirm(false);
+                }}
+                confirmText="Excluir"
+                iconName="delete-alert"
             />
 
         </SafeAreaView>
@@ -924,154 +572,6 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
 }
 
 const styles = StyleSheet.create({
-    dropdown: {
-        height: 56,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 10,
-        paddingHorizontal: 16,
-        backgroundColor: '#FFFFFF',
-    },
-    dropdownIcon: {
-        marginRight: 12,
-    }, dropdownItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        gap: 12,
-        color: customTheme.colors.onSurface, // Garantindo que o texto seja sempre visível
-    },
-
-    dropdownItemCustom: {
-        backgroundColor: customTheme.colors.primaryContainer + '20', // Mais sutil
-    },
-    dropdownLabel: {
-        flex: 1,
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-    },
-    dropdownLabelCustom: {
-        color: customTheme.colors.primary,
-        fontWeight: '500',
-    },
-    placeholderStyle: {
-        fontSize: 16,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    selectedTextStyle: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-        fontWeight: '500',
-    },
-    inputSearchStyle: {
-        height: 48,
-        fontSize: 16,
-        borderRadius: 10,
-        color: customTheme.colors.onSurface,
-    },
-    iconStyle: {
-        width: 24,
-        height: 24,
-    },
-    modalContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        padding: 16,
-    },
-    modalContent: {
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 10,
-        padding: 20,
-        elevation: 5,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    modalHeaderContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    formContainer: {
-        gap: 16,
-    },
-    infoSection: {
-        backgroundColor: customTheme.colors.surfaceVariant,
-        borderRadius: 10,
-        padding: 16,
-        gap: 12,
-    },
-    infoField: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    infoContent: {
-        flex: 1,
-    },
-    infoLabel: {
-        fontSize: 12,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    infoValue: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-        fontWeight: '500',
-    },
-    editableSection: {
-        gap: 12,
-    },
-    row: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    input: {
-        backgroundColor: customTheme.colors.surface,
-        width: "100%",
-    },
-    dropdownContainer: {
-        flex: 1,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 10,
-        backgroundColor: customTheme.colors.surface,
-    },
-    modalFooter: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 12,
-        marginTop: 20,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outlineVariant,
-    },
-    footerButton: {
-        flex: 1,
-    },
-    modalScroll: {
-        maxHeight: '60%',
-    },
-    section: {
-        marginBottom: 24,
-    },
-    sectionTitle: {
-        marginBottom: 16,
-        color: customTheme.colors.onSurface,
-        fontWeight: '500',
-    },
-    rowContainer: {
-        flexDirection: 'row',
-        gap: 16,
-    },
-    dateInput: {
-        flex: 1,
-    },
-    textArea: {
-        minHeight: 100,
-    },
     thumbnailContainer: {
         backgroundColor: customTheme.colors.surfaceVariant,
         justifyContent: 'center',
@@ -1110,15 +610,6 @@ const styles = StyleSheet.create({
         color: customTheme.colors.primary,
         fontSize: 14,
         fontWeight: '500',
-    },
-    containerWithFooter: {
-        flex: 1,
-    },
-    loadMoreContainer: {
-        padding: 16,
-        backgroundColor: 'white',
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outline,
     },
     card: {
         marginBottom: 8,
@@ -1201,60 +692,9 @@ const styles = StyleSheet.create({
     actionButton: {
         padding: 4,
     },
-    infoText: {
-        fontSize: 13,
-        color: customTheme.colors.onSurface,
-        flex: 1, // Garante que o texto não ultrapasse o espaço disponível
-    },
-    mainRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 8,
-    },
-    placaContainer: {
-        flex: 1,
-        marginRight: 12,
-    },
-    rightContainer: {
-        alignItems: 'flex-end',
-        gap: 4,
-    },
-    dataContainer: {
-        alignItems: 'flex-end',
-    },
-    infoRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 8,
-    },
-    infoItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        flex: 1,
-    },
-    produtosRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginBottom: 8,
-    },
-    produtosScroll: {
-        flex: 1,
-    },
-    produtoText: {
-        fontSize: 12,
-        color: customTheme.colors.onSurfaceVariant,
-    },
     fotosRow: {
         marginTop: 4,
         marginBottom: 8,
-    },
-    headerLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
     },
     safeArea: {
         flex: 1,
@@ -1265,35 +705,5 @@ const styles = StyleSheet.create({
     },
     container: {
         padding: 16,
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 12,
-    },
-    divider: {
-        marginVertical: 12,
-    },
-    produtosContainer: {
-        marginTop: 16,
-    },
-    produtoItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 4,
-    },
-    fotosContainer: {
-        marginTop: 16,
-    },
-    thumbnail: {
-        width: 80,
-        height: 80,
-        borderRadius: 10,
-        marginRight: 8,
-    },
-    observacoesContainer: {
-        marginTop: 16,
     },
 });

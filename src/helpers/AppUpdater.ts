@@ -5,7 +5,7 @@ import semver from 'semver';
 import { version as appVersion } from '../../package.json';
 import { Compostagem } from './Types';
 
-interface VersionInfo {
+export interface VersionInfo {
     versao: string;
     apk_url: string; // URL do Google Drive
     mudancas: string[];
@@ -37,18 +37,9 @@ export const useAppUpdater = () => {
         try {
             // Abre o link do Google Drive diretamente
             await Linking.openURL(updateInfo.apk_url);
-            
-            Alert.alert(
-                'Download Iniciado',
-                'O download começará automaticamente. Após concluir, toque no arquivo APK para instalar.',
-                [{ text: 'OK' }]
-            );
+
         } catch (error) {
             console.error('Erro ao iniciar download:', error);
-            Alert.alert(
-                'Erro na Atualização',
-                'Não foi possível iniciar o download. Por favor, tente novamente mais tarde.'
-            );
         }
     };
 

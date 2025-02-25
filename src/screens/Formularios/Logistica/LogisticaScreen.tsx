@@ -17,6 +17,11 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import firestore from '@react-native-firebase/firestore';
+import { useUser } from '../../../contexts/userContext';
+import { hasAccess } from '../../Adm/components/admTypes';
+import { ProgramacaoEquipamento } from './Components/logisticTypes';
+import { useNetwork } from '../../../contexts/NetworkContext';
+import database from '@react-native-firebase/database';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +33,9 @@ interface LavagemStats {
 }
 
 export default function LogisticaScreen({ navigation }: any) {
+    const { userInfo } = useUser();
+    const { isOnline } = useNetwork();
+
     const [stats, setStats] = useState<LavagemStats>({
         hoje: 0,
         semana: 0,
@@ -37,7 +45,6 @@ export default function LogisticaScreen({ navigation }: any) {
 
     const [lavagensRecentes, setLavagensRecentes] = useState<any[]>([]);
     const [lavagensAgendadas, setLavagensAgendadas] = useState<any[]>([]);
-
     const [agendamentosPendentes, setAgendamentosPendentes] = useState(0);
 
     // Primeiro, vamos criar funções auxiliares para datas
@@ -63,9 +70,41 @@ export default function LogisticaScreen({ navigation }: any) {
         return date;
     };
 
-    // Função para formatar a data no formato do Firestore
-    const formatFirestoreDate = (date: Date) => {
-        return date.toLocaleDateString('pt-BR');
+    // Função atualizada para buscar agendamentos sem responsável
+    const fetchAgendamentosPendentes = async () => {
+        try {
+            if (!isOnline) {
+                console.log('Usuário offline, não é possível buscar agendamentos');
+                return;
+            }
+
+            // Agora usamos o database do Firebase Realtime (não o Firestore)
+            const snapshot = await database()
+                .ref('programacoes')
+                .once('value');
+
+            const data = snapshot.val();
+
+            if (!data) {
+                setAgendamentosPendentes(0);
+                return;
+            }
+
+            // Converter os dados em um array e filtrar apenas os que não têm responsável de operação
+            const programacoesArray: ProgramacaoEquipamento[] = Object.entries(data)
+                .map(([key, value]: [string, any]) => ({
+                    firebaseKey: key,
+                    ...value
+                }));
+
+            // Filtra apenas programações sem responsável de operação
+            const semResponsavel = programacoesArray.filter(prog => !prog.responsavelOperacao);
+
+            setAgendamentosPendentes(semResponsavel.length);
+        } catch (error) {
+            console.error('Erro ao buscar agendamentos pendentes:', error);
+            setAgendamentosPendentes(0);
+        }
     };
 
     const fetchLavagemStats = async () => {
@@ -175,16 +214,27 @@ export default function LogisticaScreen({ navigation }: any) {
         }
     };
 
-    const fetchAgendamentosPendentes = async () => {
-        try {
-            const snapshot = await firestore()
-                .collection('agendamentos')
-                .where('concluido', '==', false)
-                .get();
+    // Funções específicas de verificação de acesso
+    const canAccessNovaProgramacao = () => {
+        if (!userInfo) return false;
+        return hasAccess(userInfo, 'logistica', 1);
+    };
 
-            setAgendamentosPendentes(snapshot.size);
-        } catch (error) {
-            console.error('Erro ao buscar agendamentos pendentes:', error);
+    const canAccessAgendamentos = () => {
+        if (!userInfo) return false;
+        // Permite acesso se tiver nível 1 em logística OU nível 1 em operação
+        return hasAccess(userInfo, 'logistica', 1) || hasAccess(userInfo, 'operacao', 1);
+    };
+
+    // Função que retorna a mensagem apropriada de requisito de acesso
+    const getAccessRequiredMessage = (accessType: 'novaProgramacao' | 'agendamentos') => {
+        switch (accessType) {
+            case 'novaProgramacao':
+                return 'Requer acesso à Logística nível 1';
+            case 'agendamentos':
+                return 'Requer acesso à Logística ou Operação nível 1';
+            default:
+                return 'Acesso não permitido';
         }
     };
 
@@ -220,9 +270,79 @@ export default function LogisticaScreen({ navigation }: any) {
         return unsubscribe;
     }, [navigation]);
 
+    // Adicione isso ao useEffect existente
+    useEffect(() => {
+        fetchAgendamentosPendentes();
+
+        // Atualiza quando a tela receber foco
+        const unsubscribe = navigation.addListener('focus', () => {
+            fetchAgendamentosPendentes();
+        });
+
+        return unsubscribe;
+    }, [navigation, isOnline]);
+
+    // Renderiza o botão de ação com estado bloqueado/desbloqueado
+    const renderActionButton = (
+        icon: string,
+        text: string,
+        onPress: () => void,
+        accessType?: 'novaProgramacao' | 'agendamentos', // Tornar opcional
+        badge?: number
+    ) => {
+        // Se accessType não for fornecido, o botão estará desbloqueado para todos
+        const isBlocked = accessType ? (
+            accessType === 'novaProgramacao'
+                ? !canAccessNovaProgramacao()
+                : !canAccessAgendamentos()
+        ) : false; // Sem restrição de acesso quando accessType não é fornecido
+
+        return (
+            <TouchableOpacity
+                style={[
+                    styles.actionButton,
+                    isBlocked && styles.actionButtonDisabled
+                ]}
+                onPress={isBlocked ? undefined : onPress}
+                disabled={isBlocked}
+            >
+                <View style={styles.actionIconContainer}>
+                    <View style={[
+                        styles.actionIcon,
+                        { backgroundColor: isBlocked ? customTheme.colors.surfaceDisabled : customTheme.colors.primaryContainer }
+                    ]}>
+                        {isBlocked ? (
+                            <Icon name="lock" size={24} color={customTheme.colors.onSurfaceDisabled} />
+                        ) : (
+                            <Icon name={icon} size={24} color={customTheme.colors.primary} />
+                        )}
+                    </View>
+                    {!isBlocked && badge !== undefined && badge > 0 && (
+                        <View style={styles.badgeContainer}>
+                            <Text style={styles.badgeText}>
+                                {badge > 99 ? '99+' : badge}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+                <Text style={[
+                    styles.actionText,
+                    isBlocked && styles.actionTextDisabled
+                ]}>
+                    {text}
+                </Text>
+                {isBlocked && accessType && (
+                    <Text style={styles.accessRequiredText}>
+                        {getAccessRequiredMessage(accessType)}
+                    </Text>
+                )}
+            </TouchableOpacity>
+        );
+    };
+
     return (
         <Surface style={styles.container}>
-            
+
             {/* Header */}
             <ModernHeader
                 title="Logistica"
@@ -269,49 +389,30 @@ export default function LogisticaScreen({ navigation }: any) {
 
                 </View>
 
-                {/* Ações */}
+                {/* Ações com verificação de acesso */}
                 <View style={styles.actionsContainer}>
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('LogisticaProgram')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.primaryContainer }]}>
-                                <Icon name="add" size={24} color={customTheme.colors.primary} />
-                            </View>
-                            <Text style={styles.actionText}>Nova Programação</Text>
-                        </TouchableOpacity>
+                        {renderActionButton(
+                            "add",
+                            "Nova Programação",
+                            () => navigation.navigate('LogisticaProgram'),
+                            'novaProgramacao'
+                        )}
 
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('OperacaoProgram')}
-                        >
-                            <View style={styles.actionIconContainer}>
-                                <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.secondaryContainer }]}>
-                                    <Icon name="event-available" size={24} color={customTheme.colors.secondary} />
-                                </View>
-                                {agendamentosPendentes > 0 && (
-                                    <View style={styles.badgeContainer}>
-                                        <Text style={styles.badgeText}>
-                                            {agendamentosPendentes > 99 ? '99+' : agendamentosPendentes}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-                            <Text style={styles.actionText}>Agendamentos</Text>
-                        </TouchableOpacity>
+                        {renderActionButton(
+                            "event-available",
+                            "Agendamentos",
+                            () => navigation.navigate('OperacaoProgram'),
+                            'agendamentos',
+                            agendamentosPendentes
+                        )}
 
-                        {/* TODO Pegar um exemplo de relatorio de Programação/Operacional */}
-                        {/* <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('RelatorioLavagens')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.primaryContainer }]}>
-                                <Icon name="bar-chart" size={24} color={customTheme.colors.primary} />
-                            </View>
-                            <Text style={styles.actionText}>Relatórios</Text>
-                        </TouchableOpacity> */}
+                        {renderActionButton(
+                            "history",
+                            "Historico",
+                            () => navigation.navigate('LogisticaHist'),
+                        )}
                     </View>
                 </View>
 
@@ -350,59 +451,6 @@ export default function LogisticaScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-    actionsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 16,
-        alignItems: 'stretch', // Garante que todos os itens se esticam para mesma altura
-    },
-
-    actionButton: {
-        width: (width - 48) / 2,
-        height: 120, // Altura fixa para todos os botões
-        padding: 16,
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 12,
-        elevation: 2,
-        justifyContent: 'center', // Centraliza o conteúdo verticalmente
-        alignItems: 'center',
-    },
-
-    actionIconContainer: {
-        position: 'relative',
-        marginBottom: 8,
-        flex: 0, // Impede que o container se expanda
-    },
-
-    actionIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-
-    actionText: {
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
-        fontWeight: '500',
-        textAlign: 'center', // Garante alinhamento centralizado do texto
-    },
-    badgeContainer: {
-        position: 'absolute',
-        top: -8,
-        right: -8,
-        borderRadius: 10,
-        backgroundColor: customTheme.colors.error,
-        padding: 4,
-        borderWidth: 1.5,
-        borderColor: customTheme.colors.surface,
-    },
-
-    badgeText: {
-        color: customTheme.colors.onError,
-        fontWeight: 'bold',
-    },
     container: {
         flex: 1,
         backgroundColor: customTheme.colors.background,
@@ -415,6 +463,67 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginBottom: 24,
+    },
+    actionButton: {
+        width: (width - 48) / 2,
+        height: 120,
+        padding: 16,
+        backgroundColor: customTheme.colors.surface,
+        borderRadius: 12,
+        elevation: 2,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    actionButtonDisabled: {
+        opacity: 0.7,
+        backgroundColor: customTheme.colors.surfaceDisabled,
+    },
+    actionIconContainer: {
+        position: 'relative',
+        marginBottom: 8,
+        flex: 0,
+    },
+    actionIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    actionText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurface,
+        fontWeight: '500',
+        textAlign: 'center',
+    },
+    actionTextDisabled: {
+        color: customTheme.colors.onSurfaceDisabled,
+    },
+    accessRequiredText: {
+        fontSize: 10,
+        color: customTheme.colors.error,
+        textAlign: 'center',
+        marginTop: 4,
+    },
+    badgeContainer: {
+        position: 'absolute',
+        top: -8,
+        right: -8,
+        borderRadius: 10,
+        backgroundColor: customTheme.colors.error,
+        padding: 4,
+        borderWidth: 1.5,
+        borderColor: customTheme.colors.surface,
+    },
+    badgeText: {
+        color: customTheme.colors.onError,
+        fontWeight: 'bold',
+    },
+    actionsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 16,
+        alignItems: 'stretch', // Garante que todos os itens se esticam para mesma altura
     },
     statsCard: {
         width: (width - 48) / 3,

@@ -35,6 +35,8 @@ import storage from '@react-native-firebase/storage';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Share from 'react-native-share';
 import { Dropdown } from 'react-native-element-dropdown';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
 
 
 const inputTheme = {
@@ -165,8 +167,10 @@ const PhotoNameDialog: React.FC<PhotoNameDialogProps> = ({
     );
 };
 
-export default function FormularioOcorrencia({ navigation }: { navigation: any }) {
+export default function FormularioOcorrencia() {
     const { userInfo } = useUser();
+    const navigation = useNavigation<NavigationProp<ParamListBase>>();
+
     const [loading, setLoading] = useState(false);
 
     // Estados para os campos do formulário
@@ -759,13 +763,13 @@ export default function FormularioOcorrencia({ navigation }: { navigation: any }
 
     return (
         <Surface style={styles.container}>
+
             {/* Header */}
-            <View style={styles.header}>
-                <MaterialIcons name="post-add" size={32} color={customTheme.colors.primary} />
-                <Text variant="headlineMedium" style={styles.headerTitle}>
-                    Novo Relatório de Ocorrência
-                </Text>
-            </View>
+            <ModernHeader
+                title="Novo Relatório de Ocorrência"
+                iconName="plus"
+                onBackPress={() => navigation?.goBack()}
+            />
 
             {/* Conteúdo Principal */}
             <ScrollView style={styles.content}>
@@ -1110,13 +1114,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: customTheme.colors.onSurface,
     },
-    datePickerIOS: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: customTheme.colors.surface,
-    },
     photoNameDialog: {
         backgroundColor: customTheme.colors.surface,
         borderRadius: 8,
@@ -1138,9 +1135,6 @@ const styles = StyleSheet.create({
     photoNameInput: {
         marginTop: 8,
         backgroundColor: customTheme.colors.surface,
-    },
-    itemContainerStyle: {
-        width: '100%',
     },
     placeholderStyle: {
         fontSize: 16,
@@ -1189,44 +1183,10 @@ const styles = StyleSheet.create({
         borderColor: customTheme.colors.error,
         borderWidth: 2,
     },
-    dropdownContainer: {
-        flex: 1,
-        width: '85%', // Limita a largura do dropdown
-    },
-    dropdownStyle: {
-        width: '85%', // Limita a largura do dropdown
-    },
     textInputStyle: {
         flex: 1,
         backgroundColor: customTheme.colors.surface,
         width: '85%', // Mantém consistência com os dropdowns
-    },
-    inputContainer: {
-        marginBottom: 12,
-    },
-    inputWrapper: {
-        backgroundColor: customTheme.colors.surface,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 4,
-        height: 56, // Mesma altura do TextInput
-        flexDirection: 'row',
-        alignItems: 'center',
-        overflow: 'hidden',
-    },
-    inputIcon: {
-        marginLeft: 12,
-        marginRight: 8,
-    },
-    inputError: {
-        borderColor: customTheme.colors.error,
-        borderWidth: 2,
-    },
-    dropdownInput: {
-        flex: 1,
-        borderWidth: 0, // Remove a borda do dropdown
-        backgroundColor: 'transparent',
-        height: '100%',
     },
     textInput: {
         backgroundColor: customTheme.colors.surface,
@@ -1236,21 +1196,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: customTheme.colors.background,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surface,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        elevation: 4,
-        borderBottomWidth: 1,
-        borderBottomColor: customTheme.colors.outline,
-    },
-    headerTitle: {
-        marginLeft: 12,
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
     },
     content: {
         flex: 1,
@@ -1276,41 +1221,8 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurface,
         fontWeight: '600',
     },
-    dropdownButton: {
-        backgroundColor: customTheme.colors.surface,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 4,
-        marginBottom: 12,
-        height: 56,
-        justifyContent: 'center',
-        paddingHorizontal: 16,
-    },
-    dropdownContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
     dropdownText: {
         flex: 1,
-        marginLeft: 12,
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-    },
-    placeholderText: {
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    input: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surface,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 4,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        marginBottom: 12,
-    },
-    inputText: {
         marginLeft: 12,
         fontSize: 16,
         color: customTheme.colors.onSurface,
@@ -1385,182 +1297,6 @@ const styles = StyleSheet.create({
     },
     saveButtonDisabled: {
         opacity: 0.6,
-    },
-    tipoOcorrenciaContainer: {
-        marginBottom: 12,
-        borderColor: customTheme.colors.outline,
-        borderWidth: 1,
-        borderRadius: 4,
-        backgroundColor: customTheme.colors.surface,
-        height: 56,
-        justifyContent: 'center', // Centraliza verticalmente
-        paddingHorizontal: 16,
-    },
-    tipoOcorrenciaContent: {
-        flexDirection: 'row',
-        alignItems: 'center', // Alinha os itens verticalmente
-    },
-    tipoOcorrenciaText: {
-        color: customTheme.colors.onSurface,
-        fontSize: 16,
-        marginLeft: 12,
-        flex: 1,
-    },
-    tipoOcorrenciaButton: {
-        marginBottom: 12,
-        borderColor: customTheme.colors.outline,
-        borderWidth: 1,
-        backgroundColor: customTheme.colors.surface,
-        height: 56, // Mesmo tamanho dos inputs
-        justifyContent: 'flex-start',
-        paddingHorizontal: 16,
-    },
-    searchContainer: {
-        padding: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: customTheme.colors.outline,
-        backgroundColor: customTheme.colors.surface
-    },
-    searchInput: {
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 8,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        fontSize: 14,
-        backgroundColor: customTheme.colors.surface,
-        color: customTheme.colors.onSurface
-    },
-    dropdownItemLabel: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-        flex: 1
-    },
-    dropdownItemCnpj: {
-        fontSize: 12,
-        color: customTheme.colors.primary
-    },
-    photoNameInfo: {
-        marginBottom: 16,
-        color: customTheme.colors.onSurfaceVariant,
-        textAlign: 'center'
-    },
-    photoNameExample: {
-        color: customTheme.colors.primary,
-        fontWeight: '500'
-    },
-    inputDisabled: {
-        backgroundColor: customTheme.colors.surfaceDisabled,
-        color: customTheme.colors.onSurface,
-        opacity: 0.8
-    },
-    ocorrenciaDetalhes: {
-        backgroundColor: customTheme.colors.surfaceVariant,
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 12
-    },
-    dialog: {
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 28,
-        marginHorizontal: 24
-    },
-    dialogTitle: {
-        textAlign: 'center',
-        color: customTheme.colors.primary,
-        fontSize: 20,
-        fontWeight: 'bold'
-    },
-    tipoCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surfaceVariant,
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 8
-    },
-    tipoIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: customTheme.colors.surface,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12
-    },
-    tipoText: {
-        flex: 1,
-        fontSize: 16,
-        color: customTheme.colors.onSurface
-    },
-    modalContainer: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        justifyContent: 'center',
-        alignItems: 'center'
-    },
-    modalHeader: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        padding: 16
-    },
-    modalPhotoName: {
-        color: customTheme.colors.onPrimary,
-        fontSize: 16,
-        textAlign: 'center'
-    },
-    dropdownItemMain: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    dropdownItemSecondary: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginLeft: 32, // para alinhar com o texto acima
-        marginTop: 4,
-        gap: 4,
-    },
-    photoPreview: {
-        width: '100%',
-        height: 200,
-        backgroundColor: customTheme.colors.surfaceVariant,
-    },
-    buttonError: {
-        borderColor: customTheme.colors.error,
-        borderWidth: 2,
-    },
-    tiposGrid: {
-        gap: 12,
-    },
-    modalContent: {
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    fullScreenImage: {
-        width: '100%',
-        height: '80%',
-        resizeMode: 'contain',
-    },
-    modalButtons: {
-        position: 'absolute',
-        top: 40,
-        right: 20,
-        flexDirection: 'row',
-        gap: 16,
-    },
-    modalButton: {
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        padding: 12,
-        borderRadius: 20,
-    },
-    deleteButton: {
-        backgroundColor: 'rgba(255, 0, 0, 0.5)',
     },
 });
 

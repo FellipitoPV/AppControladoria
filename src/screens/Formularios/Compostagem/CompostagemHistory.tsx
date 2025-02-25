@@ -6,21 +6,13 @@ import {
     RefreshControl,
     Modal,
     TouchableOpacity,
-    Dimensions,
     Image,
     ActivityIndicator,
     SafeAreaView,
-    Alert
+    Alert,
 } from 'react-native';
-import {
-    Text,
-    Card,
-    Divider,
-    Surface,
-    Button
-} from 'react-native-paper';
+import { Text, Card } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { Compostagem } from '../../../helpers/Types';
 import { customTheme } from '../../../theme/theme';
@@ -808,25 +800,6 @@ const styles = StyleSheet.create({
     photoThumbnail: {
         width: 100,
         height: 100,
-    },
-    imageViewerContainer: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    closeImageButton: {
-        position: 'absolute',
-        top: 40,
-        right: 20,
-        zIndex: 1,
-        padding: 10,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        borderRadius: 20,
-    },
-    fullScreenImage: {
-        width: '100%',
-        height: '100%',
     },
     card: {
         marginBottom: 8,

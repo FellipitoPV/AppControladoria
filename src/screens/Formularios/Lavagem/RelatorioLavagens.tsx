@@ -18,12 +18,12 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { PLACAS_VEICULOS, RegistroLavagem } from './lavagemTypes';
-import ModernHeader from '../../../../assets/components/ModernHeader';
-import { showGlobalToast } from '../../../../helpers/GlobalApi';
-import { customTheme } from '../../../../theme/theme';
-import FilterCard from './FilterCard';
-import RelatorioContent from './RelatorioContent';
+import { PLACAS_VEICULOS, RegistroLavagem } from './Components/lavagemTypes';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
+import { customTheme } from '../../../theme/theme';
+import FilterCard from './Components/Filtros/FilterCard';
+import RelatorioContent from './Components/RelatorioContent';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 
@@ -92,35 +92,6 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
         return PLACAS_VEICULOS.some(item => item.value === placa);
     };
 
-    // Helper function to get vehicle display info
-    const getVehicleDisplayInfo = (veiculo: {
-        placa: string;
-        tipo: string;
-        numeroEquipamento?: string;
-    }) => {
-        if (!veiculo) return null;
-
-        const isEquipment = veiculo.tipo === 'equipamento';
-        const isValidVehicle = isValidPlate(veiculo.placa);
-
-        // Define icon and label based on conditions
-        let icon = 'help-outline'; // Default icon for unknown/other
-        let label = 'Outros';
-
-        if (isEquipment) {
-            icon = 'build';
-            label = 'Equipamento';
-        } else if (isValidVehicle) {
-            icon = 'directions-car';
-            label = 'Veículo';
-        }
-
-        return {
-            icon,
-            label,
-            displayValue: veiculo.placa + (veiculo.numeroEquipamento ? ` (#${veiculo.numeroEquipamento})` : '')
-        };
-    };
 
     // Converte as datas para o formato pt-BR
     const formatarData = (data: Date) => {
@@ -238,7 +209,7 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
 
     const verificarConectividade = async () => {
         try {
-            showGlobalToast('info', 'Aguarde', 'Verificando conexão com o servidor...', 2000);
+            showGlobalToast('info', 'Aguarde', 'Verificando conexão com o servidor...', 10000);
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000); // timeout de 5 segundos
@@ -266,6 +237,12 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
         }
     };
 
+    const formatarDataParaNomeArquivo = (data: string) => {
+        // Assumindo que formatarData retorna no formato dd/mm/yyyy
+        const partes = data.split('/');
+        return `${partes[0]}-${partes[1]}-${partes[2]}`;
+    };
+
     // Função para formatar o horário (remove os segundos)
     const formatarHorario = (hora: string) => {
         // Se o horário incluir segundos (HH:mm:ss), remove os segundos
@@ -274,6 +251,7 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
         }
         return hora; // Retorna o horário original se já estiver no formato HH:mm
     };
+
 
     const gerarRelatorioExcel = async () => {
         if (lavagens.length === 0) {
@@ -315,6 +293,9 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                 })
             });
 
+            console.log(formatarData(dataInicio))
+            console.log(formatarData(dataFim))
+
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('Erro do servidor:', errorText);
@@ -326,9 +307,11 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                 '',
                 5000);
 
+            const dataInicioFormatada = formatarDataParaNomeArquivo(formatarData(dataInicio));
+            const dataFimFormatada = formatarDataParaNomeArquivo(formatarData(dataFim));
+
             // Criar nome do arquivo com timestamp
-            const timestamp = Date.now();
-            const fileName = `relatorio_lavagens_${timestamp}.xlsx`;
+            const fileName = `relatorio_lavagens_${dataInicioFormatada}_ate_${dataFimFormatada}.xlsx`;
             const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
 
             // Converter resposta para base64
@@ -395,13 +378,33 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                     </View>
 
                     <Text style={styles.modalTitle}>
-                        Conexão não estabelecida
+                        Conexão com o servidor não estabelecida
                     </Text>
 
-                    <Text style={styles.modalText}>
-                        Para gerar relatórios, é necessário estar conectado ao servidor da Ecologika (http://192.168.1.222:3000).
-                        Este serviço está disponível apenas quando você está conectado à rede interna da Ecologika com o servidor ativado.
-                    </Text>
+                    <View style={styles.modalTextContainer}>
+                        <Text style={styles.modalText}>
+                            O recurso de geração de relatórios requer duas condições:
+                        </Text>
+
+                        <View style={styles.bulletPointContainer}>
+                            <Text style={styles.bulletPoint}>•</Text>
+                            <Text style={styles.bulletPointText}>
+                                Estar conectado à rede local da Ecologika
+                            </Text>
+                        </View>
+
+                        <View style={styles.bulletPointContainer}>
+                            <Text style={styles.bulletPoint}>•</Text>
+                            <Text style={styles.bulletPointText}>
+                                O servidor de relatórios estar em funcionamento
+                            </Text>
+                        </View>
+
+                        <Text style={[styles.modalText, { marginTop: 10 }]}>
+                            Caso você já esteja conectado à rede local da Ecologika, então isso significa que o servidor está fora do ar ou desligado.
+                            Entre em contato com o Administrador do sistema para mais detalhes.
+                        </Text>
+                    </View>
 
                     <Button
                         mode="contained"
@@ -414,7 +417,6 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
             </View>
         </Modal>
     );
-
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -439,12 +441,29 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                 style={styles.scrollViewContainer}
                 contentContainerStyle={styles.scrollViewContent}
             >
-                {lavagens.length > 0 && (
+                {lavagens.length > 0 ? (
                     <RelatorioContent
                         lavagens={lavagens}
                         onGerarExcel={gerarRelatorioExcel}
                         loading={loading}
                     />
+                ) : (
+                    <View style={styles.emptyStateContainer}>
+                        <Icon
+                            name="filter-variant"
+                            size={64}
+                            color={customTheme.colors.onSurfaceVariant}
+                        />
+                        <Text style={styles.emptyStateTitle}>
+                            Nenhum registro encontrado
+                        </Text>
+                        <Text style={styles.emptyStateSubtitle}>
+                            Utilize os filtros acima para gerar um relatório
+                        </Text>
+                        <Text style={styles.emptyStateDescription}>
+                            Selecione um intervalo de datas e, se desejar, filtre por placas específicas
+                        </Text>
+                    </View>
                 )}
             </ScrollView>
 
@@ -455,6 +474,54 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
 }
 
 const styles = StyleSheet.create({
+    emptyStateContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+        marginTop: 40,
+    },
+    emptyStateTitle: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+        marginTop: 16,
+        textAlign: 'center',
+    },
+    emptyStateSubtitle: {
+        fontSize: 16,
+        color: customTheme.colors.onSurfaceVariant,
+        marginTop: 8,
+        textAlign: 'center',
+    },
+    emptyStateDescription: {
+        fontSize: 14,
+        color: customTheme.colors.onSurfaceVariant,
+        marginTop: 8,
+        textAlign: 'center',
+        paddingHorizontal: 40,
+    },
+    modalTextContainer: {
+        marginBottom: 5,
+    },
+    bulletPointContainer: {
+        flexDirection: 'row',
+        marginLeft: 10,
+        marginTop: 8,
+        alignItems: 'flex-start',
+    },
+    bulletPoint: {
+        fontSize: 16,
+        marginRight: 8,
+        color: customTheme.colors.error,
+        lineHeight: 22,
+    },
+    bulletPointText: {
+        fontSize: 15,
+        lineHeight: 22,
+        flex: 1,
+        color: customTheme.colors.onSurface,
+    },
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -483,8 +550,8 @@ const styles = StyleSheet.create({
         color: customTheme.colors.error,
     },
     modalText: {
-        fontSize: 16,
-        textAlign: 'center',
+        fontSize: 15,
+        textAlign: 'justify',
         marginBottom: 20,
         lineHeight: 22,
         color: customTheme.colors.onSurface,

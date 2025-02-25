@@ -1,12 +1,3 @@
-export type Meeting = {
-    name: string;
-    entrada: string;
-    saida: string;
-    date: string;
-    assunto: string;
-    sala: string;
-}
-
 export type Pesagem = {
     id: string;
     responsavel: string;
@@ -22,11 +13,6 @@ export type Pesagem = {
     placa: string;
     photoUris: string[]; // Agora é um array de strings
 }
-
-export type Props = {
-    meetingInfo?: Meeting;
-    closeModal: (meeting: Meeting) => void;
-};
 
 export type dropdownType = {
     label: string;

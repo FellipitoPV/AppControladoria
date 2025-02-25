@@ -34,6 +34,14 @@ export default function RegisterScreen({ navigation }: any) {
     const [confirmarSenha, setConfirmarSenha] = useState('');
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+    const formatName = (name: string) => {
+        return name
+            .toLowerCase()
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    };
+
     const handleRegister = async () => {
         // Validações
         if (!nome || !email || !senha || !confirmarSenha || !area) {
@@ -102,20 +110,27 @@ export default function RegisterScreen({ navigation }: any) {
                     .replace(/^_|_$/g, '');
             };
 
-            const customUserId = normalizeNameForId(nome);
+            // Formatar o nome com primeiras letras maiúsculas
+            const formattedName = formatName(nome);
+            const customUserId = normalizeNameForId(formattedName);
 
             // Criar documento do usuário
             await firestore()
                 .collection('users')
                 .doc(customUserId)
                 .set({
-                    user: nome,
+                    user: formattedName,
                     email: email.toLowerCase(),
                     cargo: area === 'Administrativo' ? 'Administrativo' : 'Operacional',
                     area: area,
                     createdAt: firestore.FieldValue.serverTimestamp(),
                     authUid: userCredential.user.uid,
-                    acesso: area === 'Operacional' ? ['operacional'] : [] // Aqui está a modificação
+                    acesso: area === 'Operacional' ? [
+                        {
+                            moduleId: 'operacao',
+                            level: 1
+                        }
+                    ] : []
                 });
 
             showGlobalToast(

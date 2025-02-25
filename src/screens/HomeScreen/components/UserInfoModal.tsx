@@ -4,6 +4,8 @@ import { Text, Surface } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import { useNavigation } from '@react-navigation/native';
+import { User } from '../../Adm/components/admTypes';
+import { VersionInfo } from '../../../helpers/AppUpdater';
 
 interface ProfileMenuItem {
     icon: string;
@@ -15,21 +17,15 @@ interface ProfileMenuItem {
 interface UserModalProps {
     visible: boolean;
     onClose: () => void;
-    userInfo: {
-        id: string;
-        user: string;
-        email: string;
-        telefone?: string | null;
-        cargo: string;
-        ramal?: string | null;
-        area?: string | null;
-        acesso?: string[];
-        photoURL?: string;
-    };
+    userInfo: User;
     onLogout: () => void;
+    // Adicionar estas propriedades:
+    updateInfo?: VersionInfo | null;  // Tornar opcional com ?
+    onUpdate?: () => void;           // Tornar opcional com ?
 }
 
-const UserProfileModal = ({ visible, onClose, userInfo, onLogout }: UserModalProps) => {
+
+const UserProfileModal = ({ visible, onClose, userInfo, onLogout, updateInfo, onUpdate }: UserModalProps) => {
     const navigation = useNavigation<any>();
     const [showEasterEgg, setShowEasterEgg] = useState(false);
 
@@ -46,6 +42,15 @@ const UserProfileModal = ({ visible, onClose, userInfo, onLogout }: UserModalPro
     };
 
     const menuItems: ProfileMenuItem[] = [
+        ...(updateInfo ? [{
+            icon: updateInfo.obrigatoria ? "alert-decagram" : "update",
+            label: `Atualizar para v${updateInfo.versao}`,
+            onPress: () => {
+                onClose();
+                onUpdate && onUpdate(); // Use o operador && para verificar se onUpdate existe
+            },
+            color: updateInfo.obrigatoria ? customTheme.colors.error : customTheme.colors.primary,
+        }] : []),
         {
             icon: 'account-edit',
             label: 'Editar Perfil',
@@ -77,6 +82,13 @@ const UserProfileModal = ({ visible, onClose, userInfo, onLogout }: UserModalPro
                     color={color || customTheme.colors.onSurfaceVariant}
                 />
                 <Text style={styles.menuItemText}>{label}</Text>
+
+                {/* Adicionar badge para atualizações obrigatórias */}
+                {updateInfo && label.includes(`Atualizar para v${updateInfo.versao}`) && updateInfo.obrigatoria && (
+                    <View style={styles.requiredBadge}>
+                        <Text style={styles.requiredText}>Obrigatória</Text>
+                    </View>
+                )}
             </View>
             <MaterialCommunityIcons
                 name="chevron-right"
@@ -169,6 +181,18 @@ const UserProfileModal = ({ visible, onClose, userInfo, onLogout }: UserModalPro
 };
 
 const styles = StyleSheet.create({
+    requiredBadge: {
+        backgroundColor: customTheme.colors.error,
+        borderRadius: 4,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        marginLeft: 8,
+    },
+    requiredText: {
+        color: customTheme.colors.onError,
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
     easterEgg: {
         position: 'absolute',
         bottom: 16,

@@ -1,20 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     ScrollView,
     StyleSheet,
     TouchableOpacity,
-    Platform,
-    Alert,
-    Modal,
     ActivityIndicator,
     Linking,
     SafeAreaView,
 } from 'react-native';
-import { Text, Surface, TextInput, Dialog } from 'react-native-paper';
+import { Text, Surface, TextInput } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Dropdown } from 'react-native-element-dropdown';
 import database from '@react-native-firebase/database';
 import { useUser } from '../../../../contexts/userContext';
@@ -23,7 +19,6 @@ import { customTheme } from '../../../../theme/theme';
 import EquipmentSection from './EquipmentSection';
 import { Equipment, Container, ClienteInterface, ProgramacaoEquipamento, clientes, listaTiposEquipamentos, listaTiposContainers } from './logisticTypes';
 import ModernHeader from '../../../../assets/components/ModernHeader';
-import axios from 'axios';
 
 export interface SelectedEquipment extends Equipment {
     quantidade: number;

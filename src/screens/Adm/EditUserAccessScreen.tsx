@@ -8,59 +8,74 @@ import {
     Image,
     BackHandler,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { NavigationProp, ParamListBase, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Text, Portal, Dialog, TextInput } from 'react-native-paper';
-import MaterialIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 import { customTheme } from '../../theme/theme';
-import { AcessoInterface, AcessosType } from './components/admTypes';
+import { AcessoInterface, AcessosType, User, UserAccess } from './components/admTypes';
+import ModernHeader from '../../assets/components/ModernHeader';
 
-interface User {
-    id: string;
-    user: string;
-    email: string;
-    telefone: string;
-    cargo: string;
-    ramal: string;
-    area: string;
-    acesso: string[];
-    photoURL: string;
+interface AccessItemProps {
+    item: AcessoInterface;
+    selectedLevel: number | null;
+    onLevelSelect: (moduleId: string, level: number | null) => void;
 }
 
-const AccessItem: React.FC<{
-    item: AcessoInterface;  // Aqui mudamos para usar sua interface
-    isSelected: boolean;
-    onToggle: () => void;
-}> = ({ item, isSelected, onToggle }) => {
+const AccessItem: React.FC<AccessItemProps> = ({ item, selectedLevel, onLevelSelect }) => {
+    const levels = [
+        { level: 1, label: "Básico" },
+        { level: 2, label: "Avançado" },
+        { level: 3, label: "Administrador" }
+    ];
+
     return (
-        <TouchableOpacity
-            onPress={onToggle}
-            style={[styles.accessItem, isSelected && styles.accessItemSelected]}
-        >
-            <View style={styles.accessItemContent}>
-                <View style={[styles.iconContainer, isSelected && styles.iconContainerSelected]}>
-                    <MaterialIcons
-                        name={item.icon}
-                        size={20}
-                        color={isSelected ? 'white' : customTheme.colors.primary}
-                    />
+        <View style={styles.accessItem}>
+            <View style={styles.accessItemHeader}>
+                <View style={styles.accessItemContent}>
+                    <View style={styles.iconContainer}>
+                        <Icon
+                            name={item.icon}
+                            size={20}
+                            color={selectedLevel ? customTheme.colors.primary : '#666'}
+                        />
+                    </View>
+                    <View style={styles.accessItemText}>
+                        <Text style={styles.accessItemLabel}>{item.label}</Text>
+                        <Text style={styles.accessItemDescription}>{item.description}</Text>
+                    </View>
                 </View>
-                <View style={styles.accessItemText}>
-                    <Text style={[styles.accessItemLabel, isSelected && styles.accessItemLabelSelected]}>
-                        {item.label}
-                    </Text>
-                    <Text style={styles.accessItemDescription}>
-                        {item.description}
-                    </Text>
-                </View>
+                {selectedLevel !== null && (
+                    <TouchableOpacity
+                        onPress={() => onLevelSelect(item.id, null)}
+                        style={styles.removeButton}
+                    >
+                        <Icon name="close-circle" size={25} color={customTheme.colors.error} />
+                    </TouchableOpacity>
+                )}
             </View>
-            <MaterialIcons
-                name={isSelected ? 'checkbox-intermediate' : 'checkbox-blank-outline'}
-                size={24}
-                color={isSelected ? customTheme.colors.primary : '#666'}
-            />
-        </TouchableOpacity>
+
+            <View style={styles.levelSelector}>
+                {levels.map((levelOption) => (
+                    <TouchableOpacity
+                        key={levelOption.level}
+                        style={[
+                            styles.levelButton,
+                            selectedLevel === levelOption.level && styles.levelButtonSelected
+                        ]}
+                        onPress={() => onLevelSelect(item.id, levelOption.level)}
+                    >
+                        <Text style={[
+                            styles.levelButtonText,
+                            selectedLevel === levelOption.level && styles.levelButtonTextSelected
+                        ]}>
+                            {levelOption.label}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+        </View>
     );
 };
 
@@ -86,17 +101,19 @@ const UserSearchItem: React.FC<{
                 <Text style={styles.userEmail}>{user.email}</Text>
                 <Text style={styles.userCargo}>{user.cargo}</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={24} color="#666" />
+            <Icon name="chevron-right" size={24} color="#666" />
         </TouchableOpacity>
     );
 };
 
 export default function EditUserAccessScreen() {
+    const navigation = useNavigation<NavigationProp<ParamListBase>>();
+
     const [loading, setLoading] = useState(false);
     const [users, setUsers] = useState<User[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
-    const [selectedAccess, setSelectedAccess] = useState<string[]>([]);
+    const [selectedAccess, setSelectedAccess] = useState<UserAccess[]>([]);
     const [confirmDialogVisible, setConfirmDialogVisible] = useState(false);
 
     useEffect(() => {
@@ -121,10 +138,12 @@ export default function EditUserAccessScreen() {
         }, [selectedUser])
     );
 
+    // Atualizar loadUsers
     const loadUsers = async () => {
         try {
             const snapshot = await firestore()
                 .collection('users')
+                .orderBy('user', 'asc') // 'asc' para ordem crescente (A-Z)
                 .get();
 
             const listaUsuarios: User[] = snapshot.docs.map((doc) => ({
@@ -139,11 +158,6 @@ export default function EditUserAccessScreen() {
                 photoURL: doc.data().photoURL || ''
             }));
 
-            const filteredUsers = listaUsuarios.filter(user =>
-                user.cargo === 'Administrador' ||
-                user.email.toLowerCase().endsWith('@ecologika.com.br')
-            );
-
             setUsers(listaUsuarios);
         } catch (error) {
             console.error('Erro ao acessar a coleção "users":', error);
@@ -156,9 +170,17 @@ export default function EditUserAccessScreen() {
         }
     };
 
+    // Função de seleção de usuário atualizada
     const handleUserSelect = (user: User) => {
         setSelectedUser(user);
-        setSelectedAccess(user.acesso || []);
+
+        if (user.acesso) {
+            // Se já tem acessos definidos, usa eles
+            setSelectedAccess(user.acesso);
+        } else {
+            // Se não tem nenhum acesso ainda
+            setSelectedAccess([]);
+        }
     };
 
     const handleBack = () => {
@@ -166,16 +188,27 @@ export default function EditUserAccessScreen() {
         setSelectedAccess([]);
     };
 
-    const handleToggleAccess = (accessId: string) => {
+    // Função para manipular seleção de nível
+    const handleLevelSelect = (moduleId: string, level: number | null) => {
         setSelectedAccess(prev => {
-            if (prev.includes(accessId)) {
-                return prev.filter(id => id !== accessId);
-            } else {
-                return [...prev, accessId];
+            if (level === null) {
+                // Remove o acesso se level for null
+                return prev.filter(access => access.moduleId !== moduleId);
             }
+
+            const existing = prev.find(access => access.moduleId === moduleId);
+            if (existing) {
+                return prev.map(access =>
+                    access.moduleId === moduleId
+                        ? { ...access, level }
+                        : access
+                );
+            }
+            return [...prev, { moduleId, level }];
         });
     };
 
+    // Atualizar handleSaveAccess
     const handleSaveAccess = async () => {
         if (!selectedUser?.id) return;
 
@@ -185,7 +218,7 @@ export default function EditUserAccessScreen() {
                 .collection('users')
                 .doc(selectedUser.id)
                 .update({
-                    acesso: selectedAccess
+                    acesso: selectedAccess // Salva diretamente o array de UserAccess
                 });
 
             showGlobalToast(
@@ -195,8 +228,8 @@ export default function EditUserAccessScreen() {
                 3000
             );
             setConfirmDialogVisible(false);
-            loadUsers(); // Recarrega a lista de usuários
-            handleBack(); // Volta para a tela de busca
+            loadUsers();
+            handleBack();
         } catch (error) {
             console.error('Erro ao atualizar acessos:', error);
             showGlobalToast(
@@ -232,14 +265,12 @@ export default function EditUserAccessScreen() {
             {!selectedUser ? (
                 // Tela de busca de usuários
                 <>
-                    <View style={styles.header}>
-                        <MaterialIcons
-                            name="manage-accounts"
-                            size={32}
-                            color={customTheme.colors.primary}
-                        />
-                        <Text style={styles.headerTitle}>Gerenciar Acessos</Text>
-                    </View>
+                    {/* Header */}
+                    <ModernHeader
+                        title="Gerenciar Acessos"
+                        iconName="account-cog"
+                        onBackPress={() => navigation?.goBack()}
+                    />
 
                     <View style={styles.searchContainer}>
                         <TextInput
@@ -263,63 +294,26 @@ export default function EditUserAccessScreen() {
                 </>
             ) : (
                 // Tela de edição de acessos
-                <ScrollView style={styles.container}>
-                    <View style={styles.header}>
-                        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                            <MaterialIcons
-                                name="keyboard-backspace"
-                                size={24}
-                                color={customTheme.colors.primary}
-                            />
-                        </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Editar Acessos</Text>
-                    </View>
-
-                    <View style={styles.userHeader}>
-                        {selectedUser.photoURL ? (
-                            <Image
-                                source={{ uri: selectedUser.photoURL }}
-                                style={styles.selectedUserAvatar}
-                            />
-                        ) : (
-                            <View style={styles.selectedUserAvatarPlaceholder}>
-                                <Text style={styles.selectedUserAvatarText}>
-                                    {selectedUser.user.charAt(0).toUpperCase()}
-                                </Text>
-                            </View>
-                        )}
-                        <Text style={styles.selectedUserName}>{selectedUser.user}</Text>
-                        <Text style={styles.selectedUserEmail}>{selectedUser.email}</Text>
-                    </View>
+                <>
+                    <ModernHeader
+                        title={selectedUser.user}
+                        iconName="account-edit"
+                        rightIcon='content-save'
+                        rightAction={handleSaveAccess}
+                        onBackPress={() => setSelectedUser(null)}
+                    />
 
                     <View style={styles.accessList}>
                         {AcessosType.map((access) => (
                             <AccessItem
                                 key={access.id}
                                 item={access}
-                                isSelected={selectedAccess.includes(access.id)}
-                                onToggle={() => handleToggleAccess(access.id)}
+                                selectedLevel={selectedAccess.find(a => a.moduleId === access.id)?.level || null}
+                                onLevelSelect={handleLevelSelect}
                             />
                         ))}
                     </View>
-
-                    <View style={styles.buttonContainer}>
-                        <TouchableOpacity
-                            style={styles.saveButton}
-                            onPress={() => setConfirmDialogVisible(true)}
-                            disabled={loading}
-                        >
-                            {loading ? (
-                                <ActivityIndicator color="white" />
-                            ) : (
-                                <>
-                                    <MaterialIcons name="save" size={24} color="white" />
-                                    <Text style={styles.saveButtonText}>Salvar Alterações</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
-                    </View>
-                </ScrollView>
+                </>
             )}
 
             {/* Dialog de Confirmação */}
@@ -361,6 +355,52 @@ export default function EditUserAccessScreen() {
 }
 
 const styles = StyleSheet.create({
+    accessItemHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    removeButton: {
+        padding: 0,
+        right: 15,
+    },
+    levelButton: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backgroundColor: '#f0f0f0',
+        borderWidth: 1,
+        borderColor: '#ddd',
+    },
+    levelButtonSelected: {
+        backgroundColor: customTheme.colors.primary,
+        borderColor: customTheme.colors.primary,
+    },
+    levelButtonText: {
+        fontSize: 12,
+        color: '#666',
+    },
+    levelButtonTextSelected: {
+        color: 'white',
+    },
+    accessItem: {
+        padding: 16,
+        backgroundColor: 'white',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
+        marginBottom: 12,
+    },
+    accessItemContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    levelSelector: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 8,
+    },
     accessItemDescription: {
         fontSize: 12,
         color: '#666',
@@ -369,23 +409,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#ffffff',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        padding: 20,
-        backgroundColor: 'rgba(0, 0, 0, 0.02)',
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0, 0, 0, 0.05)',
-    },
-    backButton: {
-        padding: 8,
-    },
-    headerTitle: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: customTheme.colors.primary,
     },
     searchContainer: {
         padding: 20,
@@ -442,63 +465,9 @@ const styles = StyleSheet.create({
         color: customTheme.colors.primary,
         marginTop: 4,
     },
-    userHeader: {
-        alignItems: 'center',
-        padding: 20,
-        backgroundColor: `${customTheme.colors.primary}10`,
-    },
-    selectedUserAvatar: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        marginBottom: 12,
-    },
-    selectedUserAvatarPlaceholder: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: customTheme.colors.primary,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    selectedUserAvatarText: {
-        color: 'white',
-        fontSize: 32,
-        fontWeight: 'bold',
-    },
-    selectedUserName: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 4,
-    },
-    selectedUserEmail: {
-        fontSize: 14,
-        color: '#666',
-    },
     accessList: {
         padding: 20,
         gap: 12,
-    },
-    accessItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        backgroundColor: 'rgba(0, 0, 0, 0.02)',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(0, 0, 0, 0.05)',
-    },
-    accessItemContent: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    accessItemSelected: {
-        backgroundColor: `${customTheme.colors.primary}10`,
-        borderColor: customTheme.colors.primary,
     },
     iconContainer: {
         width: 42,
@@ -508,9 +477,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    iconContainerSelected: {
-        backgroundColor: customTheme.colors.primary,
-    },
     accessItemText: {
         flex: 1,
     },
@@ -518,28 +484,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '500',
         color: '#333',
-    },
-    accessItemLabelSelected: {
-        color: customTheme.colors.primary,
-    },
-    buttonContainer: {
-        padding: 20,
-        paddingBottom: 40,
-    },
-    saveButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: customTheme.colors.primary,
-        padding: 16,
-        borderRadius: 12,
-        elevation: 2,
-    },
-    saveButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '600',
     },
     dialog: {
         backgroundColor: 'white',

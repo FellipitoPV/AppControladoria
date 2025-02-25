@@ -3,33 +3,18 @@ import {
     View,
     ScrollView,
     TouchableOpacity,
-    Image,
-    Modal,
-    Dimensions,
     StyleSheet,
     Alert,
     Linking,
     Platform,
     SafeAreaView,
-    ActivityIndicator
+    ActivityIndicator,
 } from 'react-native';
-import {
-    Text,
-    Surface,
-    TextInput,
-    Button,
-    Divider,
-    Dialog,
-    Portal,
-} from 'react-native-paper';
+import { Text, Surface, TextInput, Button } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { CameraOptions, launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import DropDownPicker from 'react-native-dropdown-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import NetInfo from "@react-native-community/netinfo";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import firestore from '@react-native-firebase/firestore';
 import { PERMISSIONS, check, RESULTS, request } from 'react-native-permissions';
 import { useUser } from '../../../contexts/userContext';
 import { customTheme } from '../../../theme/theme';
@@ -1199,28 +1184,6 @@ const styles = StyleSheet.create({
         padding: 16,
         backgroundColor: '#FFFFFF',
     },
-    photoGalleryContent: {
-        gap: 16,
-        flexDirection: 'row',
-    },
-    photoContainer: {
-        position: 'relative',
-        borderRadius: 8,
-        overflow: 'hidden',
-        elevation: 2,
-    },
-    photoThumbnail: {
-        width: 100,
-        height: 100,
-        borderRadius: 8,
-    },
-    deletePhotoButton: {
-        position: 'absolute',
-        top: 4,
-        right: 4,
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        borderRadius: 12,
-    },
     textArea: {
         minHeight: 120,
         textAlignVertical: 'top',
@@ -1311,27 +1274,6 @@ const styles = StyleSheet.create({
     },
     scrollView: {
         flex: 1,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: customTheme.colors.surface,
-        elevation: 2,
-    },
-    headerContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    backButton: {
-        padding: 8,
-    },
-    headerTitle: {
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
     },
     formContainer: {
         padding: 16,

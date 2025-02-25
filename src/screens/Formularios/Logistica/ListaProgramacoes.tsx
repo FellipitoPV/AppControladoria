@@ -20,6 +20,7 @@ import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { customTheme } from '../../../theme/theme';
 import { Container, ProgramacaoEquipamento, Responsavel } from './Components/logisticTypes';
 import ModernHeader from '../../../assets/components/ModernHeader';
+import { hasAccess } from '../../Adm/components/admTypes';
 
 function alpha(color: string, opacity: number): string {
     const opacityHex = Math.round(opacity * 255).toString(16).padStart(2, '0');
@@ -42,6 +43,11 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
     const [programacaoConclusao, setProgramacaoConclusao] = useState<ProgramacaoEquipamento | null>(null);
 
     const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+
+    const canCreateProgram = () => userInfo && hasAccess(userInfo, 'logistica', 1);
+    const canDeleteProgram = () => userInfo && hasAccess(userInfo, 'logistica', 1);
+    const canTakeResponsibility = () => userInfo && hasAccess(userInfo, 'operacao', 1);
+    const canFinishOperation = () => userInfo && hasAccess(userInfo, 'operacao', 1);
 
     useEffect(() => {
         const buscarProgramacoes = () => {
@@ -74,8 +80,18 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
         buscarProgramacoes();
     }, []);
 
-    // Adicione a função de deletar:
+    // Função de deletar modificada com verificação de acesso
     const handleDelete = async (programacao: ProgramacaoEquipamento) => {
+        if (!canDeleteProgram()) {
+            showGlobalToast(
+                'error',
+                'Acesso Negado',
+                'Você não tem permissão para excluir programações',
+                3000
+            );
+            return;
+        }
+
         try {
             setLoading(true);
             setDeleteDialogVisible(false);
@@ -246,6 +262,86 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
         }
     };
 
+    // Renderização dos botões de operação com verificação de acesso
+    const renderOperationButtons = (programacao: ProgramacaoEquipamento) => {
+        const isResponsible = programacao.responsavelOperacao?.nome === userInfo?.user;
+
+        if (!isResponsible && !canTakeResponsibility()) {
+            return null;
+        }
+
+        return (
+            <View style={styles.botoesOperacao}>
+                {isOnline ? (
+                    <>
+                        {/* Botões para usuário que já é responsável */}
+                        {isResponsible && (
+                            <>
+                                <TouchableOpacity
+                                    style={styles.editButton}
+                                    onPress={() => handleOpenDialog(programacao)}
+                                >
+                                    <MaterialIcons
+                                        name="edit"
+                                        size={20}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.editButtonText}>Alterar</Text>
+                                </TouchableOpacity>
+
+                                {/* Botão de finalizar só aparece se tiver ambos os responsáveis e permissão */}
+                                {programacao.responsavelCarregamento?.nome && canFinishOperation() && (
+                                    <TouchableOpacity
+                                        style={styles.concluirButton}
+                                        onPress={() => {
+                                            setProgramacaoConclusao(programacao);
+                                            setConfirmacaoVisible(true);
+                                        }}
+                                    >
+                                        <MaterialIcons
+                                            name="check-circle"
+                                            size={20}
+                                            color={customTheme.colors.primary}
+                                        />
+                                        <Text style={styles.concluirButtonText}>Finalizar Operação</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </>
+                        )}
+
+                        {/* Botão para quando não há responsável */}
+                        {!programacao.responsavelOperacao?.nome && canTakeResponsibility() && (
+                            <TouchableOpacity
+                                style={styles.assumirButton}
+                                onPress={() => handleOpenDialog(programacao)}
+                            >
+                                <MaterialIcons
+                                    name="engineering"
+                                    size={20}
+                                    color={customTheme.colors.primary}
+                                />
+                                <Text style={styles.assumirButtonText}>
+                                    Assumir Responsabilidade pela Operação
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+                    </>
+                ) : (
+                    <View style={styles.offlineMessage}>
+                        <MaterialIcons
+                            name="wifi-off"
+                            size={16}
+                            color={customTheme.colors.error}
+                        />
+                        <Text style={styles.offlineText}>
+                            Conecte-se à internet para gerenciar as programações
+                        </Text>
+                    </View>
+                )}
+            </View>
+        );
+    };
+
     const renderResponsavelInfo = (tipo: string, responsavel?: Responsavel) => {
         if (!responsavel) return null;
 
@@ -300,7 +396,6 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                     hoje && styles.cardHoje
                 ]}
             >
-                {/* Header com Status e Data */}
                 <View style={[
                     styles.cardHeader,
                     atrasado && styles.headerAtrasado,
@@ -330,25 +425,9 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                                 {atrasado ? 'Atrasado' : hoje ? 'Hoje' : 'Agendado'}
                             </Text>
                         </View>
-
-                        {userInfo?.cargo === "Administrador" && (
-                            <TouchableOpacity
-                                style={styles.deleteButton}
-                                onPress={() => {
-                                    setSelectedProgramacao(programacao);
-                                    setDeleteDialogVisible(true);
-                                }}
-                            >
-                                <MaterialIcons
-                                    name="delete"
-                                    size={20}
-                                    color={customTheme.colors.error}
-                                />
-                            </TouchableOpacity>
-                        )}
+                        {renderDeleteButton(programacao)}
                     </View>
                 </View>
-
 
                 <View style={styles.cardContent}>
                     {/* Linha 1: Cliente e Endereço */}
@@ -442,8 +521,10 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                     </View>
 
                     {/* Seção de botões e ações */}
+                    {/* Seção de botões e ações */}
+                    {/* Substituir a condição existente por esta nova condição */}
                     {((programacao.responsavelOperacao?.nome === userInfo?.user) ||
-                        (!programacao.responsavelOperacao?.nome && (userInfo?.acesso?.includes('operacao') || userInfo?.cargo === "Administrador"))) && (
+                        (!programacao.responsavelOperacao?.nome && userInfo && hasAccess(userInfo, 'operacao', 1))) && (
                             <View style={styles.botoesOperacao}>
                                 {isOnline ? (
                                     <>
@@ -482,8 +563,8 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                                             </>
                                         )}
 
-                                        {/* Botão para quando não há responsável */}
-                                        {!programacao.responsavelOperacao?.nome && (userInfo?.acesso?.includes('operacao') || userInfo?.cargo === "Administrador") && (
+                                        {/* Botão para quando não há responsável - AQUI ESTÁ A CORREÇÃO */}
+                                        {!programacao.responsavelOperacao?.nome && userInfo && hasAccess(userInfo, 'operacao', 1) && (
                                             <TouchableOpacity
                                                 style={styles.assumirButton}
                                                 onPress={() => handleOpenDialog(programacao)}
@@ -511,7 +592,6 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                                         </Text>
                                     </View>
                                 )}
-
                             </View>
                         )}
 
@@ -527,6 +607,40 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                 </View>
             </Surface>
         );
+    };
+
+    // Renderização do botão de deletar com verificação de acesso
+    const renderDeleteButton = (programacao: ProgramacaoEquipamento) => {
+        if (!canDeleteProgram()) {
+            return null;
+        }
+
+        return (
+            <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => {
+                    setSelectedProgramacao(programacao);
+                    setDeleteDialogVisible(true);
+                }}
+            >
+                <MaterialIcons
+                    name="delete"
+                    size={20}
+                    color={customTheme.colors.error}
+                />
+            </TouchableOpacity>
+        );
+    };
+
+    // Modificando o header para usar verificação de acesso
+    const headerProps = {
+        title: "Agendamentos",
+        iconName: "clock",
+        onBackPress: () => navigation.goBack(),
+        ...(canCreateProgram() ? {
+            rightIcon: 'plus-box',
+            rightAction: () => navigation.navigate('LogisticaProgram')
+        } : {})
     };
 
     useEffect(() => {
@@ -551,15 +665,7 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
         <View style={styles.container}>
 
             {/* Header */}
-            <ModernHeader
-                title="Agendamentos"
-                iconName="clock"
-                onBackPress={() => navigation.goBack()}
-                {...(userInfo?.acesso?.includes('logistica') || userInfo?.cargo === "Administrador" ? {
-                    rightIcon: 'plus-box',
-                    rightAction: () => navigation.navigate('LogisticaProgram')
-                } : {})}
-            />
+            <ModernHeader {...headerProps} />
 
             <ScrollView style={styles.content}>
                 {programacoes.length === 0 ? (

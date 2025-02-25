@@ -19,14 +19,25 @@ interface QuickAction {
     icon: string;
     color: string;
     route: string;
-    acesso?: string;
-    adminView?: boolean;
+    access?: {
+        moduleId: string;
+        minLevel: number;
+    };
 }
+
 
 const QuickActionsGrid = () => {
     const [currentPage, setCurrentPage] = useState(0);
     const navigation = useNavigation<NavigationProp<ParamListBase>>();
-    const { userInfo } = useUser(); // Importando userInfo do contexto
+    const { userInfo } = useUser();
+    const { width } = Dimensions.get('window');
+
+    // Função auxiliar para verificar nível de acesso
+    const getUserAccessLevel = (moduleId: string): number => {
+        if (userInfo?.cargo === 'Administrador') return 3; // Administrador tem nível máximo
+        const userAccess = userInfo?.acesso?.find((access: { moduleId: string; level: number }) => access.moduleId === moduleId);
+        return userAccess?.level || 0;
+    };
 
     const quickActions = React.useMemo((): QuickAction[] => [
         {
@@ -35,7 +46,10 @@ const QuickActionsGrid = () => {
             icon: 'car-wash',
             color: customTheme.colors.primary,
             route: 'LavagemScreen',
-            acesso: 'lavagem' // Ação restrita
+            access: {
+                moduleId: 'lavagem',
+                minLevel: 1 // Nível básico para acesso
+            }
         },
         {
             id: '2',
@@ -43,7 +57,10 @@ const QuickActionsGrid = () => {
             icon: 'sprout',
             color: customTheme.colors.primary,
             route: 'CompostagemScreen',
-            acesso: 'compostagem' // Ação restrita
+            access: {
+                moduleId: 'compostagem',
+                minLevel: 1 // Nível básico para acesso
+            }
         },
         {
             id: '3',
@@ -51,7 +68,10 @@ const QuickActionsGrid = () => {
             icon: 'truck-delivery',
             color: customTheme.colors.primary,
             route: 'LogisticaScreen',
-            acesso: 'logistica' // Ação restrita
+            access: {
+                moduleId: 'logistica',
+                minLevel: 1 // Nível básico para acesso
+            }
         },
         {
             id: '4',
@@ -59,7 +79,10 @@ const QuickActionsGrid = () => {
             icon: 'clipboard-list',
             color: customTheme.colors.primary,
             route: 'LogisticaScreen',
-            acesso: 'operacao' // Ação restrita
+            access: {
+                moduleId: 'operacao',
+                minLevel: 1 // Nível básico para acesso
+            }
         },
         {
             id: '98',
@@ -67,7 +90,10 @@ const QuickActionsGrid = () => {
             icon: 'account-cog',
             color: customTheme.colors.primary,
             route: 'UsersEdit',
-            acesso: 'Adm' // Ação restrita
+            access: {
+                moduleId: 'system',
+                minLevel: 3 // Apenas administradores
+            }
         },
         {
             id: '99',
@@ -75,38 +101,30 @@ const QuickActionsGrid = () => {
             icon: 'contacts',
             color: customTheme.colors.primary,
             route: 'Contatos'
-            // Sem acesso = público
+            // Sem access = público
         },
     ], []);
 
-    const { width } = Dimensions.get('window');
-
-    // Mova a criação das páginas para depois do filteredActions
+    // Filtrar ações baseado nos níveis de acesso
     const filteredActions = React.useMemo(() => {
         const isAdmin = userInfo?.cargo === 'Administrador';
-        console.log('\n=== DIAGNÓSTICO DE ACESSOS ===');
-        console.log('Acessos do usuário:', userInfo?.acesso || 'Nenhum acesso definido');
-        console.log('Cargo:', userInfo?.cargo);
-        console.log('É administrador:', isAdmin);
 
-        const acoesPermitidas = quickActions.filter(action => {
-            // Se é admin, permite todos os acessos
-            if (isAdmin) return true;
+        return quickActions.filter(action => {
+            // Se não requer acesso, permite
+            if (!action.access) return true;
 
-            // Lógica original para não-admins
-            if (!action.acesso) return true;
-            if (!userInfo?.acesso || userInfo.acesso.length === 0) return false;
-            return userInfo.acesso.includes(action.acesso);
-        });
-
-        // Adiciona flag para identificar atalhos que o admin não teria acesso normalmente
-        return acoesPermitidas.map(action => ({
+            // Verifica o nível de acesso do usuário para o módulo
+            const userLevel = getUserAccessLevel(action.access.moduleId);
+            return userLevel >= action.access.minLevel;
+        }).map(action => ({
             ...action,
-            adminView: isAdmin && action.acesso ? !userInfo?.acesso?.includes(action.acesso) : undefined
+            // Adiciona flag para identificar atalhos que só administradores podem ver
+            adminView: isAdmin && action.access?.minLevel === 3
         }));
-    }, [quickActions, userInfo?.acesso, userInfo?.cargo]);
+    }, [quickActions, userInfo]);
 
     // Agora use filteredActions para criar as páginas
+    // Criar páginas com as ações filtradas
     const pages = React.useMemo(() => {
         return filteredActions.reduce((acc, item, index) => {
             const pageIndex = Math.floor(index / 4);
@@ -115,7 +133,7 @@ const QuickActionsGrid = () => {
             }
             acc[pageIndex].push(item);
             return acc;
-        }, [] as QuickAction[][]); // Aqui mudamos para array de arrays de QuickAction
+        }, [] as (QuickAction & { adminView?: boolean })[][]);
     }, [filteredActions]);
 
     const handleScroll = (event: any) => {
@@ -158,7 +176,7 @@ const QuickActionsGrid = () => {
                                 style={[styles.page, { width }]}
                             >
                                 <View style={styles.gridContainer}>
-                                    {page.map((action) => (
+                                    {page.map((action: QuickAction & { adminView?: boolean }) => (
                                         <TouchableOpacity
                                             key={action.id}
                                             style={styles.actionButton}

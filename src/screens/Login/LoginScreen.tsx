@@ -1,29 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import {
     View,
-    Image,
     StyleSheet,
-    Modal,
     TouchableOpacity,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
     ActivityIndicator,
     Dimensions,
-    BackHandler
+    BackHandler,
 } from 'react-native';
-import { TextInput, Text, Button } from 'react-native-paper';
+import { TextInput, Text } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
-import { firebase } from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { checkInternetConnection, showGlobalToast } from '../../helpers/GlobalApi';
+import { showGlobalToast } from '../../helpers/GlobalApi';
 import { useUser } from '../../contexts/userContext';
-import { User } from '../../helpers/Types';
 import { customTheme } from '../../theme/theme';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import WelcomeScreen from './WelcomeScreen';
 import { useFocusEffect } from '@react-navigation/native';
-
 
 const inputTheme = {
     colors: {

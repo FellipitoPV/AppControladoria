@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     View,
     StyleSheet,
@@ -8,21 +8,14 @@ import {
     TouchableOpacity,
     SafeAreaView,
     ActivityIndicator,
+    Animated,
+    Platform,
 } from 'react-native';
-import {
-    Text,
-    TextInput,
-    Button,
-    Surface,
-    useTheme,
-    FAB,
-    Card,
-} from 'react-native-paper';
+import { Text, TextInput, Button, Surface, Card } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import firestore, { updateDoc } from '@react-native-firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import Toast from 'react-native-toast-message';
 import { useNetwork } from '../../../contexts/NetworkContext';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { customTheme } from '../../../theme/theme';
@@ -62,6 +55,9 @@ export default function ControleEstoque({ navigation }: any) {
     const [unidadeMedida, setUnidadeMedida] = useState<'unidade' | 'kilo' | 'litro'>('unidade');
     const [isEditingUnidade, setIsEditingUnidade] = useState(false);
     const [isUpdatingUnidade, setIsUpdatingUnidade] = useState(false);
+
+    const [imageErrors, setImageErrors] = useState<{ [id: string]: boolean }>({});
+    const [detailImageError, setDetailImageError] = useState(false);
 
     const ordernarProdutos = (produtos: ProdutoEstoque[]): ProdutoEstoque[] => {
         // Verifica se produtos é undefined ou null
@@ -439,6 +435,170 @@ export default function ControleEstoque({ navigation }: any) {
         return true;
     };
 
+    // Função para tratar erros de carregamento de imagem
+    const handleImageError = (produtoId?: string) => {
+        if (produtoId) {
+            setImageErrors(prev => ({
+                ...prev,
+                [produtoId]: true
+            }));
+        }
+    };
+
+    // Função para tratar erro de imagem na tela de detalhes
+    const handleDetailImageError = () => {
+        setDetailImageError(true);
+    };
+
+    // === ANIMATIONS ===
+    const slideAnim = useRef(new Animated.Value(300)).current; // Começa fora da tela (300 é um exemplo)
+    const productSlideAnim = useRef(new Animated.Value(500)).current;
+
+    useEffect(() => {
+        if (isImagePickerVisible) {
+            // Quando a modal se torna visível, deslize para cima
+            Animated.spring(slideAnim, {
+                toValue: 0,
+                useNativeDriver: true,
+                speed: 12,
+                bounciness: 2,
+                overshootClamping: true
+            }).start();
+        } else {
+            // Quando a modal se fecha, animamos de volta para baixo
+            // Nota: isso só tem efeito se você gerenciar o fechamento da modal manualmente
+            slideAnim.setValue(300);
+        }
+    }, [isImagePickerVisible]);
+
+    const closeImagePicker = () => {
+        Animated.spring(slideAnim, {
+            toValue: 500,
+            bounciness: 2,
+            speed: 20,
+            useNativeDriver: true
+        }).start();
+
+        // Definir um timeout um pouco menor que a duração esperada da animação
+        setTimeout(() => {
+            setIsImagePickerVisible(false);
+        }, 150); // 300ms é geralmente suficiente para a animação com esses parâmetros
+    };
+
+    // ANIMAÇÂO DO NOVO PRODUTO
+    useEffect(() => {
+        if (modalVisible) {
+            // Animação de entrada com spring para um efeito mais natural
+            Animated.spring(productSlideAnim, {
+                toValue: 0,
+                useNativeDriver: true,
+                speed: 12,
+                bounciness: 5
+            }).start();
+        } else {
+            // Reset para a próxima abertura
+            productSlideAnim.setValue(500);
+        }
+    }, [modalVisible]);
+
+    // Substitua a função que fecha a modal por esta:
+    const closeProductModal = () => {
+        // Inicia a animação de saída
+        Animated.spring(productSlideAnim, {
+            toValue: 800,
+            speed: 20,
+            bounciness: 2,
+            useNativeDriver: true,
+            overshootClamping: true
+        }).start();
+
+        // Usa setTimeout para fechar a modal após um curto período
+        setTimeout(() => {
+            setModalVisible(false);
+            // Reset outros estados aqui se necessário
+            setNome('');
+            setQuantidade('');
+            setQuantidadeMinima('');
+            setPhotoUri(null);
+            setUnidadeMedida('unidade');
+        }, 150);
+    };
+
+    // ANIMAÇÂO DAS UNIDADES DE MEDIDA
+    const unidadeIconAnim = {
+        unidade: useRef(new Animated.Value(1)).current,
+        kilo: useRef(new Animated.Value(1)).current,
+        litro: useRef(new Animated.Value(1)).current
+    };
+
+    // 2. Adicione esta função para animar o ícone selecionado
+    const animateIcon = (type: 'unidade' | 'kilo' | 'litro') => {
+        // Reseta outros ícones
+        (Object.keys(unidadeIconAnim) as Array<'unidade' | 'kilo' | 'litro'>).forEach(key => {
+            if (key !== type) {
+                Animated.timing(unidadeIconAnim[key], {
+                    toValue: 1,
+                    duration: 300,
+                    useNativeDriver: true
+                }).start();
+            }
+        });
+
+        // Anima o ícone selecionado
+        Animated.spring(unidadeIconAnim[type], {
+            toValue: 1.2,
+            friction: 3,
+            tension: 40,
+            useNativeDriver: true
+        }).start();
+    };
+
+    const handleUnidadeSelect = (type: UnidadeMedida) => {
+        setUnidadeMedida(type);
+        animateIcon(type);
+    };
+
+    // Adicione este useEffect para inicializar as animações quando a modal abrir
+    useEffect(() => {
+        if (modalVisible) {
+            // Reseta todos os ícones para o estado inicial
+            Object.keys(unidadeIconAnim).forEach(key => {
+                (unidadeIconAnim[key as 'unidade' | 'kilo' | 'litro']).setValue(1);
+            });
+
+            // Se já tiver uma unidade selecionada, anima ela
+            if (unidadeMedida) {
+                // Pequeno delay para garantir que a UI já esteja renderizada
+                setTimeout(() => {
+                    animateIcon(unidadeMedida);
+                }, 300);
+            }
+        }
+    }, [modalVisible]);
+
+    useEffect(() => {
+        // Só executa se a modal estiver visível e se tiver uma unidade selecionada
+        if (modalVisible && unidadeMedida) {
+            animateIcon(unidadeMedida);
+        }
+    }, [unidadeMedida]);
+
+
+
+    // Resetar erro de imagem de detalhe quando abrir/fechar o modal
+    useEffect(() => {
+        if (!isDetalhesVisible) {
+            setDetailImageError(false);
+        }
+    }, [isDetalhesVisible]);
+
+    // Resetar erro de imagem de detalhe quando selecionar uma nova imagem
+    useEffect(() => {
+        if (photoUri && isUpdatePhoto) {
+            setDetailImageError(false);
+        }
+    }, [photoUri, isUpdatePhoto]);
+
     return (
         <View style={styles.mainContainer}>
 
@@ -487,19 +647,31 @@ export default function ControleEstoque({ navigation }: any) {
                                 >
                                     <Card.Content style={styles.produtoRow}>
                                         <View style={styles.produtoImageContainer}>
-                                            {produto.photoUrl ? (
+                                            {produto.photoUrl && !imageErrors[produto.id || ''] ? (
                                                 <Image
                                                     source={{ uri: produto.photoUrl }}
                                                     style={styles.produtoImage}
                                                     resizeMode="cover"
+                                                    onError={() => handleImageError(produto.id)}
                                                 />
                                             ) : (
-                                                <View style={[styles.produtoImage, { justifyContent: 'center', alignItems: 'center' }]}>
-                                                    <Icon
-                                                        name="image-off"
-                                                        size={24}
-                                                        color={customTheme.colors.onSurfaceVariant}
-                                                    />
+                                                <View style={[styles.produtoImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: customTheme.colors.errorContainer }]}>
+                                                    {imageErrors[produto.id || ''] ? (
+                                                        <>
+                                                            <Icon
+                                                                name="image-broken"
+                                                                size={24}
+                                                                color={customTheme.colors.error}
+                                                            />
+                                                            <Text style={styles.imageErrorText}>Erro na imagem</Text>
+                                                        </>
+                                                    ) : (
+                                                        <Icon
+                                                            name="image-off"
+                                                            size={24}
+                                                            color={customTheme.colors.onSurfaceVariant}
+                                                        />
+                                                    )}
                                                 </View>
                                             )}
                                         </View>
@@ -553,114 +725,180 @@ export default function ControleEstoque({ navigation }: any) {
                 )}
             </ScrollView>
 
-            {/* Modal para criar novo produto */}
+            {/* Modal para criar novo produto com animação de slide */}
             <Modal
                 visible={modalVisible}
                 transparent
-                animationType="fade"
-                onRequestClose={() => setModalVisible(false)}
+                animationType="none"
+                onRequestClose={closeProductModal}
             >
-                <View style={styles.modalContainer}>
-                    <Surface style={styles.modalContent}>
-                        <ScrollView>
-                            <Text variant="headlineSmall" style={styles.modalTitle}>
+                <View style={styles.productModalOverlay}>
+                    <TouchableOpacity
+                        style={styles.productModalBackdrop}
+                        activeOpacity={1}
+                        onPress={closeProductModal}
+                    />
+
+                    <Animated.View
+                        style={[
+                            styles.productModalContainer,
+                            { transform: [{ translateY: productSlideAnim }] }
+                        ]}
+                    >
+                        <View style={styles.productModalHeader}>
+                            <TouchableOpacity
+                                onPress={closeProductModal}
+                                style={styles.closeButton}
+                            >
+                                <Icon name="close" size={24} color={customTheme.colors.onSurface} />
+                            </TouchableOpacity>
+
+                            <Text style={styles.productModalTitle}>
                                 Novo Produto
                             </Text>
 
-                            {/* Container principal com layout modificado */}
-                            <View style={styles.mainInfoContainer}>
-                                {/* Área da foto agora em container próprio */}
-                                <View style={styles.photoContainer}>
-                                    <TouchableOpacity
-                                        style={styles.photoSelector}
-                                        onPress={() => showImagePickerOptions()}
-                                    >
-                                        {photoUri ? (
-                                            <Image
-                                                source={{ uri: photoUri }}
-                                                style={styles.photoPreview}
-                                                resizeMode="cover"
-                                            />
-                                        ) : (
-                                            <View style={styles.photoPlaceholder}>
-                                                <Icon
-                                                    name="camera"
-                                                    size={32}
-                                                    color={customTheme.colors.primary}
-                                                />
-                                                <Text
-                                                    style={styles.photoPlaceholderText}
-                                                    variant="bodySmall"
-                                                >
-                                                    Foto (opcional)
-                                                </Text>
-                                            </View>
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
+                            <View style={styles.headerSpacer} />
+                        </View>
 
-                                {/* Container dos inputs */}
-                                <View style={styles.inputsSection}>
+                        <ScrollView
+                            style={styles.productModalContent}
+                            showsVerticalScrollIndicator={false}
+                        >
+                            {/* Área da foto */}
+                            <View style={styles.photoSection}>
+                                <TouchableOpacity
+                                    onPress={() => showImagePickerOptions(true)}
+                                    style={styles.photoContainer}
+                                >
+                                    {photoUri && !detailImageError ? (
+                                        <Image
+                                            source={{ uri: photoUri }}
+                                            style={styles.productImage}
+                                            resizeMode="cover"
+                                            onError={handleDetailImageError}
+                                        />
+                                    ) : (
+                                        <View style={styles.placeholderContainer}>
+                                            {detailImageError ? (
+                                                <>
+                                                    <Icon
+                                                        name="image-broken"
+                                                        size={48}
+                                                        color={customTheme.colors.error}
+                                                    />
+                                                    <Text style={styles.detailImageErrorText}>
+                                                        Erro ao carregar imagem
+                                                    </Text>
+                                                    <Text style={styles.detailImageErrorSubtext}>
+                                                        Clique para substituir a imagem
+                                                    </Text>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Icon
+                                                        name="image-plus"
+                                                        size={48}
+                                                        color={customTheme.colors.primary}
+                                                    />
+                                                    <Text style={styles.addPhotoText}>
+                                                        Adicionar foto do produto
+                                                    </Text>
+                                                </>
+                                            )}
+                                        </View>
+                                    )}
+                                    <View style={styles.imageOverlay}>
+                                        <Icon
+                                            name="camera-plus"
+                                            size={32}
+                                            color={customTheme.colors.inverseSurface}
+                                        />
+                                        <Text style={styles.overlayText}>
+                                            {detailImageError ? 'Substituir Imagem' : 'Adicionar Foto'}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Informações Principais */}
+                            <View style={styles.inputsSection}>
+                                <Text style={styles.sectionTitle}>Informações do Produto</Text>
+
+                                <TextInput
+                                    mode="outlined"
+                                    label="Nome do Produto"
+                                    placeholder="Ex: Detergente Líquido"
+                                    placeholderTextColor="gray"
+                                    value={nome}
+                                    onChangeText={setNome}
+                                    style={styles.input}
+                                    theme={{ colors: { onSurface: customTheme.colors.onSurface } }}
+                                />
+
+                                <View style={styles.quantidadesContainer}>
                                     <TextInput
                                         mode="outlined"
-                                        placeholder="Nome do Produto *"
-                                        placeholderTextColor={"gray"}
-                                        value={nome}
-                                        onChangeText={setNome}
+                                        label="Quantidade Inicial"
+                                        placeholder="Ex: 10"
+                                        placeholderTextColor="gray"
+                                        value={quantidade}
+                                        onChangeText={setQuantidade}
+                                        keyboardType="numeric"
                                         style={styles.input}
+                                        right={<TextInput.Affix text={
+                                            unidadeMedida === 'unidade' ? 'un' :
+                                                unidadeMedida === 'kilo' ? 'kg' : 'L'
+                                        } />}
                                         theme={{ colors: { onSurface: customTheme.colors.onSurface } }}
                                     />
 
-                                    <View style={styles.quantidadesContainer}>
-                                        <TextInput
-                                            mode="outlined"
-                                            placeholder="Quantidade Inicial *"
-                                            placeholderTextColor={"gray"}
-                                            value={quantidade}
-                                            onChangeText={setQuantidade}
-                                            keyboardType="numeric"
-                                            style={styles.input}
-                                            right={<TextInput.Affix text={
-                                                unidadeMedida === 'unidade' ? 'un' :
-                                                    unidadeMedida === 'kilo' ? 'kg' : 'L'
-                                            } />}
-                                            theme={{ colors: { onSurface: customTheme.colors.onSurface } }}
-                                        />
-
-                                        <TextInput
-                                            mode="outlined"
-                                            placeholder="Quantidade Mínima *"
-                                            placeholderTextColor={"gray"}
-                                            value={quantidadeMinima}
-                                            onChangeText={setQuantidadeMinima}
-                                            keyboardType="numeric"
-                                            style={styles.input}
-                                            right={<TextInput.Affix text={
-                                                unidadeMedida === 'unidade' ? 'un' :
-                                                    unidadeMedida === 'kilo' ? 'kg' : 'L'
-                                            } />}
-                                            theme={{ colors: { onSurface: customTheme.colors.onSurface } }}
-                                        />
-                                    </View>
+                                    <TextInput
+                                        mode="outlined"
+                                        label="Quantidade Mínima"
+                                        placeholder="Ex: 5"
+                                        placeholderTextColor="gray"
+                                        value={quantidadeMinima}
+                                        onChangeText={setQuantidadeMinima}
+                                        keyboardType="numeric"
+                                        style={styles.input}
+                                        right={<TextInput.Affix text={
+                                            unidadeMedida === 'unidade' ? 'un' :
+                                                unidadeMedida === 'kilo' ? 'kg' : 'L'
+                                        } />}
+                                        theme={{ colors: { onSurface: customTheme.colors.onSurface } }}
+                                    />
                                 </View>
                             </View>
 
-                            {/* Resto do conteúdo permanece o mesmo */}
+                            {/* Unidade de Medida */}
                             <View style={styles.unidadeMedidaSection}>
-                                <Text style={styles.unidadeMedidaLabel}>Unidade de Medida *</Text>
+                                <Text style={styles.sectionTitle}>Unidade de Medida</Text>
                                 <View style={styles.unidadeMedidaButtons}>
                                     <TouchableOpacity
                                         style={[
-                                            styles.unidadeMedidaButton,
-                                            unidadeMedida === 'unidade' && styles.unidadeMedidaButtonActive
+                                            styles.unidadeMedidaButtonNew,
+                                            unidadeMedida === 'unidade' && styles.unidadeMedidaButtonActiveNew
                                         ]}
-                                        onPress={() => setUnidadeMedida('unidade')}
+                                        onPress={() => handleUnidadeSelect('unidade')}
                                     >
-                                        <Icon
-                                            name="package"
-                                            size={24}
-                                            color={unidadeMedida === 'unidade' ? customTheme.colors.onPrimary : customTheme.colors.onSurface}
-                                        />
+                                        <Animated.View style={{
+                                            transform: [
+                                                { scale: unidadeIconAnim.unidade },
+                                                {
+                                                    rotate: unidadeIconAnim.unidade.interpolate({
+                                                        inputRange: [1, 1.2],
+                                                        outputRange: ['0deg', '25deg']
+                                                    })
+
+                                                }
+                                            ]
+                                        }}>
+                                            <Icon
+                                                name="package-variant"
+                                                size={24}
+                                                color={unidadeMedida === 'unidade' ? customTheme.colors.onPrimary : customTheme.colors.onSurface}
+                                            />
+                                        </Animated.View>
                                         <Text style={[
                                             styles.unidadeMedidaButtonText,
                                             unidadeMedida === 'unidade' && styles.unidadeMedidaButtonTextActive
@@ -671,16 +909,28 @@ export default function ControleEstoque({ navigation }: any) {
 
                                     <TouchableOpacity
                                         style={[
-                                            styles.unidadeMedidaButton,
-                                            unidadeMedida === 'kilo' && styles.unidadeMedidaButtonActive
+                                            styles.unidadeMedidaButtonNew,
+                                            unidadeMedida === 'kilo' && styles.unidadeMedidaButtonActiveNew
                                         ]}
-                                        onPress={() => setUnidadeMedida('kilo')}
+                                        onPress={() => handleUnidadeSelect('kilo')}
                                     >
-                                        <Icon
-                                            name="weight-kilogram"
-                                            size={24}
-                                            color={unidadeMedida === 'kilo' ? customTheme.colors.onPrimary : customTheme.colors.onSurface}
-                                        />
+                                        <Animated.View style={{
+                                            transform: [
+                                                { scale: unidadeIconAnim.kilo },
+                                                {
+                                                    rotate: unidadeIconAnim.kilo.interpolate({
+                                                        inputRange: [1, 1.2],
+                                                        outputRange: ['0deg', '25deg']
+                                                    })
+                                                }
+                                            ]
+                                        }}>
+                                            <Icon
+                                                name="weight-kilogram"
+                                                size={24}
+                                                color={unidadeMedida === 'kilo' ? customTheme.colors.onPrimary : customTheme.colors.onSurface}
+                                            />
+                                        </Animated.View>
                                         <Text style={[
                                             styles.unidadeMedidaButtonText,
                                             unidadeMedida === 'kilo' && styles.unidadeMedidaButtonTextActive
@@ -691,16 +941,29 @@ export default function ControleEstoque({ navigation }: any) {
 
                                     <TouchableOpacity
                                         style={[
-                                            styles.unidadeMedidaButton,
-                                            unidadeMedida === 'litro' && styles.unidadeMedidaButtonActive
+                                            styles.unidadeMedidaButtonNew,
+                                            unidadeMedida === 'litro' && styles.unidadeMedidaButtonActiveNew
                                         ]}
-                                        onPress={() => setUnidadeMedida('litro')}
+                                        onPress={() => handleUnidadeSelect('litro')}
                                     >
-                                        <Icon
-                                            name="bottle-tonic"
-                                            size={24}
-                                            color={unidadeMedida === 'litro' ? customTheme.colors.onPrimary : customTheme.colors.onSurface}
-                                        />
+                                        <Animated.View style={{
+                                            transform: [
+                                                { scale: unidadeIconAnim.litro },
+                                                {
+                                                    rotate: unidadeIconAnim.litro.interpolate({
+                                                        inputRange: [1, 1.2],
+                                                        outputRange: ['0deg', '25deg']
+                                                    })
+
+                                                }
+                                            ]
+                                        }}>
+                                            <Icon
+                                                name="bottle-tonic"
+                                                size={24}
+                                                color={unidadeMedida === 'litro' ? customTheme.colors.onPrimary : customTheme.colors.onSurface}
+                                            />
+                                        </Animated.View>
                                         <Text style={[
                                             styles.unidadeMedidaButtonText,
                                             unidadeMedida === 'litro' && styles.unidadeMedidaButtonTextActive
@@ -711,49 +974,33 @@ export default function ControleEstoque({ navigation }: any) {
                                 </View>
                             </View>
 
-                            {/* <View style={styles.descricaoContainer}>
-                                <TextInput
-                                    mode="outlined"
-                                    placeholder="Descrição (opcional)"
-                                    placeholderTextColor={"gray"}
-                                    value={descricao}
-                                    onChangeText={setDescricao}
-                                    multiline
-                                    numberOfLines={4}
-                                    style={[styles.input, styles.descricaoInput]}
-                                    theme={{ colors: { onSurface: customTheme.colors.onSurface } }}
-                                />
-                            </View> */}
-
-                            <View style={styles.modalButtons}>
-                                <Button
-                                    mode="outlined"
-                                    onPress={() => {
-                                        setModalVisible(false);
-                                        setNome('');
-                                        setQuantidade('');
-                                        setQuantidadeMinima('');
-                                        //setDescricao('');
-                                        setPhotoUri(null);
-                                        setUnidadeMedida('unidade');
-                                    }}
-                                    disabled={isSaving}
-                                    style={styles.modalButton}
-                                >
-                                    Cancelar
-                                </Button>
-                                <Button
-                                    mode="contained"
-                                    onPress={handleSave}
-                                    loading={isSaving}
-                                    disabled={isSaving || !nome.trim() || !quantidade.trim() || !quantidadeMinima.trim()}
-                                    style={styles.modalButton}
-                                >
-                                    Salvar
-                                </Button>
-                            </View>
+                            {/* Espaço extra para garantir que o conteúdo seja visível */}
+                            <View style={{ height: 100 }} />
                         </ScrollView>
-                    </Surface>
+
+                        {/* Footer com botões fixos */}
+                        <View style={styles.productModalFooter}>
+                            <Button
+                                mode="outlined"
+                                onPress={closeProductModal}
+                                disabled={isSaving}
+                                style={styles.footerButton}
+                                contentStyle={styles.buttonContent}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                mode="contained"
+                                onPress={handleSave}
+                                loading={isSaving}
+                                disabled={isSaving || !nome.trim() || !quantidade.trim() || !quantidadeMinima.trim()}
+                                style={styles.footerButton}
+                                contentStyle={styles.buttonContent}
+                            >
+                                Salvar
+                            </Button>
+                        </View>
+                    </Animated.View>
                 </View>
             </Modal>
 
@@ -761,56 +1008,84 @@ export default function ControleEstoque({ navigation }: any) {
             <Modal
                 visible={isImagePickerVisible}
                 transparent
-                animationType="fade"
-                onRequestClose={() => setIsImagePickerVisible(false)}
+                animationType="none" // Mudamos para "none" para controlar a animação manualmente
+                onRequestClose={() => closeImagePicker()}
             >
-                <TouchableOpacity
-                    style={styles.imagePickerModal}
-                    activeOpacity={1}
-                    onPress={() => setIsImagePickerVisible(false)}
-                >
-                    <Surface style={styles.imagePickerContent}>
-                        <Button
-                            mode="contained-tonal"
-                            onPress={() => {
-                                setIsImagePickerVisible(false);
-                                launchCustomCamera(!!selectedProduto);
-                            }}
-                            icon="camera"
-                            style={styles.imagePickerButton}
-                            labelStyle={styles.buttonText}
-                        >
-                            Tirar Foto
-                        </Button>
-                        <Button
-                            mode="contained-tonal"
-                            onPress={() => {
-                                setIsImagePickerVisible(false);
-                                selectImage(!!selectedProduto);
-                            }}
-                            icon="image"
-                            style={styles.imagePickerButton}
-                            labelStyle={styles.buttonText}
-                        >
-                            Escolher da Galeria
-                        </Button>
-                        {photoUri && (
-                            <Button
-                                mode="contained-tonal"
+                <View style={styles.imagePickerModalOverlay}>
+                    <TouchableOpacity
+                        style={styles.imagePickerBackdrop}
+                        activeOpacity={1}
+                        onPress={() => closeImagePicker()}
+                    />
+
+                    {/* Componente deslizante */}
+                    <Animated.View
+                        style={[
+                            styles.imagePickerModalContainer,
+                            {
+                                transform: [{
+                                    translateY: slideAnim // Usaremos um valor Animated aqui
+                                }]
+                            }
+                        ]}
+                    >
+                        <View style={styles.imagePickerHeader}>
+                            <Text style={styles.imagePickerTitle}>Selecionar imagem</Text>
+                            <TouchableOpacity
+                                onPress={() => closeImagePicker()}
+                                style={styles.closeButton}
+                            >
+                                <Icon name="close" size={24} color={customTheme.colors.onSurface} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.imagePickerOptions}>
+                            <TouchableOpacity
+                                style={styles.imagePickerOption}
                                 onPress={() => {
-                                    setPhotoUri(null); // Alterado de undefined para null
-                                    setIsImagePickerVisible(false);
+                                    closeImagePicker();
+                                    launchCustomCamera(!!selectedProduto);
+                                }}
+                            >
+                                <View style={styles.imageOptionIconContainer}>
+                                    <Icon name="camera" size={28} color={customTheme.colors.primary} />
+                                </View>
+                                <Text style={styles.imageOptionTitle}>Tirar Foto</Text>
+                                <Text style={styles.imageOptionSubtitle}>Usar a câmera do dispositivo</Text>
+                            </TouchableOpacity>
+
+                            <View style={styles.optionDivider} />
+
+                            <TouchableOpacity
+                                style={styles.imagePickerOption}
+                                onPress={() => {
+                                    closeImagePicker();
+                                    selectImage(!!selectedProduto);
+                                }}
+                            >
+                                <View style={styles.imageOptionIconContainer}>
+                                    <Icon name="image" size={28} color={customTheme.colors.secondary} />
+                                </View>
+                                <Text style={styles.imageOptionTitle}>Escolher da Galeria</Text>
+                                <Text style={styles.imageOptionSubtitle}>Selecionar uma imagem existente</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {photoUri && (
+                            <TouchableOpacity
+                                style={styles.removePhotoButton}
+                                onPress={() => {
+                                    setPhotoUri(null);
+                                    closeImagePicker();
                                     setIsUpdatePhoto(false);
                                 }}
-                                icon="trash-can"
-                                style={[styles.imagePickerButton, { marginTop: 8 }]}
-                                textColor={customTheme.colors.error}
                             >
-                                Remover Foto
-                            </Button>
+                                <Icon name="trash-can-outline" size={20} color={customTheme.colors.error} />
+                                <Text style={styles.removePhotoText}>Remover foto atual</Text>
+                            </TouchableOpacity>
                         )}
-                    </Surface>
-                </TouchableOpacity>
+                    </Animated.View>
+                </View>
             </Modal>
 
             {/* Modal de detalhes do produto */}
@@ -867,19 +1142,39 @@ export default function ControleEstoque({ navigation }: any) {
                                 onPress={() => showImagePickerOptions(true)}
                                 style={styles.photoContainer}
                             >
-                                {photoUri ? (
+                                {photoUri && !detailImageError ? (
                                     <Image
                                         source={{ uri: photoUri }}
                                         style={styles.productImage}
                                         resizeMode="cover"
+                                        onError={handleDetailImageError}
                                     />
                                 ) : (
-                                    <View style={styles.placeholderContainer}>
-                                        <Icon
-                                            name="image-off"
-                                            size={48}
-                                            color={customTheme.colors.onSurfaceVariant}
-                                        />
+                                    <View style={[
+                                        styles.placeholderContainer,
+                                        detailImageError && { backgroundColor: customTheme.colors.errorContainer }
+                                    ]}>
+                                        {detailImageError ? (
+                                            <>
+                                                <Icon
+                                                    name="image-broken"
+                                                    size={48}
+                                                    color={customTheme.colors.error}
+                                                />
+                                                <Text style={styles.detailImageErrorText}>
+                                                    Erro ao carregar imagem
+                                                </Text>
+                                                <Text style={styles.detailImageErrorSubtext}>
+                                                    Clique para substituir a imagem
+                                                </Text>
+                                            </>
+                                        ) : (
+                                            <Icon
+                                                name="image-off"
+                                                size={48}
+                                                color={customTheme.colors.onSurfaceVariant}
+                                            />
+                                        )}
                                     </View>
                                 )}
                                 <View style={styles.imageOverlay}>
@@ -888,7 +1183,9 @@ export default function ControleEstoque({ navigation }: any) {
                                         size={32}
                                         color={customTheme.colors.inverseSurface}
                                     />
-                                    <Text style={styles.overlayText}>Alterar Foto</Text>
+                                    <Text style={styles.overlayText}>
+                                        {detailImageError ? 'Substituir Imagem' : 'Alterar Foto'}
+                                    </Text>
                                 </View>
                             </TouchableOpacity>
 
@@ -1355,7 +1652,260 @@ export default function ControleEstoque({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-    // Estilos existentes...
+    productModalOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    productModalBackdrop: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    productModalContainer: {
+        backgroundColor: customTheme.colors.surface,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        maxHeight: '90%', // Limita a altura máxima
+        // Sombra para dar efeito de elevação
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 10,
+    },
+    productModalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: customTheme.colors.outlineVariant || customTheme.colors.outline,
+    },
+    headerSpacer: {
+        width: 40, // Para manter o título centralizado
+    },
+    productModalTitle: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+        textAlign: 'center',
+    },
+    productModalContent: {
+        padding: 20,
+    },
+    photoSection: {
+        marginBottom: 24,
+        alignItems: 'center',
+    },
+    photoContainer: {
+        width: '100%',
+        height: 180,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: customTheme.colors.surfaceVariant,
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+        borderStyle: 'dashed',
+    },
+    productImage: {
+        width: '100%',
+        height: '100%',
+    },
+    addPhotoText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: customTheme.colors.primary,
+        marginTop: 8,
+        textAlign: 'center',
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+        marginBottom: 12,
+    },
+    inputsSection: {
+        marginBottom: 24,
+        gap: 16,
+    },
+    input: {
+        backgroundColor: customTheme.colors.surface,
+        marginBottom: 8,
+    },
+    quantidadesContainer: {
+        gap: 12,
+    },
+    unidadeMedidaSection: {
+        marginBottom: 24,
+    },
+    unidadeMedidaButtons: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    // Novos estilos modernizados para botões de unidade
+    unidadeMedidaButtonNew: {
+        flex: 1,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+        backgroundColor: customTheme.colors.surface,
+        elevation: 1,
+    },
+    unidadeMedidaButtonActiveNew: {
+        backgroundColor: customTheme.colors.primary,
+        borderColor: customTheme.colors.primary,
+        elevation: 3,
+    },
+    productModalFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderTopWidth: 1,
+        borderTopColor: customTheme.colors.outlineVariant || customTheme.colors.outline,
+        backgroundColor: customTheme.colors.surface,
+    },
+    footerButton: {
+        flex: 1,
+        marginHorizontal: 8,
+        borderRadius: 8,
+    },
+    buttonContent: {
+        paddingVertical: 6,
+    },
+    imagePickerModalOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end', // Mantém o conteúdo no final da tela
+        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Overlay escuro
+    },
+    imagePickerBackdrop: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    imagePickerModalContainer: {
+        backgroundColor: customTheme.colors.surface,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingBottom: Platform.OS === 'ios' ? 36 : 24, // Espaço extra para iPhones com notch
+        // Sombra para dar efeito de elevação
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 10,
+        // Garantindo que a modal tenha uma posição fixa
+        width: '100%',
+        // Não definimos altura fixa para se adaptar ao conteúdo
+    },
+    imagePickerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 24,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: customTheme.colors.outlineVariant || customTheme.colors.outline,
+    },
+    imagePickerTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+    },
+    closeButton: {
+        padding: 8, // Aumentado para facilitar o toque
+        marginRight: -8, // Compensa o padding
+    },
+    imagePickerOptions: {
+        paddingVertical: 16,
+    },
+    imagePickerOption: {
+        paddingVertical: 16,
+        paddingHorizontal: 24,
+    },
+    imageOptionIconContainer: {
+        width: 52, // Ligeiramente maior
+        height: 52, // Ligeiramente maior
+        borderRadius: 26,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: customTheme.colors.surfaceVariant,
+        marginBottom: 12,
+    },
+    imageOptionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+        marginBottom: 4,
+    },
+    imageOptionSubtitle: {
+        fontSize: 14,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    optionDivider: {
+        height: 1,
+        backgroundColor: customTheme.colors.outlineVariant || customTheme.colors.outline,
+        marginHorizontal: 24,
+        opacity: 0.6,
+    },
+    removePhotoButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 16, // Aumentado
+        marginHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: customTheme.colors.errorContainer,
+    },
+    removePhotoText: {
+        marginLeft: 8,
+        fontSize: 14,
+        fontWeight: '500',
+        color: customTheme.colors.error,
+    },
+    imageErrorText: {
+        fontSize: 10,
+        color: customTheme.colors.error,
+        textAlign: 'center',
+        marginTop: 4,
+    },
+    detailImageErrorText: {
+        fontSize: 16,
+        color: customTheme.colors.error,
+        textAlign: 'center',
+        marginTop: 12,
+        fontWeight: '500',
+    },
+    detailImageErrorSubtext: {
+        fontSize: 14,
+        color: customTheme.colors.error,
+        textAlign: 'center',
+        marginTop: 4,
+        opacity: 0.8,
+    },
+    // Modifique o estilo placeholderContainer para melhor suportar mensagens de erro
+    placeholderContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 8,
+        backgroundColor: customTheme.colors.errorContainer ?
+            customTheme.colors.errorContainer :
+            customTheme.colors.surfaceVariant,
+    },
     produtoCardOffline: {
         opacity: 0.8, // Reduz um pouco a opacidade para indicar estado offline
     },
@@ -1464,9 +2014,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         color: customTheme.colors.onSurface,
     },
-    headerSpacer: {
-        minWidth: 80,
-    },
     scrollView: {
         flex: 1,
     },
@@ -1476,27 +2023,6 @@ const styles = StyleSheet.create({
     card: {
         marginBottom: 16,
         elevation: 2,
-    },
-    photoSection: {
-        marginBottom: 24,
-    },
-    photoContainer: {
-        width: '100%',
-        height: 200,
-        borderRadius: 8,
-        overflow: 'hidden',
-        backgroundColor: customTheme.colors.surfaceVariant,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-    },
-    productImage: {
-        width: '100%',
-        height: '100%',
-    },
-    placeholderContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
     },
     imageOverlay: {
         position: 'absolute',
@@ -1586,255 +2112,14 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: customTheme.colors.onSurface,
     },
-    descriptionText: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-        lineHeight: 24,
-    },
     bottomSpacer: {
         height: 32,
     },
-
-    detalheContainer: {
-        flex: 1,
-        backgroundColor: customTheme.colors.background,
-    },
-    detalheHeader: {
-        width: '100%',
-        backgroundColor: customTheme.colors.surface,
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        elevation: 4,
-        borderBottomWidth: 1,
-        borderBottomColor: customTheme.colors.outline,
-        // Removido flex para não interferir no layout
-    },
-    detalheContent: {
-        flex: 1, // Importante para permitir a rolagem
-    },
-    detalheContentContainer: {
-        padding: 16,
-        paddingBottom: 32, // Adiciona um espaço extra no final do conteúdo
-    },
-
-    mainInfoContainer: {
-        width: '100%',
-        gap: 24,
-    },
-    photoSelector: {
-        width: '100%',
-        height: 200,
-        borderRadius: 8,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderStyle: 'dashed',
-    },
-    photoPlaceholder: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surfaceVariant,
-        gap: 8,
-    },
-    photoPreview: {
-        width: '100%',
-        height: '100%',
-    },
-    inputsSection: {
-        width: '100%',
-        gap: 16,
-    },
-    unidadeMedidaEditContainer: {
-        gap: 16,
-    },
-    unitInfo: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    unidadeMedidaButtons: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    cancelEditUnidadeButton: {
-        marginTop: 8,
-    },
-
-    headerContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 24,
-        paddingHorizontal: 4,
-    },
-    nameSection: {
-        marginBottom: 16,
-    },
-    stockCard: {
-        marginBottom: 16,
-    },
-    stockInfo: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    stockLabel: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    stockAlert: {
-        color: customTheme.colors.error,
-    },
-    minStockContainer: {
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outline,
-        paddingTop: 16,
-    },
-    minStockLabel: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-        marginBottom: 4,
-    },
-    unitCard: {
-        marginBottom: 16,
-    },
-    unitLabel: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-        marginBottom: 4,
-    },
-    descriptionCard: {
-        marginBottom: 16,
-    },
-    descriptionLabel: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-        marginBottom: 8,
-    },
-    infoSection: {
-        padding: 8,
-        gap: 16,
-        flex: 1,
-        width: '100%',
-    },
-
-
     modalContainer: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.6)',
         justifyContent: 'center',
         padding: 16,
-    },
-    modalContent: {
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 12,
-        padding: 20,
-        maxHeight: '90%',
-        elevation: 4,
-    },
-    modalTitle: {
-        textAlign: 'center',
-        marginBottom: 24,
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
-    },
-    photoPlaceholderText: {
-        color: customTheme.colors.primary,
-        textAlign: 'center',
-        paddingHorizontal: 8,
-        fontSize: 12,
-    },
-    mainInputsContainer: {
-        flex: 1,
-        gap: 12,
-    },
-    input: {
-        backgroundColor: customTheme.colors.surface,
-    },
-    quantidadesContainer: {
-        gap: 12,
-    },
-    unidadeMedidaSection: {
-        marginBottom: 24,
-    },
-    unidadeMedidaLabel: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-        fontWeight: '500',
-        marginBottom: 12,
-    },
-    descricaoContainer: {
-        marginBottom: 24,
-    },
-    descricaoInput: {
-        minHeight: 100,
-    },
-    modalButtons: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 12,
-    },
-    modalButton: {
-        minWidth: 100,
-    },
-
-    formContainer: {
-        flexDirection: 'row',
-        gap: 16,
-        marginBottom: 24,
-    },
-    inputsContainer: {
-        flex: 1,
-        gap: 16,
-    },
-    unidadeMedidaContainer: {
-        gap: 8,
-    },
-    editNomeContainer: {
-        marginBottom: 16,
-    },
-    editNomeInputContainer: {
-        gap: 12,
-    },
-    editNomeInput: {
-        backgroundColor: customTheme.colors.surface,
-    },
-    editNomeButtons: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 12,
-    },
-    editNomeButton: {
-        minWidth: 100,
-    },
-    nomeDisplay: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    editNomeIcon: {
-        padding: 8,
-    },
-    imageEditButton: {
-        width: '100%',
-        height: '100%',
-    },
-    imageEditOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        opacity: 0,
-    },
-    imageEditText: {
-        color: customTheme.colors.inverseSurface,
-        marginTop: 8,
     },
     mainContainer: {
         flex: 1,
@@ -1887,127 +2172,6 @@ const styles = StyleSheet.create({
     produtoQuantidade: {
         fontSize: 12,
         color: customTheme.colors.secondary,
-    },
-    fab: {
-        position: 'absolute',
-        borderRadius: 50,
-        padding: 14,
-        right: 16,
-        bottom: 16,
-        backgroundColor: customTheme.colors.primary,
-    },
-    formRow: {
-        flexDirection: 'row',
-        gap: 16,
-        marginBottom: 16,
-    },
-    inputColumn: {
-        flex: 1,
-        gap: 16,
-    },
-    imagePickerModal: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 16,
-    },
-    imagePickerContent: {
-        padding: 16,
-        borderRadius: 8,
-        width: '80%',
-        backgroundColor: customTheme.colors.surface,
-    },
-    imagePickerButton: {
-        marginBottom: 8,
-        backgroundColor: customTheme.colors.primary,
-        color: customTheme.colors.onPrimary,
-    },
-    buttonText: {
-        color: customTheme.colors.onPrimary,
-    },
-    detalheTitulo: {
-        fontSize: 24,
-        fontWeight: '600',
-        color: customTheme.colors.onSurface,
-        flex: 1,
-    },
-    imageContainer: {
-        width: '100%',
-        aspectRatio: 16 / 9,
-        backgroundColor: customTheme.colors.surfaceVariant,
-        borderRadius: 8,
-        overflow: 'hidden',
-        marginBottom: 24,
-        elevation: 2,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-    },
-    detalheImage: {
-        width: '100%',
-        height: '100%',
-    },
-    placeholderImage: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surfaceVariant,
-    },
-    infoContainer: {
-        gap: 16,
-        paddingHorizontal: 4,
-    },
-    quantidadeInfo: {
-        backgroundColor: customTheme.colors.surface,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 8,
-        elevation: 2,
-    },
-    quantidadeContainer: {
-        padding: 16,
-    },
-    quantidadeLabel: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-        marginBottom: 8,
-        fontWeight: '500',
-    },
-    quantidadeValue: {
-        fontSize: 24,
-        fontWeight: '600',
-        color: customTheme.colors.onSurface,
-    },
-    descricaoInfo: {
-        backgroundColor: customTheme.colors.surface,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 8,
-        elevation: 2,
-    },
-    descricaoLabel: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-        marginBottom: 8,
-        marginTop: 16,
-        marginHorizontal: 16,
-        fontWeight: '500',
-    },
-    descricaoValue: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-        marginBottom: 16,
-        marginHorizontal: 16,
-        lineHeight: 24,
-    },
-    updateButton: {
-        marginTop: 8,
-        marginBottom: 24,
-        borderRadius: 8,
-    },
-    buttonContent: {
-        height: 48,
-        paddingHorizontal: 16,
     },
     quantidadeModalContainer: {
         flex: 1,
@@ -2074,9 +2238,6 @@ const styles = StyleSheet.create({
     somarButton: {
         backgroundColor: customTheme.colors.primary,
     },
-    atualizarButton: {
-        backgroundColor: customTheme.colors.secondary,
-    },
     quantidadeModalButtonContent: {
         height: 48,
         paddingHorizontal: 8,
@@ -2115,31 +2276,6 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurfaceVariant,
         textAlign: 'center',
         paddingHorizontal: 8,
-    },
-    quantidadeMinimaContainer: {
-        marginTop: 16,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outline,
-    },
-    quantidadeMinimaHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    quantidadeMinimaLabel: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-        fontWeight: '500',
-    },
-    quantidadeMinimaValue: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: customTheme.colors.onSurface,
-    },
-    editMinimoButton: {
-        borderRadius: 8,
     },
     editMinimoModal: {
         margin: 16,
@@ -2191,9 +2327,6 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: customTheme.colors.primary,
     },
-    quantidadeBaixa: {
-        color: customTheme.colors.error,
-    },
     produtoCardAlerta: {
         borderColor: customTheme.colors.error,
         borderWidth: 1,
@@ -2208,10 +2341,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-    },
-    produtoQuantidadeAlerta: {
-        color: customTheme.colors.error,
-        fontWeight: 'bold',
     },
     produtoQuantidadeMinima: {
         fontSize: 12,

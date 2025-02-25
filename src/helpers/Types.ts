@@ -1,3 +1,5 @@
+import { UserAccess } from "../screens/Adm/components/admTypes";
+
 export type Meeting = {
     name: string;
     entrada: string;
@@ -83,18 +85,6 @@ export type Compostagem = {
     photoUris: string[];
     photoUrls?: string[];
 };
-
-export interface User {
-    id: string;
-    user: string;
-    email: string;
-    telefone?: string | null;  // Agora aceita null
-    cargo: string;
-    ramal?: string | null;     // Agora aceita null
-    area?: string | null;      // Agora aceita null
-    acesso?: string[];
-    photoURL?: string;
-}
 
 export interface ClienteInterface {
     cnpjCpf: string;

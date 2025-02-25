@@ -7,19 +7,14 @@ import {
     TouchableOpacity,
     Dimensions,
     SafeAreaView,
-    Modal,
     ActivityIndicator,
-    Alert,
-    Linking,
     BackHandler,
-    TextInput
+    Animated
 } from 'react-native';
 import {
     Surface,
     Text,
     Card,
-    Button,
-    ProgressBar,
 } from 'react-native-paper';
 
 import { version } from '../../../package.json';
@@ -29,11 +24,13 @@ import { useUser } from '../../contexts/userContext';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 import { useAppUpdater } from '../../helpers/AppUpdater';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import FeedbackFloatingButton from '../../assets/components/FeedbackFloatingButton';
 import { useNetwork } from '../../contexts/NetworkContext';
 import QuickActionsGrid from './components/QuickActionsGrid';
 import UserInfoModal from './components/UserInfoModal';
+import UpdateNotification from './components/UpdateNotification';
 import storage from '@react-native-firebase/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import UserProfileModal from './components/UserInfoModal';
 
 interface CarouselItem {
     id: string;
@@ -47,7 +44,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     const { userInfo, isLoading, clearUserInfo } = useUser();
     const { isOnline } = useNetwork();
 
-    const [logoutModalVisible, setLogoutModalVisible] = useState(false);
     const [updateModalVisible, setUpdateModalVisible] = useState(false);
     const permissionsChecked = useRef(false);
     const [isUserModalVisible, setIsUserModalVisible] = useState(false);
@@ -58,6 +54,12 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     const scrollViewRef = useRef<ScrollView>(null);
     const [carouselData, setCarouselData] = useState<CarouselItem[]>([]);
     const [carouselLoading, setCarouselLoading] = useState(true);
+
+    const [showAvatarTooltip, setShowAvatarTooltip] = useState(false);
+    const tooltipOpacity = useRef(new Animated.Value(0)).current;
+
+    // Estado para controlar se a notificação de atualização foi dispensada
+    const [updateDismissed, setUpdateDismissed] = useState(false);
 
     const {
         updateInfo,
@@ -71,6 +73,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             checkPermissions();
             permissionsChecked.current = true;
         }
+
+        // Verificar atualizações explicitamente ao abrir o app
+        checkForUpdates();
 
         console.log(userInfo?.acesso)
         console.log(userInfo?.cargo)
@@ -92,6 +97,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
             // Lógica do duplo toque para sair
             if (backPressedOnce) {
+                setBackPressedOnce(false)
                 BackHandler.exitApp();
                 return;
             }
@@ -115,8 +121,83 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         return unsubscribe;
     }, [navigation, backPressedOnce]);
 
+    // Verificar se o usuário dispensou a atualização anteriormente
+    useEffect(() => {
+        const checkDismissedUpdates = async () => {
+            if (updateInfo) {
+                try {
+                    const dismissedVersion = await AsyncStorage.getItem('dismissedUpdate');
+                    if (dismissedVersion === updateInfo.versao) {
+                        setUpdateDismissed(true);
+                    } else {
+                        setUpdateDismissed(false);
+                    }
+                } catch (error) {
+                    console.error('Erro ao verificar atualizações dispensadas:', error);
+                }
+            }
+        };
+
+        checkDismissedUpdates();
+    }, [updateInfo]);
+
+    // Verifique se é o primeiro acesso do usuário
+    useEffect(() => {
+        const checkFirstTimeUser = async () => {
+            try {
+                const hasVisitedBefore = await AsyncStorage.getItem('hasVisitedHome');
+
+                if (!hasVisitedBefore) {
+                    // É o primeiro acesso, mostrar o tooltip
+                    setShowAvatarTooltip(true);
+
+                    // Animar o tooltip aparecendo
+                    Animated.sequence([
+                        // Pequeno delay para garantir que a UI esteja pronta
+                        Animated.delay(500),
+                        // Fade in
+                        Animated.timing(tooltipOpacity, {
+                            toValue: 1,
+                            duration: 500,
+                            useNativeDriver: true
+                        })
+                    ]).start();
+
+                    // Marcar que o usuário já visitou
+                    await AsyncStorage.setItem('hasVisitedHome', 'true');
+                }
+            } catch (error) {
+                console.error('Erro ao verificar primeiro acesso:', error);
+            }
+        };
+
+        checkFirstTimeUser();
+    }, []);
+
+    // Função para esconder o tooltip
+    const dismissTooltip = () => {
+        Animated.timing(tooltipOpacity, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true
+        }).start(() => {
+            setShowAvatarTooltip(false);
+        });
+    };
+
+    // Função para dispensar a atualização
+    const handleDismissUpdate = async () => {
+        if (updateInfo && !updateInfo.obrigatoria) {
+            try {
+                await AsyncStorage.setItem('dismissedUpdate', updateInfo.versao);
+                setUpdateDismissed(true);
+            } catch (error) {
+                console.error('Erro ao salvar atualização dispensada:', error);
+            }
+        }
+    };
+
     const handleLogout = async () => {
-        setLogoutModalVisible(false);
         try {
             await clearUserInfo();
             // Usando reset para navegar para o login
@@ -136,20 +217,22 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     };
 
     const scrollToNextItem = useCallback(() => {
-        if (scrollViewRef.current) {
+        if (scrollViewRef.current && carouselData.length > 0) {
             const nextIndex = (currentIndex + 1) % carouselData.length;
+            // Usar o width total da tela para calcular a posição exata
             scrollViewRef.current.scrollTo({
-                x: nextIndex * (width - 32),
+                x: nextIndex * width,
                 animated: true
             });
             setCurrentIndex(nextIndex);
         }
-    }, [currentIndex, carouselData.length]);
+    }, [currentIndex, carouselData.length, width]);
 
     // Função para lidar com o fim do scroll manual
     const handleScrollEnd = (event: any) => {
         const contentOffset = event.nativeEvent.contentOffset;
-        const index = Math.round(contentOffset.x / (width - 32));
+        // Calcular o índice baseado na largura total da tela
+        const index = Math.round(contentOffset.x / width);
         setCurrentIndex(index);
     };
 
@@ -255,7 +338,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 decelerationRate="fast"
-                snapToInterval={width}
+                snapToInterval={width}  // Usar a largura total da tela
                 snapToAlignment="center"
                 pagingEnabled
                 onMomentumScrollEnd={handleScrollEnd}
@@ -263,7 +346,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 {carouselData.map((item) => (
                     <View
                         key={item.id}
-                        style={[styles.carouselItemWrapper, { width }]}
+                        style={[styles.carouselItemWrapper, { width }]}  // Garantir que cada item tenha a largura total da tela
                     >
                         <View style={styles.carouselItem}>
                             <Image
@@ -278,11 +361,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         );
     };
 
-
     useEffect(() => {
         fetchCarouselImages();
     }, []);
-
 
     const DevelopmentAlert = () => (
         <Card style={styles.developmentCard}>
@@ -324,25 +405,36 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 {/* Novo Header */}
                 <View style={styles.header}>
                     <View style={styles.headerContent}>
-                        <TouchableOpacity
-                            style={styles.avatarContainer}
-                            onPress={() => setIsUserModalVisible(true)}
-                        >
-                            {userInfo?.photoURL ? (
-                                <Image
-                                    source={{ uri: userInfo.photoURL }}
-                                    style={styles.avatar}
-                                />
-                            ) : (
-                                <Icon
-                                    name="account"
-                                    size={30}
-                                    color={customTheme.colors.primary}
-                                />
-                            )}
-                        </TouchableOpacity>
+                        <View style={styles.avatarWrapper}>
+                            <TouchableOpacity
+                                style={styles.avatarContainer}
+                                onPress={() => {
+                                    // Se o tooltip estiver visível, apenas fecha ele
+                                    if (showAvatarTooltip) {
+                                        dismissTooltip();
+                                        return;
+                                    }
+                                    setIsUserModalVisible(true);
+                                }}
+                            >
+                                {userInfo?.photoURL ? (
+                                    <Image
+                                        source={{ uri: userInfo.photoURL }}
+                                        style={styles.avatar}
+                                    />
+                                ) : (
+                                    <Icon
+                                        name="account"
+                                        size={30}
+                                        color={customTheme.colors.primary}
+                                    />
+                                )}
+                            </TouchableOpacity>
+                        </View>
 
-                        <View style={styles.searchContainer}>
+
+                        {/* TODO Criar um metodo de pesquisar para mobilidade */}
+                        {/* <View style={styles.searchContainer}>
                             <Icon
                                 name="magnify"
                                 size={24}
@@ -353,10 +445,19 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                                 style={styles.searchInput}
                                 placeholderTextColor={customTheme.colors.onSurfaceVariant}
                             />
-                        </View>
+                        </View> */}
 
                     </View>
                 </View>
+
+                {/* Componente de Notificação de Atualização */}
+                {updateInfo && !updateDismissed && (
+                    <UpdateNotification
+                        updateInfo={updateInfo}
+                        onUpdate={downloadAndInstall}
+                        onDismiss={handleDismissUpdate}
+                    />
+                )}
 
                 <ScrollView style={styles.content}>
                     {renderCarouselContent()}
@@ -366,45 +467,142 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 </ScrollView>
 
                 {userInfo && (
-                    <UserInfoModal
+                    <UserProfileModal
                         visible={isUserModalVisible}
-                        onLogout={() => handleLogout()}
                         onClose={() => setIsUserModalVisible(false)}
                         userInfo={userInfo}
+                        onLogout={handleLogout}
+                        // Adicionar estas duas novas props:
+                        updateInfo={updateInfo}
+                        onUpdate={() => {
+                            setIsUserModalVisible(false);
+                            downloadAndInstall();
+                        }}
                     />
                 )}
 
-            </Surface>
-        </SafeAreaView>
+                {/* Renderize um overlay escuro quando o tooltip estiver visível */}
+                {showAvatarTooltip && (
+                    <Animated.View
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(0, 0, 0, 0.5)', // Fundo preto com 50% de opacidade
+                            zIndex: 1, // Menor que o tooltip, mas maior que o resto
+                            opacity: tooltipOpacity
+                        }}
+                    />
+                )}
+
+                {/* Renderize o tooltip aqui, fora de todos os outros componentes */}
+                {showAvatarTooltip && (
+                    <Animated.View
+                        style={[
+                            styles.tooltipContainer,
+                            { opacity: tooltipOpacity }
+                        ]}
+                    >
+                        <View style={styles.tooltipArrow} />
+                        <View style={styles.tooltipContent}>
+                            <Text style={styles.tooltipTitle}><Icon name="arrow-left-thick" size={20} /> Seu perfil</Text>
+                            <Text style={styles.tooltipText}>
+                                Toque aqui para acessar seu perfil, visualizar seus acessos e gerenciar sua conta
+                            </Text>
+
+                            <TouchableOpacity
+                                style={styles.tooltipButton}
+                                onPress={dismissTooltip}
+                            >
+                                <Text style={styles.tooltipButtonText}>Entendi</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Animated.View>
+                )}
+
+            </Surface >
+        </SafeAreaView >
     );
 }
 
 const styles = StyleSheet.create({
+    avatarWrapper: {
+        position: 'relative',
+    },
     carouselItemWrapper: {
-        paddingHorizontal: 16, // Mesmo padding do QuickActionsGrid
+        width: '100%',  // Usar 100% ao invés de valor fixo
         justifyContent: 'center',
         alignItems: 'center',
+        paddingHorizontal: 16,  // Manter o padding horizontal
     },
     carouselItem: {
-        width: '100%',
+        width: '100%',  // Garantir que o item ocupe toda a largura disponível
         height: 180,
         borderRadius: 16,
         overflow: 'hidden',
         backgroundColor: customTheme.colors.surfaceVariant,
     },
+    // Estilos do tooltip
+    tooltipContainer: {
+        position: 'absolute',
+        left: 60, // Posicionado à direita do avatar
+        top: 5,
+        width: 230,
+        zIndex: 1000,
+    },
+    tooltipArrow: {
+        width: 0,
+        height: 0,
+        backgroundColor: 'transparent',
+        borderStyle: 'solid',
+        borderRightWidth: 8,
+        borderTopWidth: 8,
+        borderRightColor: 'transparent',
+        borderTopColor: customTheme.colors.primary,
+        borderLeftWidth: 8,
+        borderLeftColor: 'transparent',
+        marginLeft: -30,
+        transform: [{ rotate: '-90deg' }],
+    },
+    tooltipContent: {
+        backgroundColor: customTheme.colors.primary,
+        borderRadius: 12,
+        padding: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    tooltipTitle: {
+        color: customTheme.colors.onPrimary,
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    tooltipText: {
+        color: customTheme.colors.onPrimary,
+        fontSize: 14,
+        lineHeight: 20,
+    },
+    tooltipButton: {
+        alignSelf: 'flex-end',
+        marginTop: 12,
+        backgroundColor: customTheme.colors.primaryContainer,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+    },
+    tooltipButtonText: {
+        color: customTheme.colors.primary,
+        fontSize: 14,
+        fontWeight: '500',
+    },
     carouselImage: {
         width: '100%',
         height: '100%',
-    },
-
-    carousel: {
-        flexGrow: 0,
-        height: 200, // Ajuste conforme necessário
-    },
-    carouselItemContainer: {
-        width: width,
-        justifyContent: 'center',
-        alignItems: 'center',
     },
     loadingContainer: {
         height: 200,
@@ -508,31 +706,6 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurfaceVariant,
         opacity: 0.8,
     },
-    carouselTextContainer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: 16,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-    },
-    carouselTitle: {
-        color: 'white',
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    carouselSubtitle: {
-        color: 'rgba(255,255,255,0.8)',
-        fontSize: 14,
-        marginTop: 4,
-    },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: '600',
-        marginHorizontal: 16,
-        marginVertical: 12,
-        color: customTheme.colors.onBackground,
-    },
     header: {
         backgroundColor: customTheme.colors.surface,
         paddingVertical: 12,
@@ -543,139 +716,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 12,
     },
-    searchContainer: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.surfaceVariant,
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        gap: 8,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-        padding: 0, // Remove padding padrão no Android
-    },
-    contactButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: customTheme.colors.primaryContainer,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modalContainer: {
-        margin: 0,
-    },
-    modalBackground: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    modalContent: {
-        width: '100%',
-        maxWidth: 400,
-        borderRadius: 16,
-        backgroundColor: customTheme.colors.surface,
-        elevation: 5,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 20,
-    },
-    modalIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: customTheme.colors.primaryContainer,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 16,
-    },
-    modalTitleContainer: {
-        flex: 1,
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: customTheme.colors.primary,
-        marginBottom: 4,
-    },
-    versionInfo: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: customTheme.colors.outline,
-        opacity: 0.2,
-    },
-    modalScrollContent: {
-        padding: 20,
-        maxHeight: 300,
-    },
-    changelogItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    changelogIcon: {
-        marginRight: 12,
-    },
-    changelogText: {
-        marginLeft: 3,
-        flex: 1,
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
-    },
-    warningContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.errorContainer,
-        padding: 12,
-        borderRadius: 8,
-        marginTop: 16,
-    },
-    warningIcon: {
-        marginRight: 8,
-    },
-    warningText: {
-        flex: 1,
-        fontSize: 14,
-        color: customTheme.colors.error,
-    },
-    downloadSection: {
-        padding: 20,
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outline,
-    },
-    modalButtons: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 12,
-    },
-    modalButton: {
-        minWidth: 100,
-        margin: 10,
-    },
-    cancelButton: {
-        borderColor: customTheme.colors.primary,
-    },
-    updateButton: {
-        backgroundColor: customTheme.colors.primary,
-    },
-    modalText: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-        marginBottom: 24,
-        textAlign: 'center',
-    },
     safeArea: {
         flex: 1,
         backgroundColor: customTheme.colors.background,
@@ -684,145 +724,8 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: customTheme.colors.background,
     },
-    userInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    userTextContainer: {
-        marginLeft: 12,
-    },
-    welcomeText: {
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    userName: {
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
-    },
-    headerRightContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    logo: {
-        width: 100,
-        height: 40,
-        tintColor: customTheme.colors.primary,
-    },
     content: {
         flex: 1,
         paddingTop: 10,
-    },
-    actionsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 16,
-        marginBottom: 24,
-    },
-    actionCard: {
-        width: (width - 48) / 2,
-        padding: 16,
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 16,
-        elevation: 2,
-        alignItems: 'center',
-        gap: 12,
-    },
-    actionIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    actionText: {
-        color: customTheme.colors.onSurface,
-        fontWeight: '500',
-        textAlign: 'center',
-    },
-    infoCard: {
-        marginBottom: 24,
-        borderRadius: 16,
-        backgroundColor: customTheme.colors.surface,
-    },
-    infoHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
-    },
-    infoTitle: {
-        color: customTheme.colors.primary,
-        fontWeight: '600',
-    },
-    infoText: {
-        color: customTheme.colors.onSurface,
-        lineHeight: 20,
-    },
-    alertCard: {
-        marginBottom: 24,
-        borderRadius: 16,
-        backgroundColor: customTheme.colors.surface,
-    },
-    alertHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
-    },
-    alertTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    alertText: {
-        marginBottom: 16,
-    },
-    alertButton: {
-        borderRadius: 8,
-    },
-    checkingContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 8,
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 8,
-        marginBottom: 8,
-    },
-    checkingText: {
-        marginLeft: 8,
-        color: customTheme.colors.onSurface,
-    },
-    footerSpace: {
-        height: 60,
-    },
-    footer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 16,
-        backgroundColor: customTheme.colors.surface,
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outline,
-    },
-    versionText: {
-        marginLeft: 8,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    progressContainer: {
-        marginVertical: 8,
-    },
-    progressBar: {
-        height: 8,
-        borderRadius: 4,
-    },
-    progressText: {
-        textAlign: 'center',
-        marginTop: 8,
-        color: customTheme.colors.primary,
-        fontSize: 14,
     },
 });

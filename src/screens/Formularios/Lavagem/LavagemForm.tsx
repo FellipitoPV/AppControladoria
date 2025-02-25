@@ -1,26 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import {
-    View,
-    ScrollView,
-    StyleSheet,
-    SafeAreaView,
-    Dimensions,
-    TouchableOpacity,
-    Pressable,
-} from 'react-native';
-import {
-    Surface,
-    Text,
-    TextInput,
-    Button,
-    IconButton,
-    useTheme,
-} from 'react-native-paper';
+import { View, ScrollView, StyleSheet, SafeAreaView, Dimensions, TouchableOpacity } from 'react-native';
+import { Surface, Text, TextInput, Button } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { customTheme } from '../../../theme/theme';
 import { useUser } from '../../../contexts/userContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { TouchableWithoutFeedback } from 'react-native-gesture-handler';
 import { Dropdown } from 'react-native-element-dropdown';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
@@ -266,6 +250,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         return errors.length === 0;
     };
 
+    // TODO quando offline, apos salvar localmente, sair do formulario
     const handleSave = async () => {
         // Primeiro, valide o formulário
         if (!validateForm()) return;
@@ -1047,7 +1032,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                                     <Icon name="note" size={24} color={customTheme.colors.primary} />
                                 )} />}
                                 multiline
-                                numberOfLines={4}
+                                numberOfLines={6}
                                 style={[styles.input, styles.textArea]}
                                 textAlignVertical="top"
                             />
@@ -1125,8 +1110,7 @@ const styles = StyleSheet.create({
     textArea: {
         minHeight: 150,  // Isso dará espaço para aproximadamente 4 linhas
         textAlignVertical: 'top',
-        paddingTop: 12,  // Adiciona um padding superior para melhor aparência
-        paddingBottom: 2, // Adiciona um padding inferior para melhor aparência
+        paddingTop: 10,  // Adiciona um padding superior para melhor aparência
     },
     photoButtonsContainer: {
         flexDirection: 'row',
@@ -1258,7 +1242,7 @@ const styles = StyleSheet.create({
 
     // Estilos dos inputs
     inputGroup: {
-        gap: 16, // Aumentado para melhor espaçamento
+        gap: 10, // Aumentado para melhor espaçamento
     },
     input: {
         backgroundColor: '#FFFFFF',
