@@ -35,6 +35,7 @@ import MyAccessScreen from './src/screens/HomeScreen/components/MyAccessScreen';
 import EditUserAccessScreen from './src/screens/Adm/EditUserAccessScreen';
 import HistoricoOperacoes from './src/screens/Formularios/Logistica/HistoricoOperacoes';
 import RelatorioCompostagem from './src/screens/Formularios/Compostagem/RelatorioCompostagem';
+import RdoForm from './src/screens/Formularios/Logistica/rdo/RdoForm';
 
 const Stack = createStackNavigator();
 
@@ -178,6 +179,7 @@ export default function App() {
               <Stack.Screen name="LogisticaScreen" component={LogisticaScreen} options={{ headerShown: false }} />
               <Stack.Screen name="LogisticaProgram" component={FormularioProgramacao} options={{ headerShown: false }} />
               <Stack.Screen name="LogisticaHist" component={HistoricoOperacoes} options={{ headerShown: false }} />
+              <Stack.Screen name="LogisticaRdo" component={RdoForm} options={{ headerShown: false }} />
 
               {/* Operacao */}
               <Stack.Screen name="OperacaoScreen" component={OperacaoScreen} options={{ headerShown: false }} />

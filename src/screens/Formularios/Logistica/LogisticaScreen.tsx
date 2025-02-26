@@ -13,7 +13,7 @@ import {
     Button,
     ProgressBar,
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import firestore from '@react-native-firebase/firestore';
@@ -170,10 +170,6 @@ export default function LogisticaScreen({ navigation }: any) {
                         statsMes++;
                     }
 
-                    // Para debug - identificar o tipo de registro (antigo ou novo)
-                    // const tipoRegistro = dados.createdBy ? 'novo' : 'antigo';
-                    // console.log(`Processado registro ${tipoRegistro} - Data: ${dataLavagem.toLocaleDateString()} - ID: ${doc.id}`);
-
                 } catch (error) {
                     console.warn('Erro ao processar data do documento:', doc.id, error);
                 }
@@ -183,19 +179,6 @@ export default function LogisticaScreen({ navigation }: any) {
             snapshot.docs.forEach(processarDocumento);
 
             const total = snapshot.size;
-
-            // Para debug
-            // console.log('Estatísticas de Lavagem:', {
-            //     hoje: statsHoje,
-            //     semana: statsSemana,
-            //     mes: statsMes,
-            //     total,
-            //     dataReferencia: {
-            //         hoje: hoje.toLocaleDateString(),
-            //         inicioSemana: inicioSemana.toLocaleDateString(),
-            //         inicioMes: inicioMes.toLocaleDateString()
-            //     }
-            // });
 
             return {
                 hoje: statsHoje,
@@ -312,9 +295,9 @@ export default function LogisticaScreen({ navigation }: any) {
                         { backgroundColor: isBlocked ? customTheme.colors.surfaceDisabled : customTheme.colors.primaryContainer }
                     ]}>
                         {isBlocked ? (
-                            <Icon name="lock" size={24} color={customTheme.colors.onSurfaceDisabled} />
+                            <MaterialCommunityIcons name="lock" size={24} color={customTheme.colors.onSurfaceDisabled} />
                         ) : (
-                            <Icon name={icon} size={24} color={customTheme.colors.primary} />
+                            <MaterialCommunityIcons name={icon} size={24} color={customTheme.colors.primary} />
                         )}
                     </View>
                     {!isBlocked && badge !== undefined && badge > 0 && (
@@ -360,7 +343,7 @@ export default function LogisticaScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="today" size={24} color={customTheme.colors.primary} />
+                                <MaterialCommunityIcons name="calendar-today" size={24} color={customTheme.colors.primary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.hoje}</Text>
                             <Text style={styles.statsLabel}>Hoje</Text>
@@ -370,7 +353,7 @@ export default function LogisticaScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="date-range" size={24} color={customTheme.colors.secondary} />
+                                <MaterialCommunityIcons name="calendar-range" size={24} color={customTheme.colors.secondary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.semana}</Text>
                             <Text style={styles.statsLabel}>Esta Semana</Text>
@@ -380,7 +363,7 @@ export default function LogisticaScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="calendar-month" size={24} color={customTheme.colors.tertiary} />
+                                <MaterialCommunityIcons name="calendar-month" size={24} color={customTheme.colors.tertiary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.mes}</Text>
                             <Text style={styles.statsLabel}>Este Mês</Text>
@@ -394,14 +377,14 @@ export default function LogisticaScreen({ navigation }: any) {
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
                         {renderActionButton(
-                            "add",
+                            "plus",
                             "Nova Programação",
                             () => navigation.navigate('LogisticaProgram'),
                             'novaProgramacao'
                         )}
 
                         {renderActionButton(
-                            "event-available",
+                            "calendar-check",
                             "Agendamentos",
                             () => navigation.navigate('OperacaoProgram'),
                             'agendamentos',
@@ -413,6 +396,13 @@ export default function LogisticaScreen({ navigation }: any) {
                             "Historico",
                             () => navigation.navigate('LogisticaHist'),
                         )}
+
+                        {renderActionButton(
+                            "clipboard-text",
+                            "Relatório Diário de Operação",
+                            () => navigation.navigate('LogisticaRdo'),
+                        )}
+
                     </View>
                 </View>
 
