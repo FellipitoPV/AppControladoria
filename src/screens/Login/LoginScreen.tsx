@@ -19,6 +19,7 @@ import { customTheme } from '../../theme/theme';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import WelcomeScreen from './WelcomeScreen';
 import { useFocusEffect } from '@react-navigation/native';
+import SaveButton from '../../assets/components/SaveButton';
 
 const inputTheme = {
     colors: {
@@ -230,7 +231,7 @@ export default function LoginScreen({ navigation }: any) {
                     />
 
                     <TouchableOpacity
-                        onPress={() => navigation.navigate('ForgotPassword')}
+                        onPress={() => navigation.navigate('ForgotPass')}
                         style={styles.forgotPasswordContainer}
                     >
                         <Text style={styles.forgotPasswordText}>
@@ -238,14 +239,13 @@ export default function LoginScreen({ navigation }: any) {
                         </Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.loginButton}
+                    <SaveButton
                         onPress={() => handleLogin(email, password)}
-                    >
-                        <Text style={styles.loginText}>
-                            {isLoading ? 'Entrando...' : 'Login'}
-                        </Text>
-                    </TouchableOpacity>
+                        text="Login"
+                        iconName="login"
+                        loading={isLoading}
+                        disabled={!email || !password}
+                    />
 
                 </View>
 
@@ -319,15 +319,6 @@ const styles = StyleSheet.create({
     forgotPasswordText: {
         color: customTheme.colors.primary,
         fontSize: 14,
-    },
-    loginButton: {
-        paddingVertical: 20,
-        borderRadius: 12,
-        backgroundColor: customTheme.colors.primary,
-    },
-    loginText: {
-        textAlign: 'center',
-        color: customTheme.colors.onPrimary,
     },
     footer: {
         position: 'absolute',

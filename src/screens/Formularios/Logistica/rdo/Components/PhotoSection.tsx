@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -17,6 +17,11 @@ const PhotoSection: React.FC<PhotoSectionProps> = ({
     photos,
     setPhotos
 }) => {
+
+    useEffect(() => {
+        console.log('Fotos carregadas:', photos);
+    }, [photos]);
+
     // Função para selecionar imagens da galeria
     const selectImage = () => {
         const options: any = {
@@ -87,6 +92,10 @@ const PhotoSection: React.FC<PhotoSectionProps> = ({
         // Implementar visualização da foto em tamanho completo, se necessário
         console.log("Foto clicada:", photo);
     };
+
+    useEffect(() => {
+        console.log('Fotos:', photos);
+    }, [photos]);
 
     return (
         <View style={styles.section}>
@@ -180,6 +189,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: 1,
+        borderRadius: 8,
         gap: 12,
         padding: 16,
         height: 56,

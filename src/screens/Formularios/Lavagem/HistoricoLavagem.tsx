@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
     View,
     ScrollView,
@@ -7,27 +7,30 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     RefreshControl,
-    Image,
     Alert,
-    Modal,
+    Animated,
+    Dimensions,
+    Image
 } from 'react-native';
-import { Surface, Button, Text, Card, Chip, TextInput, Dialog, Portal } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { Surface, Text, Card, Chip, Badge } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
-import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
-import FullScreenImage from '../../../assets/components/FullScreenImage';
-import { Dropdown } from 'react-native-element-dropdown';
-import { showGlobalToast } from '../../../helpers/GlobalApi';
-import { PLACAS_VEICULOS, TIPOS_LAVAGEM } from './Components/lavagemTypes';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { DropdownRef } from '../../../helpers/Types';
 import { useUser } from '../../../contexts/userContext';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
+import { customTheme } from '../../../theme/theme';
 import { hasAccess } from '../../Adm/components/admTypes';
-import EditLavagemModal from './Components/EditLavagemModal';
 import ConfirmationModal from '../../../assets/components/ConfirmationModal';
+import DetalheLavagemModal from './Components/DetalheLavagemModal';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { getTipoLavagemDetails, getTipoVeiculoColor, getTipoVeiculoIcon, getTipoVeiculoLabel } from './Components/utils/lavagemUtils';
 
-interface Lavagem {
+interface HistoricoLavagemProps {
+    navigation: any;
+}
+
+interface LavagemData {
     id: string;
     responsavel: string;
     data: string;
@@ -35,7 +38,7 @@ interface Lavagem {
     veiculo: {
         placa: string;
         tipo: string;
-        numeroEquipamento?: string;
+        numeroEquipamento?: string | null;
     };
     tipoLavagem: string;
     produtos: Array<{
@@ -47,178 +50,187 @@ interface Lavagem {
         timestamp: number;
         path: string;
     }>;
-    observacoes: string;
+    observacoes?: string;
     status: string;
-    createdAt: number;
-}
-
-interface HistoricoLavagemProps {
-    navigation: any;
+    createdAt: any;
+    createdBy: string | null;
+    agendamentoId?: string | null;
 }
 
 export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) {
     const { userInfo } = useUser();
-
-    const [lavagens, setLavagens] = useState<Lavagem[]>([]);
+    const [lavagens, setLavagens] = useState<LavagemData[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [selectedPhoto, setSelectedPhoto] = useState<{ uri: string; id: string } | null>(null);
-    const [isFullScreenVisible, setIsFullScreenVisible] = useState(false);
 
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [lastVisible, setLastVisible] = useState<any>(null);
-    const [hasMore, setHasMore] = useState(true);
-    const LIMIT = 20;
-
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false)
-    const [todasLavagens, setTodasLavagens] = useState<Lavagem[]>([]);
-    const [lavagensVisiveis, setLavagensVisiveis] = useState<Lavagem[]>([]);
+    const [todasLavagens, setTodasLavagens] = useState<LavagemData[]>([]);
+    const [lagensFiltradas, setLavagensFiltradas] = useState<LavagemData[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const ITEMS_PER_PAGE = 15;
 
-    const [editModalVisible, setEditModalVisible] = useState(false);
-    const [selectedLavagem, setSelectedLavagem] = useState<Lavagem | null>(null);
+    const [filterStatus, setFilterStatus] = useState<string | null>(null);
+    const [filterVeiculo, setFilterVeiculo] = useState<string | null>(null);
+    const [filterTipoLavagem, setFilterTipoLavagem] = useState<string | null>(null);
 
-    const canEditeDelete = () => userInfo && hasAccess(userInfo, 'lavagem', 2);
+    const [selectedLavagem, setSelectedLavagem] = useState<LavagemData | null>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
+    const [detalheModalVisible, setDetalheModalVisible] = useState(false);
 
-    // Função para normalizar os produtos
-    const normalizarProdutos = (produtos: any[]) => {
-        if (!Array.isArray(produtos)) return [];
+    // Animações
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
-        return produtos.map(prod => {
-            // Se for formato antigo (tem 'produto' ao invés de 'nome')
-            if ('produto' in prod) {
-                return {
-                    nome: prod.produto,
-                    quantidade: parseInt(prod.quantidade) || 1 // Converte para número
-                };
-            }
-            // Formato novo
-            return {
-                nome: prod.nome || 'Produto não especificado',
-                quantidade: prod.quantidade || 1
-            };
-        });
-    };
+    const canEditDelete = () => userInfo && hasAccess(userInfo, 'lavagem', 2);
 
-    // Função para normalizar os dados de lavagem
-    const normalizarLavagem = (doc: any): Lavagem => {
-
-        // Verifica se é o formato antigo (pela presença de placaVeiculo)
-        const isFormatoAntigo = 'placaVeiculo' in doc;
-
-        // Normaliza as fotos
-        const fotos = isFormatoAntigo
-            ? (doc.photoUrls || []).map((url: string, index: number) => ({
-                url,
-                path: `legacy_${index}`,
-                timestamp: new Date(doc.createdAt).getTime()
-            }))
-            : (doc.fotos || []).map((foto: any, index: number) => ({
-                url: foto.url || '',
-                path: foto.path || `new_${index}`,
-                timestamp: foto.timestamp || (doc.createdAt?.toDate?.()?.getTime() || Date.now())
-            }));
-
-        // Normaliza o veículo
-        const veiculo = isFormatoAntigo
-            ? {
-                placa: doc.placaVeiculo,
-                tipo: doc.placaVeiculo.includes('COMPACTADORA') || doc.placaVeiculo.includes('EQUIPAMENTO')
-                    ? 'equipamento'
-                    : 'veiculo',
-                numeroEquipamento: doc.placaVeiculo.includes('COMPACTADORA') || doc.placaVeiculo.includes('EQUIPAMENTO')
-                    ? doc.placaVeiculo.split('-')[1]
-                    : null
-            }
-            : doc.veiculo || {
-                placa: '',
-                tipo: 'veiculo',
-                numeroEquipamento: null
-            };
-
-        // Normaliza a data de criação
-        let createdAtTime;
-        if (isFormatoAntigo) {
-            createdAtTime = new Date(doc.createdAt).getTime();
-        } else {
-            createdAtTime = doc.createdAt?.toDate?.()?.getTime() || Date.now();
-        }
-
-        // Normaliza os produtos
-        const produtos = normalizarProdutos(doc.produtos || []);
-
-        // Constrói o objeto normalizado
-        const lavagem: Lavagem = {
-            id: doc.id,
-            responsavel: doc.responsavel || '',
-            data: doc.data || '',
-            hora: doc.hora || '',
-            veiculo: veiculo,
-            tipoLavagem: doc.tipoLavagem || '',
-            produtos: produtos,
-            fotos: fotos,
-            observacoes: doc.observacoes || '',
-            status: doc.status || 'concluido',
-            createdAt: createdAtTime
-        };
-
-        return lavagem;
-    };
-
-    // Modifique a função buscarLavagens para usar apenas um campo de ordenação por enquanto
     const buscarLavagens = async () => {
         try {
             setLoading(true);
 
-            // Buscar todos os registros sem limite
-            let queryAntigos = firestore()
+            // Buscar lavagens no novo formato
+            const snapshotNovo = await firestore()
                 .collection('registroLavagens')
-                .orderBy('createdAt', 'desc');
+                .orderBy('createdAt', 'desc')
+                .get();
 
-            let queryNovos = firestore()
-                .collection('lavagens')
-                .orderBy('data', 'desc');
+            // Buscar lavagens no formato antigo
+            const snapshotAntigo = await firestore()
+                .collection('registroLavagens')
+                .where('placaVeiculo', '!=', null)
+                .get();
 
-            const [snapshotNovos, snapshotAntigos] = await Promise.all([
-                queryNovos.get(),
-                queryAntigos.get()
-            ]);
+            console.log(`Quantidade de lavagens novas: ${snapshotNovo.size}`);
+            console.log(`Quantidade de lavagens antigas: ${snapshotAntigo.size}`);
 
-            console.log('===== DIAGNÓSTICO DE LAVAGENS =====');
-            console.log(`Quantidade de documentos NOVOS (lavagens): ${snapshotNovos.size}`);
-            console.log(`Quantidade de documentos ANTIGOS (registroLavagens): ${snapshotAntigos.size}`);
+            // Processar dados do novo formato
+            const dadosNovos = snapshotNovo.docs
+                .filter(doc => !doc.data().placaVeiculo) // Filtrar apenas os registros do novo formato
+                .map(doc => {
+                    const data = doc.data() as LavagemData;
+                    return {
+                        id: doc.id,
+                        responsavel: data.responsavel || '',
+                        data: data.data || '',
+                        hora: data.hora || '',
+                        veiculo: data.veiculo || { placa: '', tipo: '' },
+                        tipoLavagem: data.tipoLavagem || '',
+                        produtos: data.produtos || [],
+                        fotos: data.fotos || [],
+                        observacoes: data.observacoes || '',
+                        status: data.status || 'concluido',
+                        createdAt: data.createdAt || null,
+                        createdBy: data.createdBy || null,
+                        agendamentoId: data.agendamentoId || null
+                    } as LavagemData;
+                });
 
-            // Processar os dados
-            const dadosNovos = snapshotNovos.docs.map(doc => normalizarLavagem({
-                id: doc.id,
-                ...doc.data()
-            }));
-
-            const dadosAntigos = snapshotAntigos.docs.map(doc => normalizarLavagem({
-                id: doc.id,
-                ...doc.data()
-            }));
-
-            // Combinar e ordenar todos os dados
-            const todosDados = [...dadosNovos, ...dadosAntigos].sort((a, b) => {
-                if (a.createdAt && b.createdAt) {
-                    return b.createdAt - a.createdAt;
-                }
-
-                const dataA = new Date(a.data.split('/').reverse().join('-') + ' ' + a.hora);
-                const dataB = new Date(b.data.split('/').reverse().join('-') + ' ' + b.hora);
-                return dataB.getTime() - dataA.getTime();
+            // Processar dados do formato antigo
+            const dadosAntigos = snapshotAntigo.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    responsavel: data.responsavel || '',
+                    data: data.data || '',
+                    hora: data.hora || '',
+                    veiculo: {
+                        placa: data.placaVeiculo || '',
+                        tipo: 'veiculo', // Assumir que todos são veículos no formato antigo
+                        numeroEquipamento: null
+                    },
+                    tipoLavagem: data.tipoLavagem || '',
+                    produtos: (data.produtos || []).map((p: any) => ({
+                        nome: p.produto || '',
+                        quantidade: parseInt(p.quantidade) || 0
+                    })),
+                    fotos: [], // Iniciar vazio
+                    observacoes: data.observacoes || '',
+                    status: 'concluido', // Assumir que todos são concluídos no formato antigo
+                    createdAt: data.createdAt ?
+                        (typeof data.createdAt === 'string' ?
+                            firestore.Timestamp.fromDate(new Date(data.createdAt)) :
+                            data.createdAt
+                        ) : null,
+                    createdBy: null,
+                    agendamentoId: null
+                } as LavagemData;
             });
 
-            // Guardar todos os dados em um estado
-            setTodasLavagens(todosDados);
-            // Mostrar apenas os primeiros 20
-            setLavagensVisiveis(todosDados.slice(0, LIMIT));
-            // Atualizar se ainda há mais para mostrar
-            setHasMore(todosDados.length > LIMIT);
+            // Processar fotos do formato antigo
+            for (const lavagem of dadosAntigos) {
+                const docData = snapshotAntigo.docs.find(doc => doc.id === lavagem.id)?.data();
+
+                if (docData) {
+                    // Tratar photoUrls como array de strings
+                    if (docData.photoUrls && Array.isArray(docData.photoUrls)) {
+                        lavagem.fotos = docData.photoUrls.map((url: string, index: number) => ({
+                            url,
+                            timestamp: Date.now() + index,
+                            path: `legado/${lavagem.id}/${index}`
+                        }));
+                    }
+                    // Tratar photoUris como array de objetos
+                    else if (docData.photoUris && Array.isArray(docData.photoUris)) {
+                        lavagem.fotos = docData.photoUris.map((uri: any, index: number) => ({
+                            url: uri.url || uri.uri || uri,
+                            timestamp: Date.now() + index,
+                            path: `legado/${lavagem.id}/${index}`
+                        }));
+                    }
+                }
+            }
+
+            // Combinar dados dos dois formatos
+            const todosDados = [...dadosNovos, ...dadosAntigos];
+
+            // Ordenar por data de criação (mais recente primeiro)
+            const dadosOrdenados = todosDados.sort((a, b) => {
+                let dataA = 0;
+                let dataB = 0;
+
+                // Para objetos com createdAt como Timestamp
+                if (a.createdAt && typeof a.createdAt.toDate === 'function') {
+                    dataA = a.createdAt.toDate().getTime();
+                }
+                // Para strings de data ISO
+                else if (a.createdAt && typeof a.createdAt === 'string') {
+                    dataA = new Date(a.createdAt).getTime();
+                }
+
+                if (b.createdAt && typeof b.createdAt.toDate === 'function') {
+                    dataB = b.createdAt.toDate().getTime();
+                }
+                else if (b.createdAt && typeof b.createdAt === 'string') {
+                    dataB = new Date(b.createdAt).getTime();
+                }
+
+                return dataB - dataA;
+            });
+
+            setTodasLavagens(dadosOrdenados);
+
+            // Aplicar paginação inicial
+            const primeiraPagina = dadosOrdenados.slice(0, ITEMS_PER_PAGE);
+            setLavagens(primeiraPagina);
+            setHasMore(dadosOrdenados.length > ITEMS_PER_PAGE);
+
+            // Animar entrada dos cards
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 500,
+                    useNativeDriver: true
+                }),
+                Animated.timing(scaleAnim, {
+                    toValue: 1,
+                    duration: 400,
+                    useNativeDriver: true
+                })
+            ]).start();
 
         } catch (error) {
             console.error('Erro ao buscar lavagens:', error);
+            showGlobalToast('error', 'Erro', 'Não foi possível carregar o histórico de lavagens', 3000);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -226,25 +238,62 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
     };
 
     const handleLoadMore = () => {
+        if (!hasMore || loadingMore) return;
+
+        setLoadingMore(true);
+
         const nextPage = currentPage + 1;
         const startIndex = 0;
-        const endIndex = nextPage * LIMIT;
+        const endIndex = nextPage * ITEMS_PER_PAGE;
 
-        setLavagensVisiveis(todasLavagens.slice(startIndex, endIndex));
+        // Verificar se devemos usar as lavagens filtradas ou todas
+        const source = filterStatus || filterVeiculo || filterTipoLavagem
+            ? lagensFiltradas
+            : todasLavagens;
+
+        setLavagens(source.slice(startIndex, endIndex));
         setCurrentPage(nextPage);
-        setHasMore(endIndex < todasLavagens.length);
+        setHasMore(endIndex < source.length);
+        setLoadingMore(false);
     };
 
-    const handleEdit = (lavagem: Lavagem) => {
-        setSelectedLavagem(lavagem);
-        setEditModalVisible(true);
+    const aplicarFiltros = () => {
+        let resultado = [...todasLavagens];
+
+        if (filterStatus) {
+            resultado = resultado.filter(item => item.status === filterStatus);
+        }
+
+        if (filterVeiculo) {
+            resultado = resultado.filter(item =>
+                item.veiculo.placa.toLowerCase().includes(filterVeiculo.toLowerCase())
+            );
+        }
+
+        if (filterTipoLavagem) {
+            resultado = resultado.filter(item => item.tipoLavagem === filterTipoLavagem);
+        }
+
+        setLavagensFiltradas(resultado);
+        setLavagens(resultado.slice(0, ITEMS_PER_PAGE));
+        setCurrentPage(1);
+        setHasMore(resultado.length > ITEMS_PER_PAGE);
     };
 
-    // Modifique a função de refresh para resetar os estados
+    const limparFiltros = () => {
+        setFilterStatus(null);
+        setFilterVeiculo(null);
+        setFilterTipoLavagem(null);
+        setLavagens(todasLavagens.slice(0, ITEMS_PER_PAGE));
+        setCurrentPage(1);
+        setHasMore(todasLavagens.length > ITEMS_PER_PAGE);
+    };
+
     const onRefresh = React.useCallback(() => {
         setRefreshing(true);
-        setLastVisible(null);
+        setCurrentPage(1);
         setHasMore(true);
+        limparFiltros();
         buscarLavagens();
     }, []);
 
@@ -252,246 +301,415 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
         buscarLavagens();
     }, []);
 
-    const handlePhotoPress = (url: string, id: string) => {
-        setSelectedPhoto({ uri: url, id });
-        setIsFullScreenVisible(true);
-    };
-
-    const getOptimizedImageUrl = (url: string, width: number = 100) => {
-        // Verifica se é uma URL do Firebase Storage
-        if (url.includes('firebasestorage.googleapis.com')) {
-            // Adiciona parâmetros de redimensionamento
-            const separator = url.includes('?') ? '&' : '?';
-            return `${url}${separator}w=${width}&h=${width}&alt=media`;
+    useEffect(() => {
+        if (filterStatus || filterVeiculo || filterTipoLavagem) {
+            aplicarFiltros();
         }
-        return url;
-    };
-
-    const getTipoLavagemChipColor = (tipo: string) => {
-        switch (tipo.toLowerCase()) {
-            case 'completa':
-                return { bg: customTheme.colors.primaryContainer, text: customTheme.colors.primary };
-            case 'simples':
-                return { bg: customTheme.colors.secondaryContainer, text: customTheme.colors.secondary };
-            default:
-                return { bg: customTheme.colors.surfaceVariant, text: customTheme.colors.onSurfaceVariant };
-        }
-    };
-
-    const ThumbnailImage = ({ uri, style }: { uri: string; style?: any }) => {
-        const [isLoading, setIsLoading] = useState(true);
-        // Gera URL otimizada para thumbnail
-        const thumbnailUrl = getOptimizedImageUrl(uri, 80); // 2x o tamanho para telas retina
-
-        return (
-            <View style={[style, styles.thumbnailContainer]}>
-                <Image
-                    source={{ uri: thumbnailUrl }}
-                    style={[style, { position: 'absolute' }]}
-                    onLoadStart={() => setIsLoading(true)}
-                    onLoadEnd={() => setIsLoading(false)}
-                />
-                {isLoading && (
-                    <View style={[style, styles.loadingContainer]}>
-                        <ActivityIndicator
-                            size="small"
-                            color={customTheme.colors.primary}
-                        />
-                    </View>
-                )}
-            </View>
-        );
-    };
-
-    const renderLavagemCard = (lavagem: Lavagem) => {
-        if (!lavagem || !lavagem.veiculo) {
-            return null;
-        }
-
-        const chipColor = getTipoLavagemChipColor(lavagem.tipoLavagem || 'default');
-
-        // Helper function to check if the plate is valid
-        const isValidPlate = (placa: string) => {
-            return PLACAS_VEICULOS.some(item => item.value === placa);
-        };
-
-        // Helper function to get vehicle display info
-        const getVehicleDisplayInfo = (veiculo: {
-            placa: string;
-            tipo: string;
-            numeroEquipamento?: string;
-        }) => {
-            if (!veiculo) return null;
-
-            const isEquipment = veiculo.tipo === 'equipamento';
-            const isValidVehicle = isValidPlate(veiculo.placa);
-
-            // Define icon and label based on conditions
-            let icon = 'inventory'; // Ícone para outros tipos
-            let label = 'Outros';
-
-            if (isEquipment) {
-                icon = 'build';
-                label = 'Equipamento';
-            } else if (isValidVehicle) {
-                icon = 'directions-car';
-                label = 'Veículo';
-            }
-
-            return {
-                icon,
-                label,
-                displayText: isEquipment
-                    ? `Equipamento${veiculo.numeroEquipamento ? ` #${veiculo.numeroEquipamento}` : ''}`
-                    : (isValidVehicle ? 'Veículo' : 'Outros')
-            };
-        };
-
-        const vehicleInfo = getVehicleDisplayInfo(lavagem.veiculo);
-
-        return (
-            <Card style={styles.card} key={lavagem.id}>
-                {/* Barra colorida superior */}
-                <View style={[styles.cardGradient, { backgroundColor: chipColor.bg }]} />
-
-                <Card.Content style={styles.cardContent}>
-                    {/* Linha 1: Placa, Tipo Lavagem, Data/Hora */}
-                    <View style={styles.headerRow}>
-                        <Text style={styles.placa} numberOfLines={1}>
-                            {lavagem.veiculo?.placa || 'Não informado'}
-                        </Text>
-
-                        <View style={styles.headerRight}>
-                            <Chip
-                                style={[styles.tipoChip, { backgroundColor: chipColor.bg }]}
-                                textStyle={{ color: chipColor.text }}
-                            >
-                                {(lavagem.tipoLavagem || 'Não definido').toUpperCase()}
-                            </Chip>
-                            <Text style={styles.dataHora}>
-                                {`${lavagem.data} às ${lavagem.hora.split(':').slice(0, 2).join(':')}`}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {vehicleInfo ?
-                        <>
-                            {/* Linha 2: Tipo de Veículo/Equipamento */}
-                            < View style={styles.veiculoRow}>
-                                <Icon
-                                    name={vehicleInfo.icon}
-                                    size={16}
-                                    color={customTheme.colors.primary}
-                                />
-                                <Text style={styles.veiculoText} numberOfLines={1}>
-                                    {vehicleInfo.displayText}
-                                </Text>
-                            </View>
-                        </>
-                        : null}
-
-                    {/* Linha 3: Fotos em miniatura (se houver) */}
-                    {Array.isArray(lavagem.fotos) && lavagem.fotos.length > 0 && (
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.fotosRow}
-                        >
-                            {lavagem.fotos.map((foto, index) => (
-                                <TouchableOpacity
-                                    key={index}
-                                    onPress={() => handlePhotoPress(foto.url, foto.path)}
-                                >
-                                    <ThumbnailImage
-                                        uri={foto.url}
-                                        style={styles.miniThumbnail}
-                                    />
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    )}
-
-                    {/* Linha 3: Observações (opcional) */}
-                    {lavagem.observacoes && (
-                        <View style={styles.observacoesRow}>
-                            <Icon name="comment" size={16} color={customTheme.colors.primary} />
-                            <Text numberOfLines={2} style={styles.observacoesText}>
-                                {lavagem.observacoes}
-                            </Text>
-                        </View>
-                    )}
-
-                    {/* Linha 4: Responsável e Ações */}
-                    <View style={styles.footerRow}>
-                        <View style={styles.responsavelContainer}>
-                            <Icon name="person" size={16} color={customTheme.colors.primary} />
-                            <Text style={styles.responsavelText} numberOfLines={1}>
-                                {lavagem.responsavel || 'Não informado'}
-                            </Text>
-                        </View>
-
-                        {canEditeDelete() ?
-                            <View style={styles.actionButtons}>
-                                <TouchableOpacity
-                                    onPress={() => handleEdit(lavagem)}
-                                    style={styles.actionButton}>
-                                    <Icon name="edit" size={20} color={customTheme.colors.primary} />
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        setSelectedLavagem(lavagem);
-                                        setShowDeleteConfirm(true);
-                                    }}
-                                    style={styles.actionButton}>
-                                    <Icon name="delete" size={20} color={customTheme.colors.error} />
-                                </TouchableOpacity>
-                            </View>
-                            : null}
-                    </View>
-
-                </Card.Content>
-            </Card >
-        );
-    };
+    }, [filterStatus, filterVeiculo, filterTipoLavagem]);
 
     const handleDelete = async (id: string) => {
         try {
-            // Tenta excluir dos dois locais possíveis (novo e antigo)
-            await firestore().collection('registroLavagens').doc(id).delete();
-            await firestore().collection('lavagens').doc(id).delete();
+            await firestore()
+                .collection('registroLavagens')
+                .doc(id)
+                .delete();
 
-            // Atualiza a lista local removendo o item
-            setLavagens(prevLavagens =>
-                prevLavagens.filter(lavagem => lavagem.id !== id)
-            );
-            onRefresh()
+            showGlobalToast('success', 'Sucesso', 'Registro excluído com sucesso', 3000);
+            onRefresh();
         } catch (error) {
-            console.error('Erro ao excluir lavagem:', error);
+            console.error('Erro ao excluir registro:', error);
             Alert.alert("Erro", "Não foi possível excluir o registro.");
         }
     };
+
+    const formatarData = (data: string) => {
+        if (!data) return '';
+
+        try {
+            // Assumindo que data está em formato DD/MM/YYYY
+            const parts = data.split('/');
+            if (parts.length !== 3) return data;
+
+            const dia = parseInt(parts[0]);
+            const mes = parseInt(parts[1]) - 1; // Mês em JS começa em 0
+            const ano = parseInt(parts[2]);
+
+            const date = new Date(ano, mes, dia);
+
+            // Formatar para exibição (com nome do dia da semana)
+            return format(date, "EEE, dd 'de' MMM", { locale: ptBR });
+        } catch (error) {
+            console.error('Erro ao formatar data:', error);
+            return data;
+        }
+    };
+
+    const renderLavagemCard = (lavagem: LavagemData, index: number) => {
+        const tipoLavagemInfo = getTipoLavagemDetails(lavagem.tipoLavagem);
+        const dataFormatada = formatarData(lavagem.data);
+        const animationDelay = index * 100; // Escalonar animação por índice
+
+        return (
+            <Animated.View
+                key={lavagem.id}
+                style={[
+                    {
+                        opacity: fadeAnim,
+                        transform: [{ scale: scaleAnim }],
+                    }
+                ]}
+            >
+                <TouchableOpacity
+                    style={styles.card}
+                    onPress={() => {
+                        setSelectedLavagem(lavagem);
+                        setDetalheModalVisible(true);
+                    }}
+                    activeOpacity={0.7}
+                >
+                    {/* Barra colorida superior */}
+                    <View style={[styles.cardGradient, { backgroundColor: tipoLavagemInfo.bg }]} />
+
+                    <View style={styles.cardContent}>
+                        {/* Cabeçalho: Tipo de Lavagem, Status e Data */}
+                        <View style={styles.headerRow}>
+                            <Chip
+                                icon={() => (
+                                    <MaterialCommunityIcons
+                                        name={tipoLavagemInfo.icon}
+                                        size={16}
+                                        color={tipoLavagemInfo.text}
+                                    />
+                                )}
+                                style={[styles.tipoChip, { backgroundColor: tipoLavagemInfo.bg }]}
+                                textStyle={{ color: tipoLavagemInfo.text }}
+                            >
+                                {lavagem.tipoLavagem.toUpperCase()}
+                            </Chip>
+
+                            {/* <View style={styles.statusContainer}>
+                                <Badge
+                                    style={[
+                                        styles.statusBadge,
+                                        {
+                                            backgroundColor: lavagem.status === 'concluido' ?
+                                                customTheme.colors.primaryContainer :
+                                                customTheme.colors.errorContainer
+                                        }
+                                    ]}
+                                >
+                                    {lavagem.status === 'concluido' ? 'Concluído' : 'Pendente'}
+                                </Badge>
+                            </View> */}
+                        </View>
+
+                        {/* Linha 2: Veículo e Data/Hora */}
+                        <View style={styles.infoRow}>
+                            <View style={styles.veiculoContainer}>
+                                <MaterialCommunityIcons
+                                    name={getTipoVeiculoIcon(lavagem.veiculo.tipo)}
+                                    size={20}
+                                    color={getTipoVeiculoColor(lavagem.veiculo.tipo)}
+                                />
+                                <View style={styles.veiculoInfoContainer}>
+                                    <Text style={styles.veiculoText}>
+                                        {lavagem.veiculo.placa}
+                                        {lavagem.veiculo.numeroEquipamento ?
+                                            ` (Eq. ${lavagem.veiculo.numeroEquipamento})` :
+                                            ''}
+                                    </Text>
+
+                                    {/* Badge mostrando o tipo do item quando for "outros" */}
+                                    {lavagem.veiculo.tipo.toLowerCase() === 'outros' && (
+                                        <View style={styles.tipoOutrosContainer}>
+                                            <Text style={styles.tipoOutrosText}>
+                                                {getTipoVeiculoLabel(lavagem.veiculo.tipo)}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            </View>
+
+                            <View style={styles.dataHoraContainer}>
+                                <MaterialCommunityIcons
+                                    name="calendar-today"
+                                    size={18}
+                                    color={customTheme.colors.secondary}
+                                />
+                                <View>
+                                    <Text style={styles.dataText}>
+                                        {dataFormatada}
+                                    </Text>
+                                    <Text style={styles.horaText}>
+                                        {lavagem.hora}
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Linha 3: Produtos utilizados */}
+                        {lavagem.produtos && lavagem.produtos.length > 0 &&
+                            lavagem.produtos.some(p => p.nome && !isNaN(p.quantidade)) && (
+                                <View style={styles.produtosContainer}>
+                                    <Text style={styles.produtosTitle}>
+                                        <MaterialCommunityIcons
+                                            name="spray-bottle"
+                                            size={16}
+                                            color={customTheme.colors.primary}
+                                            style={{ marginRight: 4 }}
+                                        />
+                                        Produtos:
+                                    </Text>
+                                    <View style={styles.produtosRow}>
+                                        {lavagem.produtos
+                                            .filter(produto => produto.nome && !isNaN(produto.quantidade))
+                                            .slice(0, 3).map((produto, idx) => (
+                                                <Chip
+                                                    key={`${lavagem.id}-prod-${idx}`}
+                                                    style={styles.produtoChip}
+                                                    textStyle={styles.produtoChipText}
+                                                >
+                                                    {produto.nome} ({produto.quantidade})
+                                                </Chip>
+                                            ))}
+
+                                        {lavagem.produtos.filter(p => p.nome && !isNaN(p.quantidade)).length > 3 && (
+                                            <Chip
+                                                style={styles.produtoChipMais}
+                                                textStyle={{ color: customTheme.colors.primary }}
+                                            >
+                                                +{lavagem.produtos.filter(p => p.nome && !isNaN(p.quantidade)).length - 3}
+                                            </Chip>
+                                        )}
+                                    </View>
+                                </View>
+                            )}
+
+                        {/* Linha 4: Fotos e Responsável */}
+                        <View style={styles.footerRow}>
+                            <View style={styles.fotosContainer}>
+                                <MaterialCommunityIcons
+                                    name="image-multiple"
+                                    size={18}
+                                    color={customTheme.colors.primary}
+                                />
+                                <Text style={styles.fotosText}>
+                                    {lavagem.fotos?.length || 0} fotos
+                                </Text>
+
+                                {/* Miniatura das fotos */}
+                                {lavagem.fotos && lavagem.fotos.length > 0 && (
+                                    <View style={styles.thumbnailsContainer}>
+                                        {lavagem.fotos.slice(0, 2).map((foto, idx) => (
+                                            <Image
+                                                key={`thumb-${idx}`}
+                                                source={{ uri: foto.url }}
+                                                style={styles.thumbnail}
+                                            />
+                                        ))}
+
+                                        {lavagem.fotos.length > 2 && (
+                                            <View style={styles.moreThumbnails}>
+                                                <Text style={styles.moreThumbnailsText}>
+                                                    +{lavagem.fotos.length - 2}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                )}
+                            </View>
+
+                            <View style={styles.responsavelActionContainer}>
+                                <View style={styles.responsavelContainer}>
+                                    <MaterialCommunityIcons
+                                        name="account"
+                                        size={16}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.responsavelText} numberOfLines={1}>
+                                        {lavagem.responsavel}
+                                    </Text>
+                                </View>
+
+                                {canEditDelete() && (
+                                    <TouchableOpacity
+                                        onPress={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedLavagem(lavagem);
+                                            setShowDeleteConfirm(true);
+                                        }}
+                                        style={styles.deleteButton}
+                                    >
+                                        <MaterialCommunityIcons
+                                            name="delete"
+                                            size={20}
+                                            color={customTheme.colors.error}
+                                        />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </Animated.View>
+        );
+    };
+
+    const renderFilterBar = () => (
+        <View style={styles.filterBar}>
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterScrollContent}
+            >
+
+                {/* Filtro de Tipo de Lavagem */}
+                <TouchableOpacity
+                    style={[
+                        styles.filterChip,
+                        filterTipoLavagem === 'completa' && styles.filterChipActive
+                    ]}
+                    onPress={() => setFilterTipoLavagem(
+                        filterTipoLavagem === 'completa' ? null : 'completa'
+                    )}
+                >
+                    <MaterialCommunityIcons
+                        name="car-wash"
+                        size={16}
+                        color={filterTipoLavagem === 'completa' ?
+                            customTheme.colors.primary :
+                            customTheme.colors.onSurfaceVariant
+                        }
+                    />
+                    <Text
+                        style={[
+                            styles.filterChipText,
+                            filterTipoLavagem === 'completa' && styles.filterChipTextActive
+                        ]}
+                    >
+                        Completa
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[
+                        styles.filterChip,
+                        filterTipoLavagem === 'simples' && styles.filterChipActive
+                    ]}
+                    onPress={() => setFilterTipoLavagem(
+                        filterTipoLavagem === 'simples' ? null : 'simples'
+                    )}
+                >
+                    <MaterialCommunityIcons
+                        name="car-wash"
+                        size={16}
+                        color={filterTipoLavagem === 'simples' ?
+                            customTheme.colors.primary :
+                            customTheme.colors.onSurfaceVariant
+                        }
+                    />
+                    <Text
+                        style={[
+                            styles.filterChipText,
+                            filterTipoLavagem === 'simples' && styles.filterChipTextActive
+                        ]}
+                    >
+                        Simples
+                    </Text>
+                </TouchableOpacity>
+
+                {/* Botão para limpar filtros */}
+                {(filterStatus || filterVeiculo || filterTipoLavagem) && (
+                    <TouchableOpacity
+                        style={styles.clearFilterButton}
+                        onPress={limparFiltros}
+                    >
+                        <MaterialCommunityIcons
+                            name="close"
+                            size={16}
+                            color={customTheme.colors.error}
+                        />
+                        <Text style={styles.clearFilterText}>
+                            Limpar filtros
+                        </Text>
+                    </TouchableOpacity>
+                )}
+            </ScrollView>
+        </View>
+    );
+
+    const renderLoadMoreButton = () => (
+        <View style={styles.loadMoreWrapper}>
+            <TouchableOpacity
+                style={styles.loadMoreButton}
+                onPress={handleLoadMore}
+                disabled={loadingMore}
+            >
+                {loadingMore ? (
+                    <ActivityIndicator size="small" color={customTheme.colors.primary} />
+                ) : (
+                    <>
+                        <Text style={styles.loadMoreText}>
+                            Carregar mais
+                            {todasLavagens.length - lavagens.length > 0 &&
+                                ` (${todasLavagens.length - lavagens.length} restantes)`}
+                        </Text>
+                        <MaterialCommunityIcons
+                            name="chevron-double-down"
+                            size={20}
+                            color={customTheme.colors.primary}
+                        />
+                    </>
+                )}
+            </TouchableOpacity>
+        </View>
+    );
+
+    const renderEmptyState = () => (
+        <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons
+                name="car-off"
+                size={64}
+                color={customTheme.colors.onSurfaceVariant}
+            />
+            <Text style={styles.emptyTitle}>
+                Nenhuma lavagem encontrada
+            </Text>
+            <Text style={styles.emptyText}>
+                Não há registros de lavagens no sistema.
+            </Text>
+
+            {(filterStatus || filterVeiculo || filterTipoLavagem) && (
+                <TouchableOpacity
+                    style={styles.clearFilterButtonEmpty}
+                    onPress={limparFiltros}
+                >
+                    <Text style={styles.clearFilterButtonEmptyText}>
+                        Limpar filtros
+                    </Text>
+                </TouchableOpacity>
+            )}
+        </View>
+    );
 
     return (
         <SafeAreaView style={styles.safeArea}>
             <ModernHeader
                 title="Histórico de Lavagens"
-                iconName="history"
+                iconName="car-wash"
                 onBackPress={() => navigation.goBack()}
+
+                rightIcon='clipboard-plus'
+                rightAction={() => navigation.navigate('LavagemForm')}
             />
 
-            <FullScreenImage
-                visible={isFullScreenVisible}
-                photo={selectedPhoto}
-                onClose={() => {
-                    setIsFullScreenVisible(false);
-                    setSelectedPhoto(null);
-                }}
-            />
+            {/* Barra de filtros */}
+            {!loading && renderFilterBar()}
 
             {loading ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={customTheme.colors.primary} />
+                    <Text style={styles.loadingText}>Carregando histórico...</Text>
                 </View>
             ) : (
                 <ScrollView
@@ -506,56 +724,43 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                 >
                     <View style={styles.container}>
                         {/* Lista de lavagens */}
-                        {lavagensVisiveis.map(lavagem => renderLavagemCard(lavagem))}
+                        {lavagens.length > 0 ? (
+                            lavagens.map((lavagem, index) => renderLavagemCard(lavagem, index))
+                        ) : (
+                            renderEmptyState()
+                        )}
 
                         {/* Botão Carregar Mais */}
-                        {hasMore && (
-                            <View style={styles.loadMoreWrapper}>
-                                <TouchableOpacity
-                                    style={styles.loadMoreButton}
-                                    onPress={handleLoadMore}
-                                    disabled={loadingMore}
-                                >
-                                    {loadingMore ? (
-                                        <ActivityIndicator size="small" color={customTheme.colors.primary} />
-                                    ) : (
-                                        <>
-                                            <Text style={styles.loadMoreText}>
-                                                Carregar mais ({todasLavagens.length - lavagensVisiveis.length} restantes)
-                                            </Text>
-                                            <Icon
-                                                name="expand-more"
-                                                size={20}
-                                                color={customTheme.colors.primary}
-                                            />
-                                        </>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
-                        )}
+                        {hasMore && lavagens.length > 0 && renderLoadMoreButton()}
                     </View>
                 </ScrollView>
             )}
 
-            <EditLavagemModal
-                visible={editModalVisible}
-                lavagem={selectedLavagem}
-                onDismiss={() => {
-                    setEditModalVisible(false);
-                    setSelectedLavagem(null);
-                }}
-                onSave={() => {
-                    setEditModalVisible(false);
-                    setSelectedLavagem(null);
-                    buscarLavagens(); // Recarregar dados
-                }}
-            />
+            {/* Modal de Detalhe */}
+            {selectedLavagem && (
+                <DetalheLavagemModal
+                    visible={detalheModalVisible}
+                    onClose={() => {
+                        setDetalheModalVisible(false);
+                        setSelectedLavagem(null);
+                    }}
+                    lavagem={selectedLavagem}
+                    onEdit={() => {
+                        setDetalheModalVisible(false);
+                        navigation.navigate('LavagemForm', {
+                            mode: 'edit',
+                            lavagemData: selectedLavagem
+                        });
+                    }}
+                />
+            )}
 
+            {/* Modal de Confirmação para Exclusão */}
             <ConfirmationModal
                 visible={showDeleteConfirm}
                 title="Confirmar exclusão"
-                message="Tem certeza que deseja excluir esta lavagem?"
-                itemToDelete={`Lavagem #${selectedLavagem?.id}`}
+                message="Tem certeza que deseja excluir este registro de lavagem?"
+                itemToDelete={`Lavagem de ${selectedLavagem?.veiculo?.placa} em ${selectedLavagem?.data}`}
                 onCancel={() => setShowDeleteConfirm(false)}
                 onConfirm={() => {
                     if (selectedLavagem?.id) {
@@ -566,36 +771,258 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                 confirmText="Excluir"
                 iconName="delete-alert"
             />
-
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    thumbnailContainer: {
-        backgroundColor: customTheme.colors.surfaceVariant,
-        justifyContent: 'center',
-        alignItems: 'center',
+    veiculoInfoContainer: {
+        flex: 1,
+    },
+    tipoOutrosContainer: {
+        backgroundColor: customTheme.colors.tertiaryContainer || '#FFF3E0',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        alignSelf: 'flex-start',
+        marginTop: 2,
+    },
+    tipoOutrosText: {
+        fontSize: 10,
+        color: customTheme.colors.tertiary || '#FF9800',
+        fontWeight: '600',
+    },
+    safeArea: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+    },
+    scrollView: {
+        flex: 1,
+    },
+    container: {
+        padding: 16,
     },
     loadingContainer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+
+    // Estilos dos filtros
+    filterBar: {
+        backgroundColor: customTheme.colors.surfaceVariant,
+        paddingVertical: 12,
+        elevation: 2,
+    },
+    filterScrollContent: {
+        paddingHorizontal: 16,
+        gap: 8,
+    },
+    filterChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        backgroundColor: customTheme.colors.surface,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline,
+        marginRight: 8,
+        gap: 6,
+    },
+    filterChipActive: {
+        backgroundColor: customTheme.colors.primaryContainer,
+        borderColor: customTheme.colors.primary,
+    },
+    filterChipText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    filterChipTextActive: {
+        fontSize: 14,
+        color: customTheme.colors.primary,
+        fontWeight: '500',
+    },
+    clearFilterButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        backgroundColor: customTheme.colors.errorContainer,
+        borderRadius: 20,
+        gap: 6,
+    },
+    clearFilterText: {
+        fontSize: 14,
+        color: customTheme.colors.error,
+        fontWeight: '500',
+    },
+    clearFilterButtonEmpty: {
+        marginTop: 16,
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        backgroundColor: customTheme.colors.errorContainer,
+        borderRadius: 20,
+    },
+    clearFilterButtonEmptyText: {
+        fontSize: 14,
+        color: customTheme.colors.error,
+        fontWeight: '500',
+    },
+
+    // Estilos dos cards
+    card: {
+        marginBottom: 16,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#FFFFFF',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    cardGradient: {
+        height: 5,
+        width: '100%',
+    },
+    cardContent: {
+        padding: 16,
+        gap: 16,
+    },
+    headerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    tipoChip: {
+        paddingHorizontal: 8,
+        height: 28,
+    },
+
+    // Info Row
+    infoRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    veiculoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        flex: 1,
+    },
+    veiculoText: {
+        fontSize: 17,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+    },
+    dataHoraContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    dataText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurface,
+    },
+    horaText: {
+        fontSize: 12,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+
+    // Produtos
+    produtosContainer: {
+        gap: 8,
+    },
+    produtosTitle: {
+        fontSize: 14,
+        color: customTheme.colors.onSurface,
+        fontWeight: '500',
+    },
+    produtosRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    produtoChip: {
         backgroundColor: customTheme.colors.surfaceVariant,
     },
-    miniThumbnail: {
-        width: 40,
-        height: 40,
-        borderRadius: 10,
-        marginRight: 4,
+    produtoChipText: {
+        fontSize: 12,
+        color: customTheme.colors.onSurfaceVariant,
     },
+    produtoChipMais: {
+        backgroundColor: customTheme.colors.primaryContainer,
+    },
+
+    // Footer
+    footerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        borderTopWidth: 1,
+        borderTopColor: customTheme.colors.surfaceVariant,
+        paddingTop: 12,
+    },
+    fotosContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    fotosText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    thumbnailsContainer: {
+        flexDirection: 'row',
+        marginLeft: 8,
+        gap: 4,
+    },
+    thumbnail: {
+        width: 30,
+        height: 30,
+        borderRadius: 4,
+    },
+    moreThumbnails: {
+        width: 30,
+        height: 30,
+        borderRadius: 4,
+        backgroundColor: customTheme.colors.surfaceVariant,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    moreThumbnailsText: {
+        fontSize: 10,
+        color: customTheme.colors.onSurfaceVariant,
+        fontWeight: '600',
+    },
+    responsavelActionContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    responsavelContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    responsavelText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurface,
+    },
+    deleteButton: {
+        padding: 4,
+    },
+
+    // Load More
     loadMoreWrapper: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        paddingTop: 8,
+        paddingBottom: 24,
     },
     loadMoreButton: {
         flexDirection: 'row',
@@ -611,99 +1038,51 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500',
     },
-    card: {
-        marginBottom: 8,
-        elevation: 2,
-        borderRadius: 10,
-        overflow: 'hidden',
-    },
-    cardGradient: {
-        height: 4,
-        width: '100%',
-    },
-    cardContent: {
-        padding: 12,
-        borderRadius: 5,
-        gap: 8, // Espaçamento uniforme entre as linhas
-    },
-    headerRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+
+    // Estado vazio
+    emptyContainer: {
+        paddingVertical: 48,
         alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: customTheme.colors.surfaceVariant,
+        borderRadius: 12,
+        opacity: 0.9,
     },
-    headerRight: {
-        alignItems: 'flex-end',
-        gap: 4,
-    },
-    placa: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: customTheme.colors.onSurface,
-        flex: 1,
-        marginRight: 12,
-    },
-    tipoChip: {
-        paddingHorizontal: 8,
-    },
-    dataHora: {
-        fontSize: 12,
+    emptyTitle: {
+        marginTop: 16,
+        fontSize: 18,
+        fontWeight: '600',
         color: customTheme.colors.onSurfaceVariant,
     },
-    veiculoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    veiculoText: {
-        fontSize: 13,
-        color: customTheme.colors.onSurface,
-        flex: 1,
-    },
-    observacoesRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: 4,
-    },
-    observacoesText: {
-        fontSize: 12,
+    emptyText: {
+        marginTop: 8,
+        fontSize: 14,
         color: customTheme.colors.onSurfaceVariant,
-        flex: 1,
+        textAlign: 'center',
+        paddingHorizontal: 32,
     },
-    footerRow: {
+
+    // FAB
+    fab: {
+        position: 'absolute',
+        right: 16,
+        bottom: 16,
+        backgroundColor: customTheme.colors.primary,
+        borderRadius: 28,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-    },
-    responsavelContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        flex: 1,
-    },
-    responsavelText: {
-        fontSize: 13,
-        color: customTheme.colors.onSurface,
-        flex: 1,
-    },
-    actionButtons: {
-        flexDirection: 'row',
         gap: 8,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
     },
-    actionButton: {
-        padding: 4,
-    },
-    fotosRow: {
-        marginTop: 4,
-        marginBottom: 8,
-    },
-    safeArea: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-    },
-    scrollView: {
-        flex: 1,
-    },
-    container: {
-        padding: 16,
+    fabText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });

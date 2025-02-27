@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet, SafeAreaView, Dimensions, TouchableOpacity } from 'react-native';
-import { Surface, Text, TextInput, Button } from 'react-native-paper';
+import { Surface, Text, TextInput, Button, Chip } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { customTheme } from '../../../theme/theme';
 import { useUser } from '../../../contexts/userContext';
@@ -12,12 +12,16 @@ import Toast from 'react-native-toast-message';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 import PhotoGallery from './Components/PhotoGallery';
 import FullScreenImage from '../../../assets/components/FullScreenImage';
-import { EQUIPAMENTOS, PLACAS_VEICULOS } from './Components/lavagemTypes';
+import { EQUIPAMENTOS, PLACAS_VEICULOS, ProdutoEstoque, TIPOS_LAVAGEM } from './Components/lavagemTypes';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
+import SaveButton from '../../../assets/components/SaveButton';
+import PhotoGalleryEnhanced from './Components/PhotoGallery';
+import { ProductsContainer } from './Components/ProductSelection';
+import { Photo } from '../Logistica/rdo/Types/rdoTypes';
 
 const { width } = Dimensions.get('window');
 
@@ -27,10 +31,17 @@ interface DropdownRef {
 }
 
 type RootStackParamList = {
-    LavagemForm: { placa?: string; lavagem?: string, agendamentoId: string };
+    LavagemForm: {
+        placa?: string;
+        lavagem?: string;
+        agendamentoId?: string;
+        mode?: 'edit' | 'create';
+        lavagemData?: any;
+    };
 };
 
 type LavagemFormRouteProp = RouteProp<RootStackParamList, 'LavagemForm'>;
+
 
 interface LavagemFormInterface {
     navigation?: StackNavigationProp<RootStackParamList, 'LavagemForm'>;
@@ -38,14 +49,22 @@ interface LavagemFormInterface {
 }
 
 export default function LavagemForm({ navigation, route }: LavagemFormInterface) {
-    const { userInfo } = useUser(); // Usando o contexto do usuário
-    const { placa, lavagem, agendamentoId } = route?.params || {}; // Pegando os parâmetros corretamente
+    const { userInfo } = useUser();
+    const {
+        placa,
+        lavagem,
+        agendamentoId,
+        mode = 'create',
+        lavagemData
+    } = route?.params || {};
+
     const {
         produtos,
         forceSync,
         marcarAgendamentoComoConcluido
     } = useBackgroundSync();
 
+    const [isLoading, setIsLoading] = useState<boolean>(false);
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
@@ -57,18 +76,14 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
     const [formErrors, setFormErrors] = useState<string[]>([]);
     const [isVeiculoDisabled, setIsVeiculoDisabled] = useState(false);
 
-    const [photos, setPhotos] = useState<Array<{ uri: string; id: string }>>([]);
-    const [selectedPhoto, setSelectedPhoto] = useState<{ uri: string; id: string } | null>(null);
+    // Estados das fotos
+    const [photos, setPhotos] = useState<Photo[]>([]);
+    const [existingPhotos, setExistingPhotos] = useState<Photo[]>([]);
+    const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
     const [isFullScreenVisible, setIsFullScreenVisible] = useState(false);
 
     const [numeroEquipamento, setNumeroEquipamento] = useState('');
     const [showEquipmentNumber, setShowEquipmentNumber] = useState(false);
-
-    const [produtosSelecionados, setProdutosSelecionados] = useState<Array<{
-        produto: string;
-        quantidade: string;
-        id?: string;
-    }>>([]);
 
     const [customItems, setCustomItems] = useState<Array<{
         label: string;
@@ -78,30 +93,16 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         isCustom: boolean;
     }>>([]);
 
+    const [availableProducts, setAvailableProducts] = useState<ProdutoEstoque[]>(produtos);
+    const [selectedProducts, setSelectedProducts] = useState<ProdutoEstoque[]>([]);
+
+
     // Refs para abrir os dropdowns
     const lavagemRef = useRef<DropdownRef>(null);
     const veiculoRef = useRef<DropdownRef>(null);
 
     // Refs para os itens
     const [dropdownRefs, setDropdownRefs] = useState<Array<React.RefObject<any>>>([]);
-
-    const TIPOS_LAVAGEM = [
-        { label: 'Completa', value: 'completa', icon: 'local-car-wash' },
-        { label: 'Simples', value: 'simples', icon: 'local-car-wash' }
-    ];
-
-    const handleAddCustomItem = (searchValue: string) => {
-        const novoItem = {
-            label: searchValue.toUpperCase(),
-            value: searchValue.toUpperCase(),
-            icon: 'directions-car',
-            tipo: 'veiculo',
-            isCustom: false
-        };
-
-        setCustomItems(prev => [...prev, novoItem]);
-        handleSelectItem(novoItem);
-    };
 
     const handleSelectItem = (item: any) => {
         setVeiculoSelecionado(item.value);
@@ -116,6 +117,24 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         }
     };
 
+    // Substitua a função handleAddCustomItem existente por esta versão
+    const handleAddCustomItem = (searchValue: string) => {
+        // Determina o tipo baseado na placa
+        const tipoDetectado = determinarTipoVeiculo(searchValue.toUpperCase());
+
+        const novoItem = {
+            label: `${searchValue.toUpperCase()} - ${tipoDetectado === 'veiculo' ? 'Veículo' : 'Outro'}`,
+            value: searchValue.toUpperCase(),
+            icon: tipoDetectado === 'veiculo' ? 'directions-car' : 'category',
+            tipo: tipoDetectado,
+            isCustom: false
+        };
+
+        setCustomItems(prev => [...prev, novoItem]);
+        handleSelectItem(novoItem);
+    };
+
+    // Modifique a função formatarDadosDropdown para incluir diferentes ícones
     const formatarDadosDropdown = () => {
         const veiculos = PLACAS_VEICULOS.map(item => ({
             label: `${item.value} - ${item.tipo}`,
@@ -133,7 +152,13 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
             isCustom: false,
         }));
 
-        const dados = [...veiculos, ...equipamentos, ...customItems];
+        const outros = customItems.map(item => ({
+            ...item,
+            icon: item.tipo === 'veiculo' ? 'directions-car' :
+                item.tipo === 'equipamento' ? 'build' : 'category'
+        }));
+
+        const dados = [...veiculos, ...equipamentos, ...outros];
 
         // Adiciona opção de novo item apenas se houver texto de busca
         if (searchText && !dados.some(item =>
@@ -144,13 +169,38 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                 label: `Adicionar "${searchText.toUpperCase()}"`,
                 value: searchText.toUpperCase(),
                 icon: 'add-circle',
-                tipo: 'veiculo',
+                tipo: determinarTipoVeiculo(searchText.toUpperCase()),
                 isCustom: true
             });
         }
 
         return dados;
     };
+
+    // Função auxiliar para determinar o tipo de veículo pela placa
+    function determinarTipoVeiculo(placa: string): string {
+        // Padrão tradicional de placas brasileiras (ABC-1234 ou ABC1D23)
+        const placaRegexAntiga = /^[A-Z]{3}-?\d{4}$/;
+        const placaRegexMercosul = /^[A-Z]{3}\d[A-Z]\d{2}$/;
+
+        // Se segue o formato de uma placa, é um veículo
+        if (placaRegexAntiga.test(placa) || placaRegexMercosul.test(placa)) {
+            return 'veiculo';
+        }
+
+        // Checa se contém traço (possível indicativo de placa personalizada)
+        if (placa.includes('-')) {
+            // Se tem traço mas não segue o formato padrão, verificamos o comprimento
+            const partes = placa.split('-');
+            // Se tem formato semelhante a placa (parte1-parte2 onde parte1 tem 3 chars e parte2 tem 4)
+            if (partes.length === 2 && partes[0].length === 3 && partes[1].length === 4) {
+                return 'veiculo';
+            }
+        }
+
+        // Se não segue nenhum formato de placa, é classificado como "outros"
+        return 'outros';
+    }
 
     const handleSearchTextChange = (text: string) => {
         setSearchText(text);
@@ -165,8 +215,6 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 
     // Efeito para definir o responsável quando o userInfo estiver disponível
     useEffect(() => {
-        console.log(lavagem);
-        console.log(placa);
 
         if (userInfo) {
             setFormData(prev => ({
@@ -210,6 +258,126 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         }
     }, [userInfo, placa, lavagem]);
 
+    // Efeito para carregar dados de edição, quando disponíveis
+    useEffect(() => {
+        if (mode === 'edit' && lavagemData) {
+            console.log('Modo edição: carregando dados existentes');
+
+            // Preencher responsável
+            setFormData(prev => ({
+                ...prev,
+                responsavel: lavagemData.responsavel || '',
+                observacoes: lavagemData.observacoes || ''
+            }));
+
+            // Preencher data e hora
+            if (lavagemData.data && lavagemData.hora) {
+                const [dia, mes, ano] = lavagemData.data.split('/').map(Number);
+                const [hora, minutos] = lavagemData.hora.split(':').map(Number);
+
+                if (!isNaN(dia) && !isNaN(mes) && !isNaN(ano) && !isNaN(hora) && !isNaN(minutos)) {
+                    const dataHora = new Date(ano, mes - 1, dia, hora, minutos);
+                    setSelectedDate(dataHora);
+                }
+            }
+
+            // Preencher veículo
+            if (lavagemData.veiculo) {
+                if (lavagemData.veiculo.placa) {
+                    setVeiculoSelecionado(lavagemData.veiculo.placa);
+                    setTipoVeiculo(lavagemData.veiculo.tipo || 'veiculo');
+                    setIsVeiculoDisabled(true);
+
+                    // Verificar se é equipamento
+                    if (lavagemData.veiculo.tipo === 'equipamento') {
+                        setShowEquipmentNumber(true);
+                        setNumeroEquipamento(lavagemData.veiculo.numeroEquipamento || '');
+                    }
+                }
+                // Compatibilidade com formato antigo
+                else if (lavagemData.placaVeiculo) {
+                    setVeiculoSelecionado(lavagemData.placaVeiculo);
+                    setTipoVeiculo('veiculo');
+                    setIsVeiculoDisabled(true);
+                }
+            }
+
+            // Preencher tipo de lavagem
+            if (lavagemData.tipoLavagem) {
+                setTipoLavagemSelecionado(lavagemData.tipoLavagem);
+                setFormData(prev => ({
+                    ...prev,
+                    tipoLavagem: lavagemData.tipoLavagem
+                }));
+            }
+
+            // Preencher produtos
+            if (lavagemData.produtos && Array.isArray(lavagemData.produtos)) {
+                // Processar produtos do formato novo
+                if (lavagemData.produtos.some((p: { nome?: string }) => p.nome)) {
+                    const produtos: Array<{ produto: string; quantidade: string }> = lavagemData.produtos
+                        .filter((p: { nome?: string; quantidade?: number }) => p.nome && !isNaN(p.quantidade as number))
+                        .map((p: { nome: string; quantidade: number }) => ({
+                            produto: p.nome,
+                            quantidade: p.quantidade.toString()
+                        }));
+
+                    const formattedProducts: ProdutoEstoque[] = produtos.map(p => ({
+                        ...p,
+                        nome: p.produto,
+                        quantidadeMinima: '',
+                        unidadeMedida: 'litro',
+                        photoUrl: '',
+                        createdAt: new Date().toISOString(), // Add createdAt property
+                        updatedAt: new Date().toISOString()  // Add updatedAt property
+                    }));
+                    setSelectedProducts(formattedProducts);
+                    setDropdownRefs(Array(produtos.length).fill(0).map(() => React.createRef()));
+                }
+                // Processar produtos do formato antigo
+                else if (lavagemData.produtos.some((p: { produto?: string }) => p.produto)) {
+                    const produtos: Array<{ produto: string; quantidade: string }> = lavagemData.produtos
+                        .filter((p: { produto?: string; quantidade?: number }) => p.produto && p.quantidade)
+                        .map((p: { produto: string; quantidade: number }) => ({
+                            produto: p.produto,
+                            quantidade: p.quantidade.toString()
+                        }));
+
+                    const formattedProducts: ProdutoEstoque[] = produtos.map(p => ({
+                        ...p,
+                        nome: p.produto,
+                        quantidadeMinima: '',
+                        unidadeMedida: 'litro',
+                        photoUrl: '',
+                        createdAt: new Date().toISOString(), // Add createdAt property
+                        updatedAt: new Date().toISOString()  // Add updatedAt property
+                    }));
+                    setSelectedProducts(formattedProducts);
+                    setDropdownRefs(Array(produtos.length).fill(0).map(() => React.createRef()));
+                }
+            }
+
+            // Preencher fotos existentes
+            if (mode === 'edit' && lavagemData?.fotos) {
+                interface FotoProcessada {
+                    url: string;
+                    id: string;
+                    timestamp: number;
+                    path: string;
+                }
+
+                const fotosProcessadas: FotoProcessada[] = lavagemData.fotos.map((foto: any) => ({
+                    url: foto.url,
+                    id: foto.timestamp?.toString() || Date.now().toString(),
+                    timestamp: foto.timestamp || Date.now(),
+                    path: foto.path || ''
+                }));
+
+                setExistingPhotos(fotosProcessadas);
+            }
+        }
+    }, [mode, lavagemData])
+
     const validateForm = () => {
         const errors: string[] = [];
 
@@ -225,7 +393,6 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 
         // Validação do número do equipamento
         if (tipoVeiculo === 'equipamento' && !numeroEquipamento) {
-            console.log(numeroEquipamento)
             errors.push("Informe o número do equipamento");
         }
 
@@ -235,14 +402,28 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         }
 
         // Validação dos produtos
-        if (produtosSelecionados.length > 0) {
-            const produtosInvalidos = produtosSelecionados.some(
-                p => (p.produto && (!p.quantidade || p.quantidade === '0')) || // Se tem produto, precisa ter quantidade
-                    (!p.produto && p.quantidade) // Se tem quantidade, precisa ter produto
+        if (selectedProducts.length > 0) {
+            // Verificar produtos incompletos (com nome mas sem quantidade ou vice-versa)
+            const produtosIncompletos = selectedProducts.filter(
+                p => (p.nome && (!p.quantidade || p.quantidade === '0')) ||
+                    (!p.nome && p.quantidade)
             );
 
-            if (produtosInvalidos) {
-                errors.push("Preencha a quantidade para os produtos selecionados");
+            // Verificar produtos vazios (sem nome e sem quantidade)
+            const produtosVazios = selectedProducts.filter(
+                p => !p.nome && (!p.quantidade || p.quantidade === '0')
+            );
+
+            // Se tiver produtos incompletos, mostrar erro
+            if (produtosIncompletos.length > 0) {
+                errors.push("Preencha nome e quantidade para todos os produtos adicionados");
+            }
+
+            // Remover produtos vazios da lista antes de salvar
+            if (produtosVazios.length > 0) {
+                setSelectedProducts(selectedProducts.filter(
+                    p => p.nome || (p.quantidade && p.quantidade !== '0')
+                ));
             }
         }
 
@@ -252,54 +433,62 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 
     // TODO quando offline, apos salvar localmente, sair do formulario
     const handleSave = async () => {
-        // Primeiro, valide o formulário
         if (!validateForm()) return;
+        setIsLoading(true);
 
         try {
-            // Mostrar toast de carregamento inicial
-            showGlobalToast('info', 'Aguarde', 'Fazendo upload das fotos...', 15000);
+            let fotosUpload = [...existingPhotos];
 
-            // Upload das fotos para o Firebase Storage
-            const uploadPromises = photos.map(async (photo) => {
-                try {
-                    const timestamp = Date.now();
-                    const random = Math.random().toString(36).substring(7);
-                    const filename = `lavagens/${timestamp}_${random}.jpg`;
-                    const reference = storage().ref(filename);
+            if (photos.length > 0) {
+                showGlobalToast('info', 'Aguarde', 'Fazendo upload das fotos...', 15000);
+                const uploadPromises = photos.map(async (photo) => {
+                    try {
+                        const timestamp = Date.now();
+                        const random = Math.random().toString(36).substring(7);
+                        const filename = `lavagens/${timestamp}_${random}.jpg`;
+                        const reference = storage().ref(filename);
+                        const response = await fetch(photo.uri || '');
+                        const blob = await response.blob();
+                        await reference.put(blob);
+                        const url = await reference.getDownloadURL();
+                        return { url, timestamp, path: filename };
+                    } catch (error) {
+                        console.error('Erro no upload da foto:', error);
+                        throw new Error('Falha no upload da foto');
+                    }
+                });
 
-                    // Converter URI para blob
-                    const response = await fetch(photo.uri);
-                    const blob = await response.blob();
+                const novasFotos = await Promise.all(uploadPromises);
+                fotosUpload = [...fotosUpload, ...novasFotos.map(foto => ({ ...foto, id: foto.timestamp.toString() }))];
+            }
 
-                    // Fazer upload do blob
-                    await reference.put(blob);
-
-                    // Retornar a URL do arquivo
-                    const url = await reference.getDownloadURL();
-                    return {
-                        url,
-                        timestamp,
-                        path: filename
-                    };
-                } catch (error) {
-                    console.error('Erro no upload da foto:', error);
-                    throw new Error('Falha no upload da foto');
-                }
-            });
-
-            // Aguardar todos os uploads terminarem
-            const fotosUpload = await Promise.all(uploadPromises);
-
-            // Atualizar toast para próxima etapa
             showGlobalToast('info', 'Aguarde', 'Atualizando estoque de produtos...', 2000);
 
+            // Se for uma edição, buscar os produtos usados anteriormente
+            let produtosAnteriores = [];
+            if (mode === 'edit' && lavagemData?.produtos) {
+                produtosAnteriores = lavagemData.produtos;
+            }
+
+            // Criar um mapa dos produtos anteriores
+            const produtosAnterioresMap: { [key: string]: number } = {};
+            produtosAnteriores.forEach((prod: { nome: string; quantidade: number }) => {
+                (produtosAnterioresMap as any)[prod.nome] = prod.quantidade;
+            });
+
             // Atualizar estoque dos produtos
-            for (const produtoSelecionado of produtosSelecionados) {
-                const produtoEstoque = produtos.find(p => p.nome === produtoSelecionado.produto);
+            for (const produtoSelecionado of selectedProducts) {
+                const produtoEstoque = produtos.find(p => p.nome === produtoSelecionado.nome);
 
                 if (produtoEstoque) {
                     const quantidadeAtual = parseInt(produtoEstoque.quantidade);
                     const quantidadeUsada = parseInt(produtoSelecionado.quantidade);
+
+                    // Se for administrador, não altera o estoque
+                    if (userInfo?.cargo?.toLowerCase() === 'administrador') {
+                        continue;
+                    }
+
                     const novaQuantidade = quantidadeAtual - quantidadeUsada;
 
                     if (novaQuantidade < 0) {
@@ -317,13 +506,10 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                 }
             }
 
-            // Forçar sincronização dos produtos após as atualizações
             await forceSync('produtos');
 
-            // Mostrar toast de salvamento
-            showGlobalToast('info', 'Aguarde', 'Salvando informações da lavagem...', 2000);
+            showGlobalToast('info', 'Aguarde', mode === 'edit' ? 'Atualizando informações da lavagem...' : 'Salvando informações da lavagem...', 2000);
 
-            // Preparar dados completos da lavagem
             const registroLavagem = {
                 responsavel: formData.responsavel,
                 data: formatDate(selectedDate),
@@ -334,59 +520,64 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                     numeroEquipamento: tipoVeiculo === 'equipamento' ? numeroEquipamento : null
                 },
                 tipoLavagem: tipoLavagemSelecionado,
-                produtos: produtosSelecionados.map(p => ({
-                    nome: p.produto,
+                produtos: selectedProducts.map(p => ({
+                    nome: p.nome,
                     quantidade: parseInt(p.quantidade)
                 })),
-                fotos: fotosUpload.map(foto => ({
-                    url: foto.url,
-                    timestamp: foto.timestamp,
-                    path: foto.path
-                })),
+                fotos: fotosUpload,
                 observacoes: formData.observacoes,
                 status: "concluido",
+                updatedAt: firestore.Timestamp.now(),
                 createdAt: firestore.Timestamp.now(),
                 createdBy: userInfo?.id || null,
                 agendamentoId: agendamentoId || null
             };
 
-            // Criar ID customizado com prefixo e timestamp
-            const timestamp = Date.now();
-            const customId = userInfo?.cargo.toLowerCase() === 'administrador'
-                ? `0_ADM_${timestamp}`
-                : timestamp.toString();
+            console.log("Salvo como um:", registroLavagem.veiculo.tipo)
 
-            // Salvar no Firestore com ID customizado
-            await firestore()
-                .collection('registroLavagens')
-                .doc(customId)
-                .set(registroLavagem);
-
-            // Se tiver um agendamento associado, marcar como concluído
-            if (agendamentoId && marcarAgendamentoComoConcluido) {
-                await marcarAgendamentoComoConcluido(agendamentoId);
+            if (mode === 'create') {
+                registroLavagem.createdAt = firestore.Timestamp.now();
+                registroLavagem.createdBy = userInfo?.id || null;
+                registroLavagem.agendamentoId = agendamentoId || null;
             }
 
-            // Navegação de volta e toast de sucesso
+            if (mode === 'edit' && lavagemData?.id) {
+                await firestore()
+                    .collection('registroLavagens')
+                    .doc(lavagemData.id)
+                    .update(registroLavagem);
+                showGlobalToast('success', 'Sucesso', 'Lavagem atualizada com sucesso', 4000);
+            } else {
+                const timestamp = Date.now();
+                const customId = userInfo?.cargo.toLowerCase() === 'administrador'
+                    ? `0_ADM_${timestamp}`
+                    : timestamp.toString();
+
+                await firestore()
+                    .collection('registroLavagens')
+                    .doc(customId)
+                    .set(registroLavagem);
+
+                if (agendamentoId && marcarAgendamentoComoConcluido) {
+                    await marcarAgendamentoComoConcluido(agendamentoId);
+                }
+
+                showGlobalToast('success', 'Sucesso', 'Lavagem registrada com sucesso', 4000);
+            }
+
             navigation?.goBack();
-            showGlobalToast('success', 'Sucesso', 'Lavagem registrada com sucesso', 4000);
-
         } catch (error: any) {
-            console.error('Erro ao finalizar lavagem:', error);
-
-            // Toast de erro específico baseado no tipo de erro
+            console.error('Erro ao processar lavagem:', error);
             const errorMessage = error.message === 'Falha no upload da foto'
                 ? 'Erro no upload das fotos. Verifique sua conexão.'
                 : error.message || 'Não foi possível finalizar a lavagem';
 
-            showGlobalToast(
-                'error',
-                'Erro',
-                errorMessage,
-                4000
-            );
+            showGlobalToast('error', 'Erro', errorMessage, 4000);
+        } finally {
+            setIsLoading(false);
         }
     };
+
 
     const handleDateChange = (event: any, date?: Date) => {
         setShowDatePicker(false);
@@ -410,52 +601,6 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         }
     };
 
-    // Funções de controle
-    const adicionarProduto = () => {
-        setProdutosSelecionados([...produtosSelecionados, { produto: '', quantidade: '' }]);
-        // Adiciona uma nova ref ao array de refs
-        setDropdownRefs(refs => [...refs, React.createRef()]);
-    };
-
-    // Modifique a função removerProduto para também remover a ref
-    const removerProduto = (index: number) => {
-        const novosProdutos = produtosSelecionados.filter((_, idx) => idx !== index);
-        setProdutosSelecionados(novosProdutos);
-
-        // Remove a ref correspondente
-        const novasRefs = dropdownRefs.filter((_, idx) => idx !== index);
-        setDropdownRefs(novasRefs);
-    };
-
-    // Modifique a função atualizarProduto para validar com o estoque real
-    const atualizarProduto = async (index: number, atualizacoes: Partial<{ produto: string; quantidade: string }>) => {
-        const novosProdutos = [...produtosSelecionados];
-        const produtoAtual = produtos.find(p => p.nome === atualizacoes.produto || p.nome === novosProdutos[index].produto);
-
-        if (produtoAtual && atualizacoes.quantidade) {
-            const quantidadeEstoque = parseInt(produtoAtual.quantidade);
-            let quantidadeDigitada = parseInt(atualizacoes.quantidade) || 0;
-            console.log("Quantidade maxima selecionada")
-
-            if (quantidadeDigitada > quantidadeEstoque) {
-                quantidadeDigitada = quantidadeEstoque;
-                atualizacoes.quantidade = quantidadeEstoque.toString();
-                showGlobalToast(
-                    'info',
-                    'Quantidade Excedida',
-                    `Quantidade máxima disponível: ${quantidadeEstoque}`,
-                    3000
-                );
-                console.log("Quantidade maxima alcançada")
-            }
-        }
-
-        novosProdutos[index] = {
-            ...novosProdutos[index],
-            ...atualizacoes
-        };
-        setProdutosSelecionados(novosProdutos);
-    };
 
     // Função para formatar a data no formato brasileiro
     const formatDate = (date: Date) => {
@@ -470,83 +615,78 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         });
     };
 
-    // Modifique a função selectImage
-    const selectImage = () => {
-        const options: any = {
-            mediaType: 'photo',
-            quality: 1,
-        };
-
-        launchImageLibrary(options, (response: any) => {
-            if (response.didCancel) {
-                console.log('Seleção de imagem cancelada');
-            } else if (response.error) {
-                console.log('Erro ImagePicker:', response.error);
-                showGlobalToast(
-                    'error',
-                    'Não foi possível selecionar a imagem',
-                    'Tente novamente',
-                    4000
-                );
-            } else if (response.assets && response.assets.length > 0) {
-                const newPhotoUri = response.assets[0].uri;
-                // Criando um objeto com uri e id único
-                const newPhoto = {
-                    uri: newPhotoUri,
-                    id: Date.now().toString(), // Usando timestamp como id único
-                };
-                setPhotos(prevPhotos => [...prevPhotos, newPhoto]);
-            }
-        });
-    };
-
-    const LaunchCustomCamera = () => {
-        const options: any = {
-            mediaType: 'photo',
-            quality: 1,
-        };
-
-        launchCamera(options, (response: any) => {
-            if (response.didCancel) {
-                console.log('Captura de foto cancelada');
-            } else if (response.error) {
-                console.log('Erro Camera:', response.error);
-                Toast.show({
-                    type: 'error',
-                    text1: 'Erro',
-                    text2: 'Não foi possível capturar a foto',
-                });
-            } else if (response.assets && response.assets.length > 0) {
-                const newPhotoUri = response.assets[0].uri;
-                // Criando um objeto com uri e id único
-                const newPhoto = {
-                    uri: newPhotoUri,
-                    id: Date.now().toString(), // Usando timestamp como id único
-                };
-                setPhotos(prevPhotos => [...prevPhotos, newPhoto]);
-            }
-        });
+    const handleAddPhoto = (newPhoto: Photo) => {
+        setPhotos(prev => [...prev, newPhoto]);
     };
 
     const handleDeletePhoto = (photoId: string) => {
-        setPhotos(currentPhotos => currentPhotos.filter(photo => photo.id !== photoId));
+        // Verificar se é uma foto existente
+        const isExistingPhoto = existingPhotos.some(foto =>
+            (foto.id === photoId) || (foto.timestamp?.toString() === photoId)
+        );
+
+        if (isExistingPhoto) {
+            setExistingPhotos(prev => prev.filter(foto =>
+                (foto.id !== photoId) && (foto.timestamp?.toString() !== photoId)
+            ));
+        } else {
+            // É uma foto nova
+            setPhotos(prev => prev.filter(foto => foto.id !== photoId));
+        }
     };
 
-    // Atualize a função handlePhotoPress
-    const handlePhotoPress = (photo: { uri: string; id: string }) => {
-        setSelectedPhoto(photo);
+    const handlePhotoPress = (photo: Photo) => {
+        // Normalizar para o formato esperado pelo FullScreenImage
+        const photoForViewer = {
+            uri: photo.uri || photo.url || '', // Garante que uri é uma string
+            id: photo.id || photo.timestamp?.toString() || Date.now().toString()
+        };
+
+        setSelectedPhoto(photoForViewer);
         setIsFullScreenVisible(true);
     };
 
-    // Adicione a função para fechar o modal
     const handleCloseFullScreen = () => {
         setIsFullScreenVisible(false);
         setSelectedPhoto(null);
     };
 
+    // Produtos
+    const handleAddProduct = (ProdutoEstoque: ProdutoEstoque) => {
+        setSelectedProducts(prev => [...prev, ProdutoEstoque]);
+        setAvailableProducts(prev => prev.filter(p => p.id !== ProdutoEstoque.id)); // Comparar por ID evita conflitos
+    };
+
+    const handleRemoveProduct = (index: number) => {
+        setSelectedProducts(prev => {
+            const removedProduct = prev[index];
+            setAvailableProducts(prev => [...prev, removedProduct]); // Adiciona de volta
+            return prev.filter((_, idx) => idx !== index);
+        });
+    };
+
+    const handleUpdateProduct = (index: number, updatedProduct: ProdutoEstoque) => {
+        setSelectedProducts(prev => {
+            const newProducts = [...prev];
+            const oldProduct = newProducts[index];
+
+            newProducts[index] = updatedProduct;
+
+            setAvailableProducts(prev => {
+                let updatedAvailable = prev.filter(p => p.id !== updatedProduct.id); // Remover o novo caso já esteja
+                if (!prev.some(p => p.id === oldProduct.id)) {
+                    updatedAvailable = [...updatedAvailable, oldProduct]; // Adicionar o antigo de volta
+                }
+                return updatedAvailable;
+            });
+
+            return newProducts;
+        });
+    };
+
     // Useefects
     useEffect(() => {
-        if (dropdownRefs.length === 0 && produtosSelecionados.length > 0) {
+        if (dropdownRefs.length === 0 && selectedProducts.length > 0) {
             setDropdownRefs([React.createRef()]);
         }
     }, []);
@@ -557,7 +697,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         formData,
         veiculoSelecionado,
         tipoLavagemSelecionado,
-        produtosSelecionados,
+        selectedProducts,
         numeroEquipamento,
         photos
     ]);
@@ -574,7 +714,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 
             <FullScreenImage
                 visible={isFullScreenVisible}
-                photo={selectedPhoto}
+                photo={selectedPhoto?.uri ? selectedPhoto : null}
                 onClose={handleCloseFullScreen}
             />
 
@@ -726,7 +866,10 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                                 renderLeftIcon={() => (
                                     <Icon
                                         style={styles.dropdownIcon}
-                                        name={tipoVeiculo === 'equipamento' ? 'build' : 'directions-car'}
+                                        name={
+                                            tipoVeiculo === 'equipamento' ? 'build' :
+                                                tipoVeiculo === 'veiculo' ? 'directions-car' : 'category'
+                                        }
                                         size={20}
                                         color={customTheme.colors.primary}
                                     />
@@ -739,9 +882,12 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                                         <Icon
                                             name={item.icon}
                                             size={20}
-                                            color={item.isCustom ? customTheme.colors.primary :
-                                                item.tipo === 'equipamento' ? customTheme.colors.secondary :
-                                                    customTheme.colors.primary}
+                                            color={
+                                                item.isCustom ? customTheme.colors.primary :
+                                                    item.tipo === 'equipamento' ? customTheme.colors.secondary :
+                                                        item.tipo === 'veiculo' ? customTheme.colors.primary :
+                                                            customTheme.colors.tertiary
+                                            }
                                         />
                                         <Text style={[
                                             styles.dropdownLabel,
@@ -749,9 +895,18 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                                         ]}>
                                             {item.label}
                                         </Text>
+                                        {item.tipo === 'outros' && !item.isCustom && (
+                                            <Chip
+                                                style={styles.chipOutros}
+                                                textStyle={styles.chipTextOutros}
+                                            >
+                                                Outros
+                                            </Chip>
+                                        )}
                                     </View>
                                 )}
                             />
+
                         </TouchableOpacity>
 
                         {/* Novo input condicional para número do equipamento */}
@@ -835,177 +990,23 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                     </View>
 
                     {/* Seção de Produtos */}
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Icon
-                                name="local-pharmacy"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                            <Text variant="titleMedium" style={styles.sectionTitle}>
-                                Produtos Utilizados
-                            </Text>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            {produtosSelecionados.map((item, index) => (
-                                <View key={`produto-${index}`} style={styles.produtoRow}>
-                                    <View style={styles.produtoMain}>
-                                        <TouchableOpacity
-                                            style={styles.dropdownContainer}
-                                            onPress={() => dropdownRefs[index]?.current?.open()}
-                                        >
-                                            <Dropdown
-                                                ref={dropdownRefs[index]}
-                                                style={[styles.dropdown, { borderWidth: 0 }]}
-                                                placeholderStyle={styles.placeholderStyle}
-                                                selectedTextStyle={styles.selectedTextStyle}
-                                                iconStyle={styles.iconStyle}
-                                                data={produtos.filter(p =>
-                                                    !produtosSelecionados.some(ps =>
-                                                        ps.produto === p.nome && ps !== item
-                                                    )
-                                                )}
-                                                labelField="nome"
-                                                valueField="nome"
-                                                placeholder="Selecione o produto"
-                                                value={item.produto}
-                                                onChange={value => {
-                                                    atualizarProduto(index, {
-                                                        produto: value.nome,
-                                                        quantidade: '1'
-                                                    });
-                                                }}
-                                                renderLeftIcon={() => (
-                                                    <Icon
-                                                        name="inventory"
-                                                        size={20}
-                                                        color={customTheme.colors.primary}
-                                                        style={styles.dropdownIcon}
-                                                    />
-                                                )}
-                                                renderItem={item => (
-                                                    <View style={styles.dropdownItem}>
-                                                        <Icon
-                                                            name="inventory"
-                                                            size={20}
-                                                            color={customTheme.colors.primary}
-                                                        />
-                                                        <Text style={styles.dropdownLabel}>
-                                                            {item.nome} {`(${item.quantidade})`}
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                            />
-                                        </TouchableOpacity>
-
-                                        <TextInput
-                                            mode="outlined"
-                                            placeholder="Qtd"
-                                            value={item.quantidade}
-                                            onChangeText={value => {
-                                                const produtoEstoque = produtos.find(p => p.nome === item.produto);
-                                                if (produtoEstoque) {
-                                                    const quantidadeEstoque = parseInt(produtoEstoque.quantidade);
-                                                    let quantidadeDigitada = parseInt(value) || 0;
-
-                                                    if (quantidadeDigitada > quantidadeEstoque) {
-                                                        quantidadeDigitada = quantidadeEstoque;
-                                                        value = quantidadeEstoque.toString();
-                                                    }
-                                                }
-                                                atualizarProduto(index, { quantidade: value });
-                                            }}
-                                            keyboardType="numeric"
-                                            style={styles.quantidadeInput}
-                                            left={<TextInput.Icon
-                                                icon={() => (
-                                                    <Icon
-                                                        name="123"
-                                                        size={24}
-                                                        color={customTheme.colors.primary}
-                                                    />
-                                                )}
-                                            />}
-                                        />
-
-                                        <TouchableOpacity
-                                            onPress={() => removerProduto(index)}
-                                            style={styles.removeButton}
-                                        >
-                                            <Icon name="delete-outline" size={24} color={customTheme.colors.error} />
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            ))}
-
-                            <Button
-                                mode="outlined"
-                                onPress={adicionarProduto}
-                                icon="plus"
-                                style={styles.addButton}
-                            >
-                                Adicionar Produto
-                            </Button>
-                        </View>
-                    </View>
+                    <ProductsContainer
+                        produtos={availableProducts.map(ProdutoEstoque => ({ ...ProdutoEstoque, produto: ProdutoEstoque.nome }))}
+                        selectedProducts={selectedProducts}
+                        onAddProduct={handleAddProduct}
+                        onRemoveProduct={handleRemoveProduct}
+                        onUpdateProduct={handleUpdateProduct}
+                    />
 
                     {/* Seção de Fotos */}
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Icon
-                                name="camera-alt"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                            <Text variant="titleMedium" style={styles.sectionTitle}>
-                                Registro Fotográfico
-                            </Text>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <View style={styles.photoButtonsContainer}>
-                                <TouchableOpacity
-                                    style={styles.dropdownContainer}
-                                    activeOpacity={0.7}
-                                    onPress={LaunchCustomCamera}
-                                >
-                                    <View style={styles.photoButton}>
-                                        <Icon
-                                            name="camera-alt"
-                                            size={24}
-                                            color={customTheme.colors.primary}
-                                        />
-                                        <Text style={styles.photoButtonText}>Tirar Foto</Text>
-                                    </View>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.dropdownContainer}
-                                    activeOpacity={0.7}
-                                    onPress={selectImage}
-                                >
-                                    <View style={styles.photoButton}>
-                                        <Icon
-                                            name="photo-library"
-                                            size={24}
-                                            color={customTheme.colors.primary}
-                                        />
-                                        <Text style={styles.photoButtonText}>Galeria</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* Componente de Galeria */}
-                            <View style={styles.photoGalleryContainer}>
-                                <PhotoGallery
-                                    photos={photos}
-                                    onDeletePhoto={handleDeletePhoto}
-                                    onPhotoPress={handlePhotoPress}
-                                />
-                            </View>
-                        </View>
-                    </View>
+                    <PhotoGalleryEnhanced
+                        photos={photos}
+                        existingPhotos={existingPhotos}
+                        onAddPhoto={handleAddPhoto}
+                        onDeletePhoto={handleDeletePhoto}
+                        onPhotoPress={handlePhotoPress}
+                        sectionTitle="Registro Fotográfico"
+                    />
 
                     {/* Observações */}
                     <View style={styles.section}>
@@ -1055,17 +1056,14 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                                 ))}
                             </View>
                         )}
-                        <Button
-                            mode="contained"
-                            disabled={formErrors.length > 0}
+                        <SaveButton
                             onPress={handleSave}
-                            style={styles.button}
-                            contentStyle={styles.buttonContent}
-                        >
-                            Salvar Lavagem
-                        </Button>
+                            text="Salvar Lavagem"
+                            iconName="content-save"
+                            disabled={formErrors.length > 0}
+                            loading={isLoading}
+                        />
                     </View>
-
                 </Surface>
             </ScrollView>
 
@@ -1074,6 +1072,15 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
 }
 
 const styles = StyleSheet.create({
+    chipOutros: {
+        backgroundColor: customTheme.colors.tertiaryContainer,
+        height: 24,
+        marginLeft: 8,
+    },
+    chipTextOutros: {
+        fontSize: 12,
+        color: customTheme.colors.tertiary,
+    },
     equipmentNumberInput: {
         backgroundColor: '#FFFFFF',
         marginTop: 8,
@@ -1112,59 +1119,12 @@ const styles = StyleSheet.create({
         textAlignVertical: 'top',
         paddingTop: 10,  // Adiciona um padding superior para melhor aparência
     },
-    photoButtonsContainer: {
-        flexDirection: 'row',
-        gap: 16,
-        marginBottom: 16,
-    },
-    photoButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
-        padding: 16,
-        height: 56,
-    },
-    photoButtonText: {
-        fontSize: 16,
-        color: customTheme.colors.primary,
-        fontWeight: '500',
-    },
-    photoGalleryContainer: {
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderStyle: 'dashed',
-        padding: 16,
-        minHeight: 200,
-        backgroundColor: '#FFFFFF',
-    },
-    produtoRow: {
-        marginBottom: 16,
-    },
-    produtoMain: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
     dropdownContainer: {
         flex: 2,
         borderWidth: 1,
         borderColor: customTheme.colors.outline,
         borderRadius: 8,
         backgroundColor: '#FFFFFF',
-    },
-    quantidadeInput: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-    },
-    removeButton: {
-        padding: 8,
-    },
-    addButton: {
-        marginTop: 8,
-        borderColor: customTheme.colors.primary,
-        borderStyle: 'dashed',
     },
     dropdown: {
         height: 56,
@@ -1267,14 +1227,6 @@ const styles = StyleSheet.create({
     buttonContainer: {
         marginTop: 32,
         marginBottom: 24,
-    },
-    button: {
-        borderRadius: 8,
-        elevation: 0, // Remove sombra
-    },
-    buttonContent: {
-        height: 56, // Aumentado para melhor toque
-        paddingHorizontal: 24,
     },
     formContainer: {
         padding: 16,

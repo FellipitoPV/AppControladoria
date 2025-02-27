@@ -16,6 +16,7 @@ const Occurrences: React.FC<OccurrencesProps> = ({
     setOcorrencias
 }) => {
     const [dropdownRefs, setDropdownRefs] = useState<React.RefObject<DropdownRef>[]>([]);
+    const [tipoValues, setTipoValues] = useState<Record<number, string>>({});
 
     useEffect(() => {
         // Initialize dropdown refs when occurrences change
@@ -89,10 +90,14 @@ const Occurrences: React.FC<OccurrencesProps> = ({
                                     labelField="label"
                                     valueField="value"
                                     placeholder="Tipo de Ocorrência"
-                                    value={item.tipo}
+                                    value={tipoValues[index]}
                                     onChange={value => {
+                                        // Atualiza o estado de controle do dropdown
+                                        setTipoValues(prev => ({ ...prev, [index]: value.value }));
+
+                                        // Mantém a lógica atual de salvar o label no estado principal
                                         atualizarOcorrencia(index, {
-                                            tipo: value.value
+                                            tipo: value.label
                                         });
                                     }}
                                     renderLeftIcon={() => (

@@ -36,6 +36,8 @@ import EditUserAccessScreen from './src/screens/Adm/EditUserAccessScreen';
 import HistoricoOperacoes from './src/screens/Formularios/Logistica/HistoricoOperacoes';
 import RelatorioCompostagem from './src/screens/Formularios/Compostagem/RelatorioCompostagem';
 import RdoForm from './src/screens/Formularios/Logistica/rdo/RdoForm';
+import HistoricoRdo from './src/screens/Formularios/Logistica/rdo/HistoricoRdo';
+import ForgotPasswordScreen from './src/screens/Login/ForgotPasswordScreen';
 
 const Stack = createStackNavigator();
 
@@ -149,6 +151,7 @@ export default function App() {
               {/* LOGIN */}
               <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="ForgotPass" component={ForgotPasswordScreen} options={{ headerShown: false }} />
 
               {/* ADM */}
               <Stack.Screen name="UsersEdit" component={EditUserAccessScreen} options={{ headerShown: false }} />
@@ -179,7 +182,9 @@ export default function App() {
               <Stack.Screen name="LogisticaScreen" component={LogisticaScreen} options={{ headerShown: false }} />
               <Stack.Screen name="LogisticaProgram" component={FormularioProgramacao} options={{ headerShown: false }} />
               <Stack.Screen name="LogisticaHist" component={HistoricoOperacoes} options={{ headerShown: false }} />
-              <Stack.Screen name="LogisticaRdo" component={RdoForm} options={{ headerShown: false }} />
+              <Stack.Screen name="RdoForm" component={RdoForm} options={{ headerShown: false }} />
+              <Stack.Screen name="RdoHist" component={HistoricoRdo} options={{ headerShown: false }} />
+
 
               {/* Operacao */}
               <Stack.Screen name="OperacaoScreen" component={OperacaoScreen} options={{ headerShown: false }} />

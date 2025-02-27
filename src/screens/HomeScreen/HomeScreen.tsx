@@ -31,6 +31,7 @@ import UpdateNotification from './components/UpdateNotification';
 import storage from '@react-native-firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UserProfileModal from './components/UserInfoModal';
+import TestNotificationButtons from './components/TestNotificationButtons';
 
 interface CarouselItem {
     id: string;
@@ -398,6 +399,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         </Card>
     );
 
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <Surface style={styles.container}>
@@ -462,6 +464,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 <ScrollView style={styles.content}>
                     {renderCarouselContent()}
                     <QuickActionsGrid />
+                    <TestNotificationButtons />
                     <DevelopmentAlert />
                     {/* Resto do conteúdo ... */}
                 </ScrollView>

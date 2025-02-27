@@ -15,6 +15,7 @@ import { customTheme } from '../../theme/theme';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { showGlobalToast } from '../../helpers/GlobalApi';
+import SaveButton from '../../assets/components/SaveButton';
 
 const inputTheme = {
     colors: {
@@ -305,19 +306,14 @@ export default function RegisterScreen({ navigation }: any) {
                             </TouchableOpacity>
                         </View>
 
-                        <TouchableOpacity
-                            style={styles.submitButton}
+                        <SaveButton
                             onPress={handleRegister}
+                            text="Criar Conta"
+                            iconName="account-plus"
+                            loading={loading}
                             disabled={loading}
-                        >
-                            {loading ? (
-                                <ActivityIndicator color={customTheme.colors.onPrimary} />
-                            ) : (
-                                <Text style={styles.submitButtonText}>
-                                    Criar Conta
-                                </Text>
-                            )}
-                        </TouchableOpacity>
+                        />
+
                     </View>
                 </ScrollView>
 
@@ -399,17 +395,5 @@ const styles = StyleSheet.create({
     },
     areaButtonTextSelected: {
         color: customTheme.colors.onPrimary,
-    },
-    submitButton: {
-        paddingVertical: 20,
-        borderRadius: 12,
-        backgroundColor: customTheme.colors.primary,
-        marginTop: 20,
-    },
-    submitButtonText: {
-        textAlign: 'center',
-        color: customTheme.colors.onPrimary,
-        fontSize: 16,
-        fontWeight: '600',
     },
 });

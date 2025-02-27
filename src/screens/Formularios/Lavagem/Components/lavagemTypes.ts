@@ -5,11 +5,6 @@ export type TipoLavagem = 'simples' | 'completa';
 
 export type UnidadeMedida = 'unidade' | 'kilo' | 'litro';
 
-export interface ProdutoSelecionado {
-    produto: string;
-    quantidade: string;
-}
-
 // Primeiro, defina a interface do Produto
 export interface ProdutoEstoque {
     id?: string;
@@ -21,6 +16,11 @@ export interface ProdutoEstoque {
     photoUrl: string | null;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface ProdutoSelecionado {
+    produto: string;
+    quantidade: string;
 }
 
 export interface Equipamento {

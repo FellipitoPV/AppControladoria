@@ -376,31 +376,38 @@ export default function LogisticaScreen({ navigation }: any) {
                 <View style={styles.actionsContainer}>
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
+
                         {renderActionButton(
-                            "plus",
-                            "Nova Programação",
+                            "calendar-plus",  // Changed from "plus"
+                            "Agendar Operação",  // More specific name
                             () => navigation.navigate('LogisticaProgram'),
                             'novaProgramacao'
                         )}
 
                         {renderActionButton(
-                            "calendar-check",
-                            "Agendamentos",
+                            "clock-outline",  // More descriptive for pending schedules
+                            "Operações Pendentes",  // Clearer description
                             () => navigation.navigate('OperacaoProgram'),
                             'agendamentos',
                             agendamentosPendentes
                         )}
 
                         {renderActionButton(
-                            "history",
-                            "Historico",
+                            "file-document-multiple",  // More appropriate for historical records
+                            "Histórico de Operações",  // More specific
                             () => navigation.navigate('LogisticaHist'),
                         )}
 
                         {renderActionButton(
-                            "clipboard-text",
-                            "Relatório Diário de Operação",
-                            () => navigation.navigate('LogisticaRdo'),
+                            "file-document-edit",  // Suggests form/report creation
+                            "Relatório Diário",  // Shortened for clarity
+                            () => navigation.navigate('RdoForm'),
+                        )}
+
+                        {renderActionButton(
+                            "archive-search",  // Suggests searching through archives
+                            "Arquivo de Relatórios",  // More descriptive name
+                            () => navigation.navigate('RdoHist'),
                         )}
 
                     </View>

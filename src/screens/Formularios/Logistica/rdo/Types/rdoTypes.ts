@@ -18,38 +18,55 @@ export interface Atividade {
 }
 
 export interface Profissional {
-    profissional: string;
+    tipo: string;
     quantidade: string;
     id?: string;
 }
 
 export interface Equipamento {
-    equipamento: string;
+    tipo: string;
     quantidade: string;
     id?: string;
 }
 
-export interface Photo {
-    uri: string;
-    id: string;
-}
+export type Photo = {
+    uri?: string;        // URI para fotos locais
+    url?: string;        // URL para fotos do Firebase
+    id: string;          // ID único da foto
+    path?: string;       // Caminho no storage (opcional)
+    timestamp?: number;  // Timestamp (opcional)
+    filename?: string;
+};
 
 export interface FormDataInterface {
+    id: string;
+    numeroRdo: string;
     cliente: string;
+    clienteNome?: string;
     servico: string;
     responsavel: string;
+    cargo: string;
     material: string;
-    numeroRdo: string;
     funcao: string;
     inicioOperacao: string;
     terminoOperacao: string;
     data: string;
-    condicaoTempoManha: string;
-    condicaoTempoTarde: string;
-    condicaoTempoNoite: string;
+    condicaoTempo: {
+        manha: string;
+        tarde: string;
+        noite: string;
+    }
     diaSemana: string;
-    cargo?: string;
-    clienteNome?: string;
+    profissionais?: Profissional[];
+    equipamentos?: Equipamento[];
+    atividades?: Atividade[];
+    ocorrencias?: Ocorrencia[];
+    comentarioGeral?: string;
+    createdAt: any;
+    createdBy: string;
+    photos: Photo[];
+    updatedBy: string;
+    updatedAt: any;
 }
 
 export type RootStackParamList = {
@@ -101,4 +118,11 @@ export const TIPOS_OCORRENCIAS = [
     { label: 'Quase Acidente', value: 'quase_acidente', icon: 'alert-outline' },
     { label: 'Desvio', value: 'desvio', icon: 'swap-horizontal' },
     { label: 'Condição Insegura', value: 'condicao_insegura', icon: 'safety-goggles' }
+];
+
+// Serviços dropdown data
+export const SERVICOS = [
+    { label: 'Desmantelamento', value: 'desmantelamento', icon: 'hammer-wrench' },
+    { label: 'Descaracterização', value: 'descaracterização', icon: 'hammer-wrench' },
+    { label: 'Repetro', value: 'repetro', icon: 'hammer-wrench' }
 ];

@@ -125,6 +125,14 @@ android {
             assets.srcDirs = ['src/main/assets']
         }
     }
+
+    configurations.all {
+        resolutionStrategy {
+            force "androidx.core:core:1.9.0"
+            exclude group: 'com.android.support', module: 'support-compat'
+        }
+    }
+
 }
 
 dependencies {

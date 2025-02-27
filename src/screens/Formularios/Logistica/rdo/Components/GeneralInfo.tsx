@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -6,7 +6,7 @@ import { Dropdown } from 'react-native-element-dropdown';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { customTheme } from '../../../../../theme/theme';
 import { clientes } from '../../Components/logisticTypes';
-import { DropdownRef, DIAS_SEMANA, MATERIAIS, FormDataInterface } from '../Types/rdoTypes';
+import { DropdownRef, DIAS_SEMANA, MATERIAIS, FormDataInterface, SERVICOS } from '../Types/rdoTypes';
 import { formatDate } from '../Utils/formUtils';
 
 interface GeneralInfoProps {
@@ -26,6 +26,7 @@ interface GeneralInfoProps {
     setDiaSemanaSelecionado: React.Dispatch<React.SetStateAction<string>>;
     isClienteDisabled: boolean;
     isServicoDisabled: boolean;
+    mode?: string;
 }
 
 const GeneralInfo: React.FC<GeneralInfoProps> = ({
@@ -44,15 +45,22 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
     diaSemanaSelecionado,
     setDiaSemanaSelecionado,
     isClienteDisabled,
-    isServicoDisabled
+    isServicoDisabled,
+    mode
 }) => {
+    const servicoItem = SERVICOS.find(item => item.label === servicoSelecionado);
+
     const [showDatePicker, setShowDatePicker] = React.useState(false);
+    const [servicoSelecionadoValue, setServicoSelecionadoValue] = useState(
+        servicoItem ? servicoItem.value : null
+    );
 
     // Refs for dropdowns
     const clienteRef = useRef<DropdownRef>(null);
     const servicoRef = useRef<DropdownRef>(null);
     const diaSemanaRef = useRef<DropdownRef>(null);
     const materialRef = useRef<DropdownRef>(null);
+
 
     // Cliente dropdown data
     const clientesDropdown = clientes.map((cliente) => ({
@@ -61,13 +69,6 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
         icon: 'domain',
         endereco: cliente.endereco,
     }));
-
-    // Serviços dropdown data
-    const servicos = [
-        { label: 'Desmantelamento', value: 'desmantelamento', icon: 'hammer-wrench' },
-        { label: 'Descaracterização', value: 'descaracterização', icon: 'hammer-wrench' },
-        { label: 'Repetro', value: 'repetro', icon: 'hammer-wrench' }
-    ];
 
     // Handle date change
     const handleDateChange = (event: any, date?: Date) => {
@@ -159,13 +160,14 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={styles.dateTimeContainer}
+                        style={[styles.dateTimeContainer, styles.dropdownContainer]}
                         activeOpacity={0.7}
                         onPress={() => diaSemanaRef.current?.open()}
                     >
                         <Dropdown
                             ref={diaSemanaRef}
-                            style={[styles.dropdown, styles.rowInput]}
+                            autoScroll={false}
+                            style={[styles.dropdown, styles.rowInput, {top: 7}]}
                             placeholderStyle={styles.placeholderStyle}
                             selectedTextStyle={styles.selectedTextStyle}
                             iconStyle={styles.iconStyle}
@@ -176,14 +178,18 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                             placeholder="Dia da semana"
                             value={diaSemanaSelecionado}
                             onChange={item => {
-                                setDiaSemanaSelecionado(item.value);
-                                setFormData(prev => ({ ...prev, diaSemana: item.value }));
+                                setClienteSelecionado(item.value);
+                                setFormData(prev => ({
+                                    ...prev,
+                                    cliente: item.value,
+                                    clienteNome: item.label
+                                }));
                             }}
                             renderLeftIcon={() => (
                                 <MaterialCommunityIcons
                                     style={styles.dropdownIcon}
                                     name="calendar-week"
-                                    size={20}
+                                    size={24}
                                     color={customTheme.colors.primary}
                                 />
                             )}
@@ -221,6 +227,7 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                 >
                     <Dropdown
                         ref={clienteRef}
+                        autoScroll={false}
                         style={[
                             styles.dropdown,
                             isClienteDisabled && styles.disabledDropdown
@@ -279,33 +286,41 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                 <TouchableOpacity
                     style={styles.dropdownContainer}
                     activeOpacity={0.7}
-                    onPress={!isServicoDisabled ? () => servicoRef.current?.open() : undefined}
+                    onPress={() => {
+                        // Permitir abertura em modo de edição ou quando não estiver desabilitado
+                        if (mode === 'edit' || !isServicoDisabled) {
+                            servicoRef.current?.open();
+                        }
+                    }}
                 >
                     <Dropdown
                         ref={servicoRef}
+                        autoScroll={false}
                         style={[
                             styles.dropdown,
-                            isServicoDisabled && styles.disabledDropdown
+                            // Remover a desabilitação em modo de edição
+                            (mode === 'edit' ? false : isServicoDisabled) && styles.disabledDropdown
                         ]}
                         placeholderStyle={[
                             styles.placeholderStyle,
-                            isServicoDisabled && styles.disabledPlaceholderStyle
+                            (mode === 'edit' ? false : isServicoDisabled) && styles.disabledPlaceholderStyle
                         ]}
                         selectedTextStyle={[
                             styles.selectedTextStyle,
-                            isServicoDisabled && styles.disabledSelectedTextStyle
+                            (mode === 'edit' ? false : isServicoDisabled) && styles.disabledSelectedTextStyle
                         ]}
                         iconStyle={styles.iconStyle}
-                        data={servicos}
-                        disable={isServicoDisabled}
+                        data={SERVICOS}
+                        disable={mode === 'edit' ? false : isServicoDisabled}
                         maxHeight={300}
                         labelField="label"
                         valueField="value"
                         placeholder="Selecione o serviço"
-                        value={servicoSelecionado}
+                        value={servicoSelecionadoValue}
                         onChange={item => {
-                            setServicoSelecionado(item.value);
-                            setFormData(prev => ({ ...prev, servico: item.value }));
+                            setServicoSelecionadoValue(item.value);
+                            setServicoSelecionado(item.label); // Armazena o label para exibição
+                            setFormData(prev => ({ ...prev, servico: item.label })); // Salva o label no formulário
                         }}
                         renderLeftIcon={() => (
                             <MaterialCommunityIcons
@@ -338,6 +353,7 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                 >
                     <Dropdown
                         ref={materialRef}
+                        autoScroll={false}
                         style={styles.dropdown}
                         placeholderStyle={styles.placeholderStyle}
                         selectedTextStyle={styles.selectedTextStyle}

@@ -1,4 +1,5 @@
-import { FormDataInterface, Profissional, Equipamento, Atividade, Ocorrencia } from '../Types/rdoTypes';
+import { showGlobalToast } from '../../../../../helpers/GlobalApi';
+import { FormDataInterface, Profissional, Equipamento, Atividade, Ocorrencia, Photo } from '../Types/rdoTypes';
 
 // Format date to DD/MM/YYYY
 export const formatDate = (date: Date): string => {
@@ -40,7 +41,7 @@ export const validateForm = (
         errors.push("Adicione pelo menos um profissional");
     } else {
         const profissionaisInvalidos = profissionaisSelecionados.some(
-            p => !p.profissional || !p.quantidade || p.quantidade === '0'
+            p => !p.tipo || !p.quantidade || p.quantidade === '0'
         );
         if (profissionaisInvalidos) {
             errors.push("Preencha corretamente todos os profissionais e suas quantidades");
@@ -52,7 +53,7 @@ export const validateForm = (
         errors.push("Adicione pelo menos um equipamento");
     } else {
         const equipamentosInvalidos = equipamentosSelecionados.some(
-            e => !e.equipamento || !e.quantidade || e.quantidade === '0'
+            e => !e.tipo || !e.quantidade || e.quantidade === '0'
         );
         if (equipamentosInvalidos) {
             errors.push("Preencha corretamente todos os equipamentos e suas quantidades");
@@ -94,3 +95,4 @@ export const getStartOfMonth = (): Date => {
     date.setHours(0, 0, 0, 0);
     return date;
 };
+

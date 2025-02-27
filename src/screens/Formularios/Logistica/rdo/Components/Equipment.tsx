@@ -16,19 +16,48 @@ const Equipment: React.FC<EquipmentProps> = ({
     setEquipamentosSelecionados
 }) => {
     const [dropdownRefs, setDropdownRefs] = useState<React.RefObject<DropdownRef>[]>([]);
+    const [equipamentoValues, setEquipamentoValues] = useState<{ [key: number]: string }>({});
 
     useEffect(() => {
         // Initialize dropdown refs when equipment changes
         setDropdownRefs(Array(equipamentosSelecionados.length).fill(0).map(() => React.createRef()));
     }, [equipamentosSelecionados.length]);
 
+    useEffect(() => {
+        // Inicialize os valores de controle para equipamentos existentes
+        if (equipamentosSelecionados.length > 0) {
+            const initialValues: { [key: number]: string } = {};
+            equipamentosSelecionados.forEach((equip, idx) => {
+                const equipItem = EQUIPAMENTOS.find(e => e.label === equip.tipo);
+                if (equipItem) {
+                    initialValues[idx] = equipItem.value;
+                }
+            });
+            setEquipamentoValues(initialValues);
+        }
+    }, [equipamentosSelecionados]); // Adicionar equipamentosSelecionados como dependência
+
     const adicionarEquipamento = () => {
-        setEquipamentosSelecionados([...equipamentosSelecionados, { equipamento: '', quantidade: '1' }]);
+        setEquipamentosSelecionados([
+            ...equipamentosSelecionados,
+            {
+                tipo: '',
+                quantidade: '1',
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9)
+            }
+        ]);
     };
 
     const removerEquipamento = (index: number) => {
         const novosEquipamentos = equipamentosSelecionados.filter((_, idx) => idx !== index);
         setEquipamentosSelecionados(novosEquipamentos);
+
+        setEquipamentoValues(prev => {
+            const newValues = { ...prev };
+            delete newValues[index];
+            return newValues;
+        });
+
     };
 
     const atualizarEquipamento = (index: number, atualizacoes: Partial<Equipamento>) => {
@@ -55,7 +84,7 @@ const Equipment: React.FC<EquipmentProps> = ({
 
             <View style={styles.inputGroup}>
                 {equipamentosSelecionados.map((item, index) => (
-                    <View key={`equipamento-${index}`} style={styles.itemRow}>
+                    <View key={`equipamento-${item.id || index}`}  style={styles.itemRow}>
                         <View style={styles.itemMain}>
                             <TouchableOpacity
                                 style={styles.dropdownContainer}
@@ -69,16 +98,23 @@ const Equipment: React.FC<EquipmentProps> = ({
                                     iconStyle={styles.iconStyle}
                                     data={EQUIPAMENTOS.filter(e =>
                                         !equipamentosSelecionados.some(es =>
-                                            es.equipamento === e.value && es !== item
+                                            es.tipo === e.value && es !== item
                                         )
                                     )}
+                                    placeholder='Selecione um equipamento'
                                     labelField="label"
                                     valueField="value"
-                                    placeholder="Selecione o equipamento"
-                                    value={item.equipamento}
+                                    value={equipamentoValues[index]}
                                     onChange={value => {
+                                        // Atualiza o valor de controle
+                                        setEquipamentoValues(prev => ({
+                                            ...prev,
+                                            [index]: value.value
+                                        }));
+
+                                        // Mantém a lógica atual
                                         atualizarEquipamento(index, {
-                                            equipamento: value.value,
+                                            tipo: value.label,
                                             quantidade: item.quantidade || '1'
                                         });
                                     }}
@@ -219,6 +255,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
+        paddingVertical: 14,
+        gap: 12,
     },
     dropdownLabel: {
         flex: 1,

@@ -704,10 +704,9 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                         ) : (
                             <View>
                                 <Text style={styles.userInfoText}>
-                                    Ao assumir esta responsabilidade, você, <Text style={{ fontWeight: 'bold' }}>{userInfo?.user}</Text>,
-                                    será registrado como o responsável oficial pela execução desta operação.
-                                    Isso significa que você estará encarregado de supervisionar e garantir a
-                                    conclusão da operação.
+                                    Ao assumir esta operação, <Text style={{ fontWeight: 'bold' }}>{userInfo?.user} </Text>
+                                    será o responsável oficial. Você será encarregado de supervisionar e garantir
+                                    sua conclusão.
                                 </Text>
 
                                 <TouchableOpacity

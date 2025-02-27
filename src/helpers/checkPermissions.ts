@@ -6,7 +6,9 @@ import {
     PermissionStatus,
     check,
     request,
+    checkNotifications,
 } from 'react-native-permissions';
+import PushNotification from 'react-native-push-notification';
 
 const logPermissionStatus = (permission: string, status: PermissionStatus) => {
     switch (status) {
@@ -45,7 +47,11 @@ const checkPermissions = async (): Promise<boolean> => {
     if (Platform.OS === 'android') {
         console.log('[LOG] Solicitando permissões...');
 
-        const permissionsToCheck: Permission[] = [PERMISSIONS.ANDROID.CAMERA];
+        const permissionsToCheck: Permission[] = [
+            PERMISSIONS.ANDROID.CAMERA,
+            // Add notification permission for Android 13+
+            ...(Platform.Version >= 33 ? [PERMISSIONS.ANDROID.POST_NOTIFICATIONS] : [])
+        ];
 
         // Adicionar permissão de armazenamento somente para versões do Android abaixo de 10 (API 29)
         if (Platform.Version < 29) {
@@ -62,15 +68,68 @@ const checkPermissions = async (): Promise<boolean> => {
             }
         }
 
+        // Check notification permissions separately for more detailed handling
+        if (Platform.Version >= 33) {
+            const { status: notificationStatus } = await checkNotifications();
+            if (notificationStatus !== RESULTS.GRANTED) {
+                Alert.alert(
+                    "Permissão de Notificação",
+                    "É necessário permitir notificações para usar todas as funcionalidades do app"
+                );
+                allGranted = false;
+            }
+        }
+
         if (allGranted) {
             console.log('[LOG] Todas as permissões foram concedidas.');
+
+            // Configure push notifications
+            PushNotification.configure({
+                onRegister: function (token) {
+                    console.log("Notification Token:", token);
+                },
+                onNotification: function (notification) {
+                    console.log("NOTIFICATION:", notification);
+                },
+                requestPermissions: true
+            });
         } else {
             console.warn('[LOG] Algumas permissões foram negadas.');
         }
 
-        return allGranted;
+        const hasExactAlarmPermission = await checkScheduleExactAlarmPermission();
+
+        return allGranted && hasExactAlarmPermission;
+
     }
 
+    return true;
+};
+
+const checkScheduleExactAlarmPermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'android' && Platform.Version >= 31) {
+        try {
+            // Check if the app has SCHEDULE_EXACT_ALARM permission
+            const result = await check('android.permission.SCHEDULE_EXACT_ALARM' as Permission);
+
+            if (result !== RESULTS.GRANTED) {
+                // Request permission
+                const requestResult = await request('android.permission.SCHEDULE_EXACT_ALARM' as Permission);
+
+                if (requestResult !== RESULTS.GRANTED) {
+                    Alert.alert(
+                        "Permissão Necessária",
+                        "É necessário permitir agendamento exato de alarmes para usar todas as funcionalidades do app"
+                    );
+                    return false;
+                }
+            }
+            return true;
+        } catch (error) {
+            console.error('Erro ao verificar permissão de SCHEDULE_EXACT_ALARM:', error);
+            return false;
+        }
+    }
     return true;
 };
 
