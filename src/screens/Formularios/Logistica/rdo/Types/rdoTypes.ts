@@ -5,6 +5,11 @@ export interface DropdownRef {
     close: () => void;
 }
 
+export interface GeneralInfoProps {
+    formData: FormDataInterface;
+    saveFormData: (updates: Partial<FormDataInterface>) => void;
+}
+
 export interface Ocorrencia {
     tipo: string;
     descricao: string;

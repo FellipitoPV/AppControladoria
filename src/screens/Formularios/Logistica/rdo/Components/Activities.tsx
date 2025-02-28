@@ -1,35 +1,42 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, TextInput, Button } from 'react-native-paper';
+import React, { useState } from 'react';
+import {
+    View,
+    StyleSheet,
+    TouchableOpacity
+} from 'react-native';
+import {
+    Text,
+    Surface
+} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../../../theme/theme';
-import { Atividade } from '../Types/rdoTypes';
+import { Atividade, GeneralInfoProps, FormDataInterface } from '../Types/rdoTypes';
+import { ActivitySelectionModal } from './ActivitySelectionModal';
 
-interface ActivitiesProps {
-    atividadesRealizadas: Atividade[];
-    setAtividadesRealizadas: React.Dispatch<React.SetStateAction<Atividade[]>>;
-}
-
-const Activities: React.FC<ActivitiesProps> = ({
-    atividadesRealizadas,
-    setAtividadesRealizadas
+const Activities: React.FC<GeneralInfoProps> = ({
+    formData,
+    saveFormData
 }) => {
-    const adicionarAtividade = () => {
-        setAtividadesRealizadas([...atividadesRealizadas, { descricao: '', observacao: '' }]);
+    const [isModalVisible, setIsModalVisible] = useState(false);
+    const [editingActivityIndex, setEditingActivityIndex] = useState<number | null>(null);
+
+    const handleEditActivity = (index: number) => {
+        setEditingActivityIndex(index);
+        setIsModalVisible(true);
     };
 
-    const removerAtividade = (index: number) => {
-        const novasAtividades = atividadesRealizadas.filter((_, idx) => idx !== index);
-        setAtividadesRealizadas(novasAtividades);
+    const handleModalClose = () => {
+        setIsModalVisible(false);
+        setEditingActivityIndex(null);
     };
 
-    const atualizarAtividade = (index: number, atualizacoes: Partial<Atividade>) => {
-        const novasAtividades = [...atividadesRealizadas];
-        novasAtividades[index] = {
-            ...novasAtividades[index],
-            ...atualizacoes
-        };
-        setAtividadesRealizadas(novasAtividades);
+    const handleRemoveActivity = (index: number) => {
+        // Make a copy of the existing activities array or create an empty one
+        const updatedActivities = [...(formData.atividades || [])];
+        // Remove the activity at the specified index
+        updatedActivities.splice(index, 1);
+        // Update the form data with the new array
+        saveFormData({ atividades: updatedActivities });
     };
 
     return (
@@ -46,72 +53,72 @@ const Activities: React.FC<ActivitiesProps> = ({
             </View>
 
             <View style={styles.inputGroup}>
-                {atividadesRealizadas.map((item, index) => (
-                    <View key={`atividade-${index}`} style={styles.atividadeContainer}>
-                        <View style={styles.atividadeHeader}>
-                            <Text style={styles.atividadeTitle}>{index + 1}° Atividade</Text>
+                {formData.atividades?.map((item, index) => (
+                    <View key={`atividade-${item.id || index}`} style={styles.atividadeRow}>
+                        <TouchableOpacity
+                            style={styles.activityButton}
+                            onPress={() => handleEditActivity(index)}
+                        >
+                            <View style={styles.activityButtonContent}>
+                                <MaterialCommunityIcons
+                                    name="clipboard-text-outline"
+                                    size={24}
+                                    color={customTheme.colors.primary}
+                                />
+                                <View style={styles.activityTextContainer}>
+                                    <Text style={styles.activityDescText} numberOfLines={1}>
+                                        {item.descricao || "Atividade sem descrição"}
+                                    </Text>
+                                    {item.observacao ? (
+                                        <Text style={styles.activityObsText} numberOfLines={1}>
+                                            Obs: {item.observacao}
+                                        </Text>
+                                    ) : null}
+                                </View>
+                            </View>
                             <TouchableOpacity
-                                onPress={() => removerAtividade(index)}
+                                onPress={() => handleRemoveActivity(index)}
                                 style={styles.removeButton}
-                                disabled={atividadesRealizadas.length === 1}
+                                disabled={(formData.atividades?.length ?? 0) <= 1}
                             >
                                 <MaterialCommunityIcons
                                     name="delete-outline"
                                     size={24}
-                                    color={atividadesRealizadas.length === 1 ?
-                                        customTheme.colors.surfaceDisabled :
+                                    color={(formData.atividades?.length ?? 0) <= 1 ? 
+                                        customTheme.colors.surfaceDisabled : 
                                         customTheme.colors.error}
                                 />
                             </TouchableOpacity>
-                        </View>
-
-                        <TextInput
-                            mode="outlined"
-                            label="Descrição"
-                            value={item.descricao}
-                            onChangeText={(texto) => atualizarAtividade(index, { descricao: texto })}
-                            style={styles.input}
-                            left={<TextInput.Icon
-                                icon={() => (
-                                    <MaterialCommunityIcons
-                                        name="text-box-outline"
-                                        size={24}
-                                        color={customTheme.colors.primary}
-                                    />
-                                )}
-                            />}
-                        />
-
-                        <TextInput
-                            mode="outlined"
-                            label="Observação"
-                            value={item.observacao}
-                            onChangeText={(texto) => atualizarAtividade(index, { observacao: texto })}
-                            style={[styles.input, styles.multilineInput, { marginTop: 10 }]}
-                            multiline={true}
-                            numberOfLines={5}
-                            left={<TextInput.Icon
-                                icon={() => (
-                                    <MaterialCommunityIcons
-                                        name="comment-outline"
-                                        size={24}
-                                        color={customTheme.colors.primary}
-                                    />
-                                )}
-                            />}
-                        />
+                        </TouchableOpacity>
                     </View>
                 ))}
 
-                <Button
-                    mode="outlined"
-                    onPress={adicionarAtividade}
-                    icon="plus"
-                    style={styles.addButton}
+                <TouchableOpacity
+                    style={styles.addActivityButton}
+                    onPress={() => {
+                        setEditingActivityIndex(null);
+                        setIsModalVisible(true);
+                    }}
                 >
-                    Adicionar Atividade
-                </Button>
+                    <MaterialCommunityIcons
+                        name="plus"
+                        size={24}
+                        color={customTheme.colors.primary}
+                    />
+                    <Text style={styles.addActivityButtonText}>
+                        Adicionar Atividade
+                    </Text>
+                </TouchableOpacity>
             </View>
+
+            <ActivitySelectionModal
+                visible={isModalVisible}
+                onClose={handleModalClose}
+                onConfirm={() => {}} // This is not needed since we're using saveFormData directly
+                formData={formData}
+                saveFormData={saveFormData}
+                editingIndex={editingActivityIndex}
+            />
         </View>
     );
 };
@@ -134,41 +141,60 @@ const styles = StyleSheet.create({
     inputGroup: {
         gap: 10,
     },
-    atividadeContainer: {
-        marginBottom: 20,
+    atividadeRow: {
+        marginBottom: 8,
+    },
+    activityButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
         backgroundColor: customTheme.colors.surface,
         borderRadius: 8,
         padding: 12,
+        elevation: 1,
         borderWidth: 1,
-        borderColor: customTheme.colors.primary,
+        borderColor: customTheme.colors.outline,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
     },
-    atividadeHeader: {
+    activityButtonContent: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 10,
+        flex: 1,
     },
-    atividadeTitle: {
+    activityTextContainer: {
+        marginLeft: 12,
+        flex: 1,
+    },
+    activityDescText: {
         fontSize: 16,
-        fontWeight: '600',
-        color: customTheme.colors.primary,
+        fontWeight: '500',
+        color: customTheme.colors.onSurface,
     },
-    input: {
-        backgroundColor: '#FFFFFF',
-        height: 56,
-    },
-    multilineInput: {
-        height: 120,
-        textAlignVertical: 'top',
+    activityObsText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurfaceVariant,
+        marginTop: 2,
     },
     removeButton: {
         padding: 8,
-        justifyContent: 'center',
     },
-    addButton: {
-        marginTop: 8,
+    addActivityButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
         borderColor: customTheme.colors.primary,
         borderStyle: 'dashed',
+        borderRadius: 8,
+        paddingVertical: 12,
+        marginTop: 8,
+    },
+    addActivityButtonText: {
+        marginLeft: 8,
+        color: customTheme.colors.primary,
+        fontWeight: '500',
     },
 });
 

@@ -117,10 +117,6 @@ const checkScheduleExactAlarmPermission = async (): Promise<boolean> => {
                 const requestResult = await request('android.permission.SCHEDULE_EXACT_ALARM' as Permission);
 
                 if (requestResult !== RESULTS.GRANTED) {
-                    Alert.alert(
-                        "Permissão Necessária",
-                        "É necessário permitir agendamento exato de alarmes para usar todas as funcionalidades do app"
-                    );
                     return false;
                 }
             }

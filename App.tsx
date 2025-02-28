@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import FormularioMedicaoCompostagem from './src/screens/Formularios/ocorrencia/FormularioOcorrencia';
@@ -38,6 +38,8 @@ import RelatorioCompostagem from './src/screens/Formularios/Compostagem/Relatori
 import RdoForm from './src/screens/Formularios/Logistica/rdo/RdoForm';
 import HistoricoRdo from './src/screens/Formularios/Logistica/rdo/HistoricoRdo';
 import ForgotPasswordScreen from './src/screens/Login/ForgotPasswordScreen';
+import { createNotificationChannel, configureNotificationListeners, setNotificationNavigationHandler, removeRepeatingNotification } from './src/helpers/notificationChannel';
+import PushNotification from 'react-native-push-notification';
 
 const Stack = createStackNavigator();
 
@@ -142,10 +144,95 @@ const toastConfig: ToastConfig = {
 };
 
 export default function App() {
+
+  const navigationRef = useRef<any>({
+    navigate: (name: string, params?: object) => {
+      console.log('Tentativa de navegação antes da inicialização do ref:', name, params);
+      // Vai armazenar para navegação posterior
+      pendingNavigation.current = { name, params };
+    }
+  });
+
+  const pendingNavigation = useRef<{ name: string, params?: object } | null>(null);
+
+  // Para rastrear se o NavigationContainer já está pronto
+  const isNavigationReady = useRef(false);
+
+  const onNavigationReady = () => {
+    console.log('🚀 NavigationContainer is ready');
+    isNavigationReady.current = true;
+
+    // Processar qualquer navegação pendente
+    if (pendingNavigation.current) {
+      const { name, params } = pendingNavigation.current;
+      console.log('⏱️ Executando navegação pendente para:', name);
+
+      setTimeout(() => {
+        try {
+          // @ts-ignore
+          navigationRef.current?.navigate(name, params);
+          console.log('✅ Navegação pendente executada com sucesso');
+        } catch (error) {
+          console.error('❌ Erro ao executar navegação pendente:', error);
+        }
+        pendingNavigation.current = null;
+      }, 300);
+    }
+  };
+
+  useEffect(() => {
+    console.log('📱 Configurando notificações e navegação');
+
+    try {
+      // Configurar canal e listeners de notificação
+      createNotificationChannel();
+      configureNotificationListeners();
+
+      // Configurar o handler de navegação global
+      setNotificationNavigationHandler((screenName, params) => {
+        console.log('🧭 Navigation handler called with:', screenName, params);
+
+        try {
+          // Verificar se a ref de navegação está disponível
+          if (navigationRef.current) {
+            console.log('🧭 Navegando para:', screenName);
+
+            // @ts-ignore
+            navigationRef.current.navigate(screenName, params);
+
+            console.log('✅ Navegação executada');
+          } else {
+            console.log('⚠️ NavigationRef não disponível, armazenando navegação pendente');
+            // Podemos armazenar para navegação posterior
+            pendingNavigation.current = { name: screenName, params };
+          }
+        } catch (error) {
+          console.error('❌ Erro durante navegação:', error);
+
+          try {
+            console.log('🔄 Tentando navegar novamente sem parâmetros');
+            // @ts-ignore
+            navigationRef.current?.navigate(screenName);
+          } catch (innerError) {
+            console.error('❌ Segundo erro durante navegação:', innerError);
+          }
+        }
+      });
+
+      console.log('✅ Configuração de notificações e navegação concluída');
+    } catch (error) {
+      console.error('❌ Erro ao configurar notificações e navegação:', error);
+    }
+  }, []);
+
+
   return (
     <UserProvider>
       <BackgroundSyncProvider>
-        <NavigationContainer>
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={onNavigationReady}
+        >
           <NetworkProvider>
             <Stack.Navigator initialRouteName="Login">
               {/* LOGIN */}

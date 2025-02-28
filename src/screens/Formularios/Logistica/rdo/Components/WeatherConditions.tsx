@@ -3,34 +3,26 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
-import { CONDICOES_TEMPO, DropdownRef, FormDataInterface } from '../Types/rdoTypes';
+import { CONDICOES_TEMPO, DropdownRef, FormDataInterface, GeneralInfoProps } from '../Types/rdoTypes';
 import { customTheme } from '../../../../../theme/theme';
 
-interface WeatherConditionsProps {
-    tempoManha: string;
-    setTempoManha: React.Dispatch<React.SetStateAction<string>>;
-    tempoTarde: string;
-    setTempoTarde: React.Dispatch<React.SetStateAction<string>>;
-    tempoNoite: string;
-    setTempoNoite: React.Dispatch<React.SetStateAction<string>>;
-    formData: FormDataInterface;
-    setFormData: React.Dispatch<React.SetStateAction<FormDataInterface>>;
-}
-
-const WeatherConditions: React.FC<WeatherConditionsProps> = ({
-    tempoManha,
-    setTempoManha,
-    tempoTarde,
-    setTempoTarde,
-    tempoNoite,
-    setTempoNoite,
+const WeatherConditions: React.FC<GeneralInfoProps> = ({
     formData,
-    setFormData
+    saveFormData
 }) => {
     // Refs for dropdowns
     const tempoManhaRef = useRef<DropdownRef>(null);
     const tempoTardeRef = useRef<DropdownRef>(null);
     const tempoNoiteRef = useRef<DropdownRef>(null);
+
+    const updateWeatherCondition = (period: 'manha' | 'tarde' | 'noite', value: string) => {
+        saveFormData({
+            condicaoTempo: {
+                ...formData.condicaoTempo,
+                [period]: value
+            }
+        });
+    };
 
     return (
         <View style={styles.section}>
@@ -63,11 +55,8 @@ const WeatherConditions: React.FC<WeatherConditionsProps> = ({
                         labelField="label"
                         valueField="value"
                         placeholder="Condição do tempo pela manhã"
-                        value={tempoManha}
-                        onChange={item => {
-                            setTempoManha(item.value);
-                            setFormData(prev => ({ ...prev, condicaoTempoManha: item.value }));
-                        }}
+                        value={formData.condicaoTempo.manha}
+                        onChange={item => updateWeatherCondition('manha', item.value)}
                         renderLeftIcon={() => (
                             <MaterialCommunityIcons
                                 style={styles.dropdownIcon}
@@ -108,11 +97,8 @@ const WeatherConditions: React.FC<WeatherConditionsProps> = ({
                         labelField="label"
                         valueField="value"
                         placeholder="Condição do tempo pela tarde"
-                        value={tempoTarde}
-                        onChange={item => {
-                            setTempoTarde(item.value);
-                            setFormData(prev => ({ ...prev, condicaoTempoTarde: item.value }));
-                        }}
+                        value={formData.condicaoTempo.tarde}
+                        onChange={item => updateWeatherCondition('tarde', item.value)}
                         renderLeftIcon={() => (
                             <MaterialCommunityIcons
                                 style={styles.dropdownIcon}
@@ -153,11 +139,8 @@ const WeatherConditions: React.FC<WeatherConditionsProps> = ({
                         labelField="label"
                         valueField="value"
                         placeholder="Condição do tempo pela noite"
-                        value={tempoNoite}
-                        onChange={item => {
-                            setTempoNoite(item.value);
-                            setFormData(prev => ({ ...prev, condicaoTempoNoite: item.value }));
-                        }}
+                        value={formData.condicaoTempo.noite}
+                        onChange={item => updateWeatherCondition('noite', item.value)}
                         renderLeftIcon={() => (
                             <MaterialCommunityIcons
                                 style={styles.dropdownIcon}

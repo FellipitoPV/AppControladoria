@@ -14,18 +14,6 @@ interface GeneralInfoProps {
     setFormData: React.Dispatch<React.SetStateAction<FormDataInterface>>;
     userInfo: any;
     numeroRdo: string;
-    selectedDate: Date;
-    setSelectedDate: React.Dispatch<React.SetStateAction<Date>>;
-    clienteSelecionado: string;
-    setClienteSelecionado: React.Dispatch<React.SetStateAction<string>>;
-    servicoSelecionado: string;
-    setServicoSelecionado: React.Dispatch<React.SetStateAction<string>>;
-    materialSelecionado: string;
-    setMaterialSelecionado: React.Dispatch<React.SetStateAction<string>>;
-    diaSemanaSelecionado: string;
-    setDiaSemanaSelecionado: React.Dispatch<React.SetStateAction<string>>;
-    isClienteDisabled: boolean;
-    isServicoDisabled: boolean;
     mode?: string;
 }
 
@@ -34,26 +22,11 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
     setFormData,
     userInfo,
     numeroRdo,
-    selectedDate,
-    setSelectedDate,
-    clienteSelecionado,
-    setClienteSelecionado,
-    servicoSelecionado,
-    setServicoSelecionado,
-    materialSelecionado,
-    setMaterialSelecionado,
-    diaSemanaSelecionado,
-    setDiaSemanaSelecionado,
-    isClienteDisabled,
-    isServicoDisabled,
     mode
 }) => {
-    const servicoItem = SERVICOS.find(item => item.label === servicoSelecionado);
-
-    const [showDatePicker, setShowDatePicker] = React.useState(false);
-    const [servicoSelecionadoValue, setServicoSelecionadoValue] = useState(
-        servicoItem ? servicoItem.value : null
-    );
+    // Single state for date
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     // Refs for dropdowns
     const clienteRef = useRef<DropdownRef>(null);
@@ -61,8 +34,7 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
     const diaSemanaRef = useRef<DropdownRef>(null);
     const materialRef = useRef<DropdownRef>(null);
 
-
-    // Cliente dropdown data
+    // Dropdown data
     const clientesDropdown = clientes.map((cliente) => ({
         label: cliente.razaoSocial,
         value: cliente.cnpjCpf,
@@ -70,13 +42,40 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
         endereco: cliente.endereco,
     }));
 
+    // Consolidated save method
+    const saveGeneralInfo = (field: string, value: any) => {
+        setFormData(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
     // Handle date change
     const handleDateChange = (event: any, date?: Date) => {
         setShowDatePicker(false);
         if (date) {
             setSelectedDate(date);
-            setFormData(prev => ({ ...prev, data: formatDate(date) }));
+            saveGeneralInfo('data', formatDate(date));
         }
+    };
+
+    // Simplified dropdown handlers
+    const handleClienteChange = (item: any) => {
+        saveGeneralInfo('cliente', item.value);
+        saveGeneralInfo('clienteNome', item.label);
+    };
+
+    // Updated handleServicoChange method
+    const handleServicoChange = (item: { label: string; value?: string; icon?: string }) => {
+        saveGeneralInfo('servico', item.label);
+    };
+
+    const handleMaterialChange = (item: any) => {
+        saveGeneralInfo('material', item.value);
+    };
+
+    const handleDiaSemanaChange = (item: any) => {
+        saveGeneralInfo('diaSemana', item.value);
     };
 
     return (
@@ -111,9 +110,7 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                     label="Responsável"
                     value={formData.responsavel}
                     disabled={!!userInfo}
-                    onChangeText={(text) =>
-                        setFormData({ ...formData, responsavel: text })
-                    }
+                    onChangeText={(text) => saveGeneralInfo('responsavel', text)}
                     style={[
                         styles.input,
                         !!userInfo && styles.disabledInput
@@ -129,9 +126,7 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                     label="Função"
                     value={userInfo?.cargo || ''}
                     disabled={!!userInfo}
-                    onChangeText={(text) =>
-                        setFormData({ ...formData, funcao: text })
-                    }
+                    onChangeText={(text) => saveGeneralInfo('funcao', text)}
                     style={[
                         styles.input,
                         !!userInfo && styles.disabledInput
@@ -167,7 +162,7 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                         <Dropdown
                             ref={diaSemanaRef}
                             autoScroll={false}
-                            style={[styles.dropdown, styles.rowInput, {top: 7}]}
+                            style={[styles.dropdown, styles.rowInput, { top: 7 }]}
                             placeholderStyle={styles.placeholderStyle}
                             selectedTextStyle={styles.selectedTextStyle}
                             iconStyle={styles.iconStyle}
@@ -176,15 +171,8 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                             labelField="label"
                             valueField="value"
                             placeholder="Dia da semana"
-                            value={diaSemanaSelecionado}
-                            onChange={item => {
-                                setClienteSelecionado(item.value);
-                                setFormData(prev => ({
-                                    ...prev,
-                                    cliente: item.value,
-                                    clienteNome: item.label
-                                }));
-                            }}
+                            value={formData.diaSemana}
+                            onChange={handleDiaSemanaChange}
                             renderLeftIcon={() => (
                                 <MaterialCommunityIcons
                                     style={styles.dropdownIcon}
@@ -223,42 +211,25 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                 <TouchableOpacity
                     style={styles.dropdownContainer}
                     activeOpacity={0.7}
-                    onPress={!isClienteDisabled ? () => clienteRef.current?.open() : undefined}
+                    onPress={() => clienteRef.current?.open()}
                 >
                     <Dropdown
                         ref={clienteRef}
                         autoScroll={false}
-                        style={[
-                            styles.dropdown,
-                            isClienteDisabled && styles.disabledDropdown
-                        ]}
-                        placeholderStyle={[
-                            styles.placeholderStyle,
-                            isClienteDisabled && styles.disabledPlaceholderStyle
-                        ]}
-                        selectedTextStyle={[
-                            styles.selectedTextStyle,
-                            isClienteDisabled && styles.disabledSelectedTextStyle
-                        ]}
+                        style={styles.dropdown}
+                        placeholderStyle={styles.placeholderStyle}
+                        selectedTextStyle={styles.selectedTextStyle}
                         inputSearchStyle={{ color: customTheme.colors.onSurface }}
                         iconStyle={styles.iconStyle}
                         data={clientesDropdown}
-                        disable={isClienteDisabled}
                         search
                         searchPlaceholder="Buscar cliente..."
                         maxHeight={300}
                         labelField="label"
                         valueField="value"
                         placeholder="Selecione o cliente"
-                        value={clienteSelecionado}
-                        onChange={item => {
-                            setClienteSelecionado(item.value);
-                            setFormData(prev => ({
-                                ...prev,
-                                cliente: item.value,
-                                clienteNome: item.label
-                            }));
-                        }}
+                        value={formData.cliente}
+                        onChange={handleClienteChange}
                         renderLeftIcon={() => (
                             <MaterialCommunityIcons
                                 style={styles.dropdownIcon}
@@ -286,41 +257,24 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                 <TouchableOpacity
                     style={styles.dropdownContainer}
                     activeOpacity={0.7}
-                    onPress={() => {
-                        // Permitir abertura em modo de edição ou quando não estiver desabilitado
-                        if (mode === 'edit' || !isServicoDisabled) {
-                            servicoRef.current?.open();
-                        }
-                    }}
+                    onPress={() => servicoRef.current?.open()}
                 >
                     <Dropdown
                         ref={servicoRef}
                         autoScroll={false}
-                        style={[
-                            styles.dropdown,
-                            // Remover a desabilitação em modo de edição
-                            (mode === 'edit' ? false : isServicoDisabled) && styles.disabledDropdown
-                        ]}
-                        placeholderStyle={[
-                            styles.placeholderStyle,
-                            (mode === 'edit' ? false : isServicoDisabled) && styles.disabledPlaceholderStyle
-                        ]}
-                        selectedTextStyle={[
-                            styles.selectedTextStyle,
-                            (mode === 'edit' ? false : isServicoDisabled) && styles.disabledSelectedTextStyle
-                        ]}
+                        style={styles.dropdown}
+                        placeholderStyle={styles.placeholderStyle}
+                        selectedTextStyle={styles.selectedTextStyle}
                         iconStyle={styles.iconStyle}
                         data={SERVICOS}
-                        disable={mode === 'edit' ? false : isServicoDisabled}
                         maxHeight={300}
                         labelField="label"
-                        valueField="value"
+                        valueField="label"  // Change valueField to 'label'
                         placeholder="Selecione o serviço"
-                        value={servicoSelecionadoValue}
-                        onChange={item => {
-                            setServicoSelecionadoValue(item.value);
-                            setServicoSelecionado(item.label); // Armazena o label para exibição
-                            setFormData(prev => ({ ...prev, servico: item.label })); // Salva o label no formulário
+                        value={formData.servico}
+                        onChange={(item) => {
+                            // Ensure the entire item is passed and used consistently
+                            handleServicoChange(item);
                         }}
                         renderLeftIcon={() => (
                             <MaterialCommunityIcons
@@ -363,11 +317,8 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                         labelField="label"
                         valueField="value"
                         placeholder="Selecione o material"
-                        value={materialSelecionado}
-                        onChange={item => {
-                            setMaterialSelecionado(item.value);
-                            setFormData(prev => ({ ...prev, material: item.value }));
-                        }}
+                        value={formData.material}
+                        onChange={handleMaterialChange}
                         renderLeftIcon={() => (
                             <MaterialCommunityIcons
                                 style={styles.dropdownIcon}
@@ -445,10 +396,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         backgroundColor: '#FFFFFF',
     },
-    disabledDropdown: {
-        backgroundColor: customTheme.colors.surfaceDisabled,
-        opacity: 0.7,
-    },
     dropdownIcon: {
         marginRight: 12,
     },
@@ -466,20 +413,12 @@ const styles = StyleSheet.create({
     },
     placeholderStyle: {
         fontSize: 16,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    disabledPlaceholderStyle: {
-        color: customTheme.colors.onSurfaceVariant,
-        opacity: 0.7,
+        color: "gray",
     },
     selectedTextStyle: {
         fontSize: 16,
         color: customTheme.colors.onSurface,
         fontWeight: '500',
-    },
-    disabledSelectedTextStyle: {
-        color: customTheme.colors.onSurfaceVariant,
-        opacity: 0.7,
     },
     iconStyle: {
         width: 24,

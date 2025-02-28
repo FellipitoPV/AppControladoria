@@ -1,72 +1,47 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, TextInput, Button } from 'react-native-paper';
+import React, { useState } from 'react';
+import {
+    View,
+    StyleSheet,
+    TouchableOpacity
+} from 'react-native';
+import {
+    Text,
+    Surface
+} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Dropdown } from 'react-native-element-dropdown';
 import { customTheme } from '../../../../../theme/theme';
-import { Equipamento, DropdownRef, EQUIPAMENTOS } from '../Types/rdoTypes';
+import { Equipamento, EQUIPAMENTOS, GeneralInfoProps, FormDataInterface } from '../Types/rdoTypes';
+import { EquipmentSelectionModal } from './EquipmentSelectionModal';
 
-interface EquipmentProps {
-    equipamentosSelecionados: Equipamento[];
-    setEquipamentosSelecionados: React.Dispatch<React.SetStateAction<Equipamento[]>>;
-}
-
-const Equipment: React.FC<EquipmentProps> = ({
-    equipamentosSelecionados,
-    setEquipamentosSelecionados
+const Equipment: React.FC<GeneralInfoProps> = ({
+    formData,
+    saveFormData,
 }) => {
-    const [dropdownRefs, setDropdownRefs] = useState<React.RefObject<DropdownRef>[]>([]);
-    const [equipamentoValues, setEquipamentoValues] = useState<{ [key: number]: string }>({});
+    const [isModalVisible, setIsModalVisible] = useState(false);
+    const [editingEquipmentIndex, setEditingEquipmentIndex] = useState<number | null>(null);
 
-    useEffect(() => {
-        // Initialize dropdown refs when equipment changes
-        setDropdownRefs(Array(equipamentosSelecionados.length).fill(0).map(() => React.createRef()));
-    }, [equipamentosSelecionados.length]);
-
-    useEffect(() => {
-        // Inicialize os valores de controle para equipamentos existentes
-        if (equipamentosSelecionados.length > 0) {
-            const initialValues: { [key: number]: string } = {};
-            equipamentosSelecionados.forEach((equip, idx) => {
-                const equipItem = EQUIPAMENTOS.find(e => e.label === equip.tipo);
-                if (equipItem) {
-                    initialValues[idx] = equipItem.value;
-                }
-            });
-            setEquipamentoValues(initialValues);
-        }
-    }, [equipamentosSelecionados]); // Adicionar equipamentosSelecionados como dependência
-
-    const adicionarEquipamento = () => {
-        setEquipamentosSelecionados([
-            ...equipamentosSelecionados,
-            {
-                tipo: '',
-                quantidade: '1',
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 9)
-            }
-        ]);
+    const handleEditEquipment = (index: number) => {
+        setEditingEquipmentIndex(index);
+        setIsModalVisible(true);
     };
 
-    const removerEquipamento = (index: number) => {
-        const novosEquipamentos = equipamentosSelecionados.filter((_, idx) => idx !== index);
-        setEquipamentosSelecionados(novosEquipamentos);
-
-        setEquipamentoValues(prev => {
-            const newValues = { ...prev };
-            delete newValues[index];
-            return newValues;
-        });
-
+    const handleModalClose = () => {
+        setIsModalVisible(false);
+        setEditingEquipmentIndex(null);
     };
 
-    const atualizarEquipamento = (index: number, atualizacoes: Partial<Equipamento>) => {
-        const novosEquipamentos = [...equipamentosSelecionados];
-        novosEquipamentos[index] = {
-            ...novosEquipamentos[index],
-            ...atualizacoes
-        };
-        setEquipamentosSelecionados(novosEquipamentos);
+    const handleRemoveEquipment = (index: number) => {
+        // Make a copy of the existing equipment array or create an empty one
+        const updatedEquipments = [...(formData.equipamentos || [])];
+        // Remove the equipment at the specified index
+        updatedEquipments.splice(index, 1);
+        // Update the form data with the new array
+        saveFormData({ equipamentos: updatedEquipments });
+    };
+
+    const getEquipmentIcon = (tipoLabel: string): string => {
+        const equipamento = EQUIPAMENTOS.find(e => e.label === tipoLabel);
+        return equipamento?.icon || 'wrench';
     };
 
     return (
@@ -83,110 +58,71 @@ const Equipment: React.FC<EquipmentProps> = ({
             </View>
 
             <View style={styles.inputGroup}>
-                {equipamentosSelecionados.map((item, index) => (
-                    <View key={`equipamento-${item.id || index}`}  style={styles.itemRow}>
-                        <View style={styles.itemMain}>
-                            <TouchableOpacity
-                                style={styles.dropdownContainer}
-                                onPress={() => dropdownRefs[index]?.current?.open()}
-                            >
-                                <Dropdown
-                                    ref={dropdownRefs[index]}
-                                    style={styles.dropdown}
-                                    placeholderStyle={styles.placeholderStyle}
-                                    selectedTextStyle={styles.selectedTextStyle}
-                                    iconStyle={styles.iconStyle}
-                                    data={EQUIPAMENTOS.filter(e =>
-                                        !equipamentosSelecionados.some(es =>
-                                            es.tipo === e.value && es !== item
-                                        )
-                                    )}
-                                    placeholder='Selecione um equipamento'
-                                    labelField="label"
-                                    valueField="value"
-                                    value={equipamentoValues[index]}
-                                    onChange={value => {
-                                        // Atualiza o valor de controle
-                                        setEquipamentoValues(prev => ({
-                                            ...prev,
-                                            [index]: value.value
-                                        }));
-
-                                        // Mantém a lógica atual
-                                        atualizarEquipamento(index, {
-                                            tipo: value.label,
-                                            quantidade: item.quantidade || '1'
-                                        });
-                                    }}
-                                    renderLeftIcon={() => (
-                                        <MaterialCommunityIcons
-                                            name="wrench"
-                                            size={20}
-                                            color={customTheme.colors.primary}
-                                            style={styles.dropdownIcon}
-                                        />
-                                    )}
-                                    renderItem={item => (
-                                        <View style={styles.dropdownItem}>
-                                            <MaterialCommunityIcons
-                                                name={item.icon}
-                                                size={20}
-                                                color={customTheme.colors.primary}
-                                            />
-                                            <Text style={styles.dropdownLabel}>
-                                                {item.label}
-                                            </Text>
-                                        </View>
-                                    )}
+                {formData.equipamentos?.map((item, index) => (
+                    <View key={`equipamento-${item.id || index}`} style={styles.equipamentoRow}>
+                        <TouchableOpacity
+                            style={styles.equipmentButton}
+                            onPress={() => handleEditEquipment(index)}
+                        >
+                            <View style={styles.equipmentButtonContent}>
+                                <MaterialCommunityIcons
+                                    name={getEquipmentIcon(item.tipo)}
+                                    size={24}
+                                    color={customTheme.colors.primary}
                                 />
-                            </TouchableOpacity>
-
-                            <TextInput
-                                mode="outlined"
-                                placeholder="Qtd"
-                                value={item.quantidade}
-                                onChangeText={value => {
-                                    atualizarEquipamento(index, { quantidade: value });
-                                }}
-                                keyboardType="numeric"
-                                style={styles.quantidadeInput}
-                                left={<TextInput.Icon
-                                    icon={() => (
-                                        <MaterialCommunityIcons
-                                            name="numeric"
-                                            size={24}
-                                            color={customTheme.colors.primary}
-                                        />
-                                    )}
-                                />}
-                            />
-
+                                <View style={styles.equipmentTextContainer}>
+                                    <Text style={styles.equipmentNameText}>
+                                        {item.tipo || "Selecione um equipamento"}
+                                    </Text>
+                                    <Text style={styles.equipmentQuantityText}>
+                                        Quantidade: {item.quantidade || "1"}
+                                    </Text>
+                                </View>
+                            </View>
                             <TouchableOpacity
-                                onPress={() => removerEquipamento(index)}
+                                onPress={() => handleRemoveEquipment(index)}
                                 style={styles.removeButton}
-                                disabled={equipamentosSelecionados.length === 1}
+                                disabled={(formData.equipamentos?.length ?? 0) <= 1}
                             >
                                 <MaterialCommunityIcons
                                     name="delete-outline"
                                     size={24}
-                                    color={equipamentosSelecionados.length === 1 ?
+                                    color={(formData.equipamentos?.length ?? 0) <= 1 ?
                                         customTheme.colors.surfaceDisabled :
                                         customTheme.colors.error}
                                 />
                             </TouchableOpacity>
-                        </View>
+                        </TouchableOpacity>
                     </View>
                 ))}
 
-                <Button
-                    mode="outlined"
-                    onPress={adicionarEquipamento}
-                    icon="plus"
-                    style={styles.addButton}
+                <TouchableOpacity
+                    style={styles.addEquipmentButton}
+                    onPress={() => {
+                        setEditingEquipmentIndex(null);
+                        setIsModalVisible(true);
+                    }}
                 >
-                    Adicionar Equipamento
-                </Button>
+                    <MaterialCommunityIcons
+                        name="plus"
+                        size={24}
+                        color={customTheme.colors.primary}
+                    />
+                    <Text style={styles.addEquipmentButtonText}>
+                        Adicionar Equipamento
+                    </Text>
+                </TouchableOpacity>
             </View>
+
+            <EquipmentSelectionModal
+                visible={isModalVisible}
+                onClose={handleModalClose}
+                onConfirm={() => {}} // This is not needed since we're using saveFormData directly
+                availableEquipments={EQUIPAMENTOS}
+                formData={formData}
+                saveFormData={saveFormData}
+                editingIndex={editingEquipmentIndex}
+            />
         </View>
     );
 };
@@ -209,72 +145,59 @@ const styles = StyleSheet.create({
     inputGroup: {
         gap: 10,
     },
-    itemRow: {
-        marginBottom: 16,
+    equipamentoRow: {
+        marginBottom: 8,
     },
-    itemMain: {
+    equipmentButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-    },
-    dropdownContainer: {
-        flex: 3,
-        borderColor: customTheme.colors.outline,
+        backgroundColor: customTheme.colors.surface,
         borderRadius: 8,
-        backgroundColor: '#FFFFFF',
-        height: 56,
-    },
-    dropdown: {
-        height: 56,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 8,
+        padding: 12,
+        elevation: 1,
         borderWidth: 1,
-        paddingHorizontal: 16,
-        backgroundColor: '#FFFFFF',
+        borderColor: customTheme.colors.outline,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
     },
-    quantidadeInput: {
+    equipmentButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
         flex: 1,
-        maxWidth: 100,
-        backgroundColor: '#FFFFFF',
-        height: 56,
+    },
+    equipmentTextContainer: {
+        marginLeft: 12,
+        flex: 1,
+    },
+    equipmentNameText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: customTheme.colors.onSurface,
+    },
+    equipmentQuantityText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurfaceVariant,
     },
     removeButton: {
         padding: 8,
-        height: 56,
-        justifyContent: 'center',
     },
-    addButton: {
-        marginTop: 8,
-        borderColor: customTheme.colors.primary,
-        borderStyle: 'dashed',
-    },
-    dropdownIcon: {
-        marginRight: 12,
-    },
-    dropdownItem: {
+    addEquipmentButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        gap: 12,
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: customTheme.colors.primary,
+        borderStyle: 'dashed',
+        borderRadius: 8,
+        paddingVertical: 12,
+        marginTop: 8,
     },
-    dropdownLabel: {
-        flex: 1,
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-    },
-    placeholderStyle: {
-        fontSize: 16,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    selectedTextStyle: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
+    addEquipmentButtonText: {
+        marginLeft: 8,
+        color: customTheme.colors.primary,
         fontWeight: '500',
-    },
-    iconStyle: {
-        width: 24,
-        height: 24,
     },
 });
 

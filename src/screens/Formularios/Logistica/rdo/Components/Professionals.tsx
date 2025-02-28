@@ -1,73 +1,47 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, TextInput, Button } from 'react-native-paper';
+import React, { useState } from 'react';
+import {
+    View,
+    StyleSheet,
+    TouchableOpacity
+} from 'react-native';
+import {
+    Text,
+    Surface
+} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Dropdown } from 'react-native-element-dropdown';
 import { customTheme } from '../../../../../theme/theme';
-import { Profissional, DropdownRef, PROFISSIONAIS } from '../Types/rdoTypes';
+import { Profissional, PROFISSIONAIS, GeneralInfoProps, FormDataInterface } from '../Types/rdoTypes';
+import { ProfessionalSelectionModal } from './ProfessionalSelectionModal';
 
-interface ProfessionalsProps {
-    profissionaisSelecionados: Profissional[];
-    setProfissionaisSelecionados: React.Dispatch<React.SetStateAction<Profissional[]>>;
-}
-
-const Professionals: React.FC<ProfessionalsProps> = ({
-    profissionaisSelecionados,
-    setProfissionaisSelecionados
+const Professionals: React.FC<GeneralInfoProps> = ({
+    formData,
+    saveFormData
 }) => {
-    const [dropdownRefs, setDropdownRefs] = useState<React.RefObject<DropdownRef>[]>([]);
-    const [profissionalValues, setProfissionalValues] = useState<{ [key: number]: string }>({});
+    const [isModalVisible, setIsModalVisible] = useState(false);
+    const [editingProfessionalIndex, setEditingProfessionalIndex] = useState<number | null>(null);
 
-    useEffect(() => {
-        // Initialize dropdown refs when professionals change
-        setDropdownRefs(Array(profissionaisSelecionados.length).fill(0).map(() => React.createRef()));
-    }, [profissionaisSelecionados.length]);
-
-    useEffect(() => {
-        // Mapear valores atuais para o estado de controle do dropdown
-        const valuesMap: { [key: number]: string } = {};
-
-        // Para cada profissional, encontre o value correspondente no PROFISSIONAIS
-        profissionaisSelecionados.forEach((prof, index) => {
-            // Procurar pelo item correspondente em PROFISSIONAIS
-            const foundItem = PROFISSIONAIS.find(p => p.label === prof.tipo);
-            if (foundItem) {
-                valuesMap[index] = foundItem.value;
-            }
-        });
-
-        setProfissionalValues(valuesMap);
-    }, [profissionaisSelecionados]);
-
-    useEffect(() => {
-        // Initialize dropdown refs when professionals change
-        setDropdownRefs(Array(profissionaisSelecionados.length).fill(0).map(() => React.createRef()));
-    }, [profissionaisSelecionados.length]);
-
-    const adicionarProfissional = () => {
-        // Adicionar novo profissional com ID único
-        setProfissionaisSelecionados([
-            ...profissionaisSelecionados,
-            {
-                tipo: '',
-                quantidade: '1',
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 9)
-            }
-        ]);
+    const handleEditProfessional = (index: number) => {
+        setEditingProfessionalIndex(index);
+        setIsModalVisible(true);
     };
 
-    const removerProfissional = (index: number) => {
-        const novosProfissionais = profissionaisSelecionados.filter((_, idx) => idx !== index);
-        setProfissionaisSelecionados(novosProfissionais);
+    const handleModalClose = () => {
+        setIsModalVisible(false);
+        setEditingProfessionalIndex(null);
     };
 
-    const atualizarProfissional = (index: number, atualizacoes: Partial<Profissional>) => {
-        const novosProfissionais = [...profissionaisSelecionados];
-        novosProfissionais[index] = {
-            ...novosProfissionais[index],
-            ...atualizacoes
-        };
-        setProfissionaisSelecionados(novosProfissionais);
+    const handleRemoveProfessional = (index: number) => {
+        // Make a copy of the existing professionals array or create an empty one
+        const updatedProfessionals = [...(formData.profissionais || [])];
+        // Remove the professional at the specified index
+        updatedProfessionals.splice(index, 1);
+        // Update the form data with the new array
+        saveFormData({ profissionais: updatedProfessionals });
+    };
+
+    const getProfessionalIcon = (tipoLabel: string): string => {
+        const profissional = PROFISSIONAIS.find(p => p.label === tipoLabel);
+        return profissional?.icon || 'account';
     };
 
     return (
@@ -84,110 +58,71 @@ const Professionals: React.FC<ProfessionalsProps> = ({
             </View>
 
             <View style={styles.inputGroup}>
-                {profissionaisSelecionados.map((item, index) => (
-                    <View key={`profissional-${item.id || index}`} style={styles.itemRow}>
-                        <View style={styles.itemMain}>
-                            <TouchableOpacity
-                                style={styles.dropdownContainer}
-                                onPress={() => dropdownRefs[index]?.current?.open()}
-                            >
-                                <Dropdown
-                                    ref={dropdownRefs[index]}
-                                    style={styles.dropdown}
-                                    placeholderStyle={styles.placeholderStyle}
-                                    selectedTextStyle={styles.selectedTextStyle}
-                                    iconStyle={styles.iconStyle}
-                                    data={PROFISSIONAIS.filter(p =>
-                                        !profissionaisSelecionados.some(ps =>
-                                            ps.tipo === p.label && ps !== item
-                                        )
-                                    )}
-                                    labelField="label"
-                                    valueField="value"
-                                    placeholder="Selecione o profissional"
-                                    value={profissionalValues[index]} // Use o estado de controle
-                                    onChange={value => {
-                                        // Atualiza o valor de controle do dropdown
-                                        setProfissionalValues(prev => ({
-                                            ...prev,
-                                            [index]: value.value
-                                        }));
-
-                                        // Mantém a lógica atual
-                                        atualizarProfissional(index, {
-                                            tipo: value.label,
-                                            quantidade: item.quantidade || '1'
-                                        });
-                                    }}
-                                    renderLeftIcon={() => (
-                                        <MaterialCommunityIcons
-                                            name="account"
-                                            size={20}
-                                            color={customTheme.colors.primary}
-                                            style={styles.dropdownIcon}
-                                        />
-                                    )}
-                                    renderItem={item => (
-                                        <View style={styles.dropdownItem}>
-                                            <MaterialCommunityIcons
-                                                name={item.icon}
-                                                size={20}
-                                                color={customTheme.colors.primary}
-                                            />
-                                            <Text style={styles.dropdownLabel}>
-                                                {item.label}
-                                            </Text>
-                                        </View>
-                                    )}
+                {formData.profissionais?.map((item, index) => (
+                    <View key={`profissional-${item.id || index}`} style={styles.profissionalRow}>
+                        <TouchableOpacity
+                            style={styles.professionalButton}
+                            onPress={() => handleEditProfessional(index)}
+                        >
+                            <View style={styles.professionalButtonContent}>
+                                <MaterialCommunityIcons
+                                    name={getProfessionalIcon(item.tipo)}
+                                    size={24}
+                                    color={customTheme.colors.primary}
                                 />
-                            </TouchableOpacity>
-
-                            <TextInput
-                                mode="outlined"
-                                placeholder="Qtd"
-                                value={item.quantidade}
-                                onChangeText={value => {
-                                    atualizarProfissional(index, { quantidade: value });
-                                }}
-                                keyboardType="numeric"
-                                style={styles.quantidadeInput}
-                                left={<TextInput.Icon
-                                    icon={() => (
-                                        <MaterialCommunityIcons
-                                            name="numeric"
-                                            size={24}
-                                            color={customTheme.colors.primary}
-                                        />
-                                    )}
-                                />}
-                            />
-
+                                <View style={styles.professionalTextContainer}>
+                                    <Text style={styles.professionalNameText}>
+                                        {item.tipo || "Selecione um profissional"}
+                                    </Text>
+                                    <Text style={styles.professionalQuantityText}>
+                                        Quantidade: {item.quantidade || "1"}
+                                    </Text>
+                                </View>
+                            </View>
                             <TouchableOpacity
-                                onPress={() => removerProfissional(index)}
+                                onPress={() => handleRemoveProfessional(index)}
                                 style={styles.removeButton}
-                                disabled={profissionaisSelecionados.length === 1}
+                                disabled={(formData.profissionais?.length ?? 0) <= 1}
                             >
                                 <MaterialCommunityIcons
                                     name="delete-outline"
                                     size={24}
-                                    color={profissionaisSelecionados.length === 1 ?
+                                    color={(formData.profissionais?.length ?? 0) <= 1 ?
                                         customTheme.colors.surfaceDisabled :
                                         customTheme.colors.error}
                                 />
                             </TouchableOpacity>
-                        </View>
+                        </TouchableOpacity>
                     </View>
-                ))} 
+                ))}
 
-                <Button
-                    mode="outlined"
-                    onPress={adicionarProfissional}
-                    icon="plus"
-                    style={styles.addButton}
+                <TouchableOpacity
+                    style={styles.addProfessionalButton}
+                    onPress={() => {
+                        setEditingProfessionalIndex(null);
+                        setIsModalVisible(true);
+                    }}
                 >
-                    Adicionar Profissional
-                </Button>
+                    <MaterialCommunityIcons
+                        name="plus"
+                        size={24}
+                        color={customTheme.colors.primary}
+                    />
+                    <Text style={styles.addProfessionalButtonText}>
+                        Adicionar Profissional
+                    </Text>
+                </TouchableOpacity>
             </View>
+
+            <ProfessionalSelectionModal
+                visible={isModalVisible}
+                onClose={handleModalClose}
+                onConfirm={() => {}} // This is not needed since we're using saveFormData directly
+                availableProfessionals={PROFISSIONAIS}
+                formData={formData}
+                saveFormData={saveFormData}
+                editingIndex={editingProfessionalIndex}
+            />
         </View>
     );
 };
@@ -210,72 +145,59 @@ const styles = StyleSheet.create({
     inputGroup: {
         gap: 10,
     },
-    itemRow: {
-        marginBottom: 16,
+    profissionalRow: {
+        marginBottom: 8,
     },
-    itemMain: {
+    professionalButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-    },
-    dropdownContainer: {
-        flex: 3,
-        borderColor: customTheme.colors.outline,
+        backgroundColor: customTheme.colors.surface,
         borderRadius: 8,
-        backgroundColor: '#FFFFFF',
-        height: 56,
-    },
-    dropdown: {
-        height: 56,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 8,
+        padding: 12,
+        elevation: 1,
         borderWidth: 1,
-        paddingHorizontal: 16,
-        backgroundColor: '#FFFFFF',
+        borderColor: customTheme.colors.outline,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
     },
-    quantidadeInput: {
+    professionalButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
         flex: 1,
-        maxWidth: 100,
-        backgroundColor: '#FFFFFF',
-        height: 56,
+    },
+    professionalTextContainer: {
+        marginLeft: 12,
+        flex: 1,
+    },
+    professionalNameText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: customTheme.colors.onSurface,
+    },
+    professionalQuantityText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurfaceVariant,
     },
     removeButton: {
         padding: 8,
-        height: 56,
-        justifyContent: 'center',
     },
-    addButton: {
-        marginTop: 8,
-        borderColor: customTheme.colors.primary,
-        borderStyle: 'dashed',
-    },
-    dropdownIcon: {
-        marginRight: 12,
-    },
-    dropdownItem: {
+    addProfessionalButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        gap: 12,
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: customTheme.colors.primary,
+        borderStyle: 'dashed',
+        borderRadius: 8,
+        paddingVertical: 12,
+        marginTop: 8,
     },
-    dropdownLabel: {
-        flex: 1,
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-    },
-    placeholderStyle: {
-        fontSize: 16,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    selectedTextStyle: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
+    addProfessionalButtonText: {
+        marginLeft: 8,
+        color: customTheme.colors.primary,
         fontWeight: '500',
-    },
-    iconStyle: {
-        width: 24,
-        height: 24,
     },
 });
 

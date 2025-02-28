@@ -1,5 +1,6 @@
 import { showGlobalToast } from '../../../../../helpers/GlobalApi';
 import { FormDataInterface, Profissional, Equipamento, Atividade, Ocorrencia, Photo } from '../Types/rdoTypes';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Format date to DD/MM/YYYY
 export const formatDate = (date: Date): string => {
@@ -17,13 +18,6 @@ export const formatTime = (date: Date): string => {
 // Validate the form data
 export const validateForm = (
     formData: FormDataInterface,
-    materialSelecionado: string,
-    tempoManha: string,
-    tempoTarde: string,
-    tempoNoite: string,
-    profissionaisSelecionados: Profissional[],
-    equipamentosSelecionados: Equipamento[],
-    atividadesRealizadas: Atividade[]
 ): string[] => {
     const errors: string[] = [];
 
@@ -31,16 +25,16 @@ export const validateForm = (
     if (!formData.cliente) errors.push("Informe o cliente");
     if (!formData.servico) errors.push("Selecione o serviço");
     if (!formData.responsavel) errors.push("Informe o responsável");
-    if (!materialSelecionado) errors.push("Selecione o material");
-    if (!tempoManha) errors.push("Informe a condição do tempo pela manhã");
-    if (!tempoTarde) errors.push("Informe a condição do tempo pela tarde");
-    if (!tempoNoite) errors.push("Informe a condição do tempo pela noite");
+    if (!formData.material) errors.push("Selecione o material");
+    if (!formData.condicaoTempo.manha) errors.push("Informe a condição do tempo pela manhã");
+    if (!formData.condicaoTempo.tarde) errors.push("Informe a condição do tempo pela tarde");
+    if (!formData.condicaoTempo.noite) errors.push("Informe a condição do tempo pela noite");
 
     // Validate professionals
-    if (profissionaisSelecionados.length === 0) {
+    if (formData.profissionais?.length === 0) {
         errors.push("Adicione pelo menos um profissional");
     } else {
-        const profissionaisInvalidos = profissionaisSelecionados.some(
+        const profissionaisInvalidos = formData.profissionais?.some(
             p => !p.tipo || !p.quantidade || p.quantidade === '0'
         );
         if (profissionaisInvalidos) {
@@ -49,10 +43,10 @@ export const validateForm = (
     }
 
     // Validate equipment
-    if (equipamentosSelecionados.length === 0) {
+    if (formData.equipamentos?.length === 0) {
         errors.push("Adicione pelo menos um equipamento");
     } else {
-        const equipamentosInvalidos = equipamentosSelecionados.some(
+        const equipamentosInvalidos = formData.equipamentos?.some(
             e => !e.tipo || !e.quantidade || e.quantidade === '0'
         );
         if (equipamentosInvalidos) {
@@ -61,7 +55,7 @@ export const validateForm = (
     }
 
     // Validate activities
-    const atividadesInvalidas = atividadesRealizadas.some(
+    const atividadesInvalidas = formData.atividades?.some(
         a => !a.descricao || a.descricao.trim() === ''
     );
     if (atividadesInvalidas) {
@@ -95,4 +89,3 @@ export const getStartOfMonth = (): Date => {
     date.setHours(0, 0, 0, 0);
     return date;
 };
-

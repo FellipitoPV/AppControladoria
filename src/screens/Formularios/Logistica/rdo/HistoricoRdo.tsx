@@ -18,7 +18,6 @@ import { useUser } from '../../../../contexts/userContext';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
 import { customTheme } from '../../../../theme/theme';
 import { hasAccess } from '../../../Adm/components/admTypes';
-import EditRdoModal from './Components/EditRdoModal';
 import DetalheRdoModal from './Components/DetalheRdoModal';
 import { FormDataInterface } from './Types/rdoTypes';
 
