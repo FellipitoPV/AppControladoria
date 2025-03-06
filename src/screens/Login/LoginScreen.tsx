@@ -18,8 +18,9 @@ import { useUser } from '../../contexts/userContext';
 import { customTheme } from '../../theme/theme';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import WelcomeScreen from './WelcomeScreen';
-import { useFocusEffect } from '@react-navigation/native';
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import SaveButton from '../../assets/components/SaveButton';
+import { StackNavigationProp } from '@react-navigation/stack';
 
 const inputTheme = {
     colors: {
@@ -29,7 +30,27 @@ const inputTheme = {
     }
 };
 
-export default function LoginScreen({ navigation }: any) {
+type RootStackParamList = {
+    Login: {
+        nextScreen?: string;
+        nextScreenParams?: object;
+    };
+    Home: undefined;
+    ForgotPass: undefined;
+    Register: undefined;
+    // Outras rotas
+};
+
+type LoginScreenProps = {
+    navigation: StackNavigationProp<RootStackParamList, 'Login'>;
+    route?: RouteProp<RootStackParamList, 'Login'>;
+};
+
+
+const LoginScreen: React.FC<LoginScreenProps> = ({
+    navigation,
+    route
+}) => {
     const { updateUserInfo } = useUser();
     const [email, setEmail] = useState('');
     const [welcomeIsOpen, setWelcomeIsOpen] = useState<boolean>(true);
@@ -67,7 +88,13 @@ export default function LoginScreen({ navigation }: any) {
     }, [navigation, welcomeIsOpen]);
 
     // Modifique a função handleLogin
-    const handleLogin = async (loginEmail: string, loginPassword: string, isAutoLogin = false) => {
+    const handleLogin = async (
+        loginEmail: string,
+        loginPassword: string,
+        isAutoLogin = false,
+        nextScreen?: string,
+        nextScreenParams?: object
+    ) => {
         setIsLoading(true);
 
         try {
@@ -95,8 +122,12 @@ export default function LoginScreen({ navigation }: any) {
 
             // Pequeno timeout para garantir que o estado foi atualizado
             setTimeout(() => {
-                // Navegar para Home usando replace
-                navigation.replace('Home');
+                // Navegar para a próxima tela ou para Home
+                if (nextScreen) {
+                    navigation.replace(nextScreen as keyof RootStackParamList, nextScreenParams);
+                } else {
+                    navigation.replace('Home');
+                }
             }, 100);
 
             if (!isAutoLogin) {
@@ -146,8 +177,18 @@ export default function LoginScreen({ navigation }: any) {
             const savedEmail = await AsyncStorage.getItem('userEmail');
             const savedPassword = await AsyncStorage.getItem('userPassword');
 
+            // Verificar se há parâmetros de navegação passados na autenticação
+            const nextScreen = route?.params?.nextScreen;
+            const nextScreenParams = route?.params?.nextScreenParams;
+
             if (savedEmail && savedPassword) {
-                await handleLogin(savedEmail, savedPassword, true);
+                await handleLogin(
+                    savedEmail,
+                    savedPassword,
+                    true,
+                    nextScreen,
+                    nextScreenParams
+                );
             }
         } catch (error) {
             console.error('Erro na verificação de autenticação:', error);
@@ -155,6 +196,7 @@ export default function LoginScreen({ navigation }: any) {
             setIsCheckingAuth(false);
         }
     };
+
 
     if (isCheckingAuth) {
         return (
@@ -336,3 +378,5 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 });
+
+export default LoginScreen;

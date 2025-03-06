@@ -43,6 +43,7 @@ const checkAndRequestPermission = async (permission: Permission): Promise<Permis
     }
 };
 
+// Modificação para checkPermissions.ts
 const checkPermissions = async (): Promise<boolean> => {
     if (Platform.OS === 'android') {
         console.log('[LOG] Solicitando permissões...');
@@ -83,16 +84,8 @@ const checkPermissions = async (): Promise<boolean> => {
         if (allGranted) {
             console.log('[LOG] Todas as permissões foram concedidas.');
 
-            // Configure push notifications
-            PushNotification.configure({
-                onRegister: function (token) {
-                    console.log("Notification Token:", token);
-                },
-                onNotification: function (notification) {
-                    console.log("NOTIFICATION:", notification);
-                },
-                requestPermissions: true
-            });
+            // IMPORTANTE: Remova a configuração do PushNotification.configure daqui
+            // para evitar sobrescrever a configuração do index.js
         } else {
             console.warn('[LOG] Algumas permissões foram negadas.');
         }
@@ -100,7 +93,6 @@ const checkPermissions = async (): Promise<boolean> => {
         const hasExactAlarmPermission = await checkScheduleExactAlarmPermission();
 
         return allGranted && hasExactAlarmPermission;
-
     }
 
     return true;

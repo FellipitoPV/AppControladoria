@@ -78,7 +78,7 @@ const QuickActionsGrid = () => {
             title: 'Operacional',
             icon: 'clipboard-list',
             color: customTheme.colors.primary,
-            route: 'LogisticaScreen',
+            route: 'OperacaoScreen',
             access: {
                 moduleId: 'operacao',
                 minLevel: 1 // Nível básico para acesso

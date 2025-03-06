@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, SafeAreaView, Alert, ActivityIndicator } from 'react-native';
 import { Surface, Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -38,8 +38,13 @@ import SaveButton from '../../../../assets/components/SaveButton';
 import PhotoGalleryEnhanced from '../../Lavagem/Components/PhotoGallery';
 import FullScreenImage from '../../../../assets/components/FullScreenImage';
 import { User } from '../../../Adm/components/admTypes';
-import { loadRdoDraft, clearRdoDraft, saveRdoDraft, formatDate } from './Utils/draftUtils';
-import { validateForm, formatTime } from './Utils/formUtils';
+import { validateForm, formatDate, formatTime } from './Utils/formUtils';
+import { loadRdoDraftWithId, loadRdoDraft, clearRdoDraftWithId, clearRdoDraft, saveRdoDraftWithId, saveRdoDraft } from './Utils/draftUtils';
+import DraftConfirmationModal from '../../../../assets/components/DraftConfirmationModal';
+import { useRoute } from '@react-navigation/native';
+
+// Funções de utilidade para o draft system
+const DRAFT_KEY = 'rdoDraft';
 
 type RdoFormRouteProp = RouteProp<RootStackParamList, 'RdoForm'> & {
     params: {
@@ -52,16 +57,32 @@ type RdoFormRouteProp = RouteProp<RootStackParamList, 'RdoForm'> & {
 
 interface RdoFormProps {
     navigation?: StackNavigationProp<RootStackParamList, 'RdoForm'>;
-    route?: RdoFormRouteProp;
+    route?: RdoFormRouteProp & {
+        params?: {
+            cliente?: string;
+            servico?: string;
+            mode?: string;
+            relatorioData?: FormDataInterface;
+            // Novos parâmetros para notificação
+            source?: string;
+            openDraft?: boolean;
+        };
+    };
 }
 
-// TODO Corrigir os farmdata nos components e aplciar oDraft para voltar a prenencher
 export default function RdoForm({ navigation, route }: RdoFormProps) {
     const { userInfo } = useUser();
-    const { cliente, servico, mode, relatorioData } = route?.params || {};
+    const {
+        cliente,
+        servico,
+        mode,
+        relatorioData,
+        source,
+        openDraft
+    } = route?.params || {};
     const isEditMode = mode === 'edit';
 
-    // Estados principais
+    // Estado principal do formulário
     const [formData, setFormData] = useState<FormDataInterface>({
         id: '',
         cliente: cliente || '',
@@ -78,8 +99,8 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         cargo: '',
         profissionais: [],
         equipamentos: [],
-        atividades: [],
-        ocorrencias: [],
+        atividades: [], // Inicializar com uma atividade vazia
+        ocorrencias: [], // Inicializar com array vazio
         createdAt: null,
         createdBy: '',
         comentarioGeral: '',
@@ -88,24 +109,15 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         photos: [],
     });
 
-    // Estados do formulário
+    // Estados adicionais necessários
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [horaInicio, setHoraInicio] = useState(new Date());
     const [horaTermino, setHoraTermino] = useState(new Date());
     const [formErrors, setFormErrors] = useState<string[]>([]);
     const [numeroRdo, setNumeroRdo] = useState('');
     const [relatorioId, setRelatorioId] = useState<string | null>(null);
-    const [hasDraft, setHasDraft] = useState(false);
     const [lastSavedState, setLastSavedState] = useState<string | null>(null);
-    const [isClienteDisabled, setIsClienteDisabled] = useState(false);
-    const [isServicoDisabled, setIsServicoDisabled] = useState(false);
 
-    // Estados de coleções
-    const [atividadesRealizadas, setAtividadesRealizadas] = useState<Atividade[]>([
-        { descricao: '', observacao: '' }
-    ]);
-
-    const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
     const [comentarioGeral, setComentarioGeral] = useState('');
     const [photos, setPhotos] = useState<Photo[]>([]);
 
@@ -113,104 +125,115 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
     const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
     const [isFullScreenVisible, setIsFullScreenVisible] = useState(false);
 
-    // ALGO AQUI
+    const [isDataLoaded, setIsDataLoaded] = useState(false);
+
+    const [draftModalVisible, setDraftModalVisible] = useState(false);
+    const [draftToLoad, setDraftToLoad] = useState<any>(null);
+
+    const [userInteracted, setUserInteracted] = useState<boolean>(false);
+
+    // Flag para evitar carregar draft duplicado
+    const draftLoadedRef = useRef(false);
+
+    // Helper para atualizar formData
     const saveFormData = useCallback((updates: Partial<FormDataInterface>) => {
+        setUserInteracted(true); // Marcar que houve interação
         setFormData(prevData => ({
             ...prevData,
             ...updates
         }));
     }, []);
 
-    const saveNestedFormData = useCallback(<K extends keyof FormDataInterface>(
-        key: K,
-        updates: Partial<FormDataInterface[K]>
-    ) => {
-        setFormData(prevData => ({
-            ...prevData,
-            [key]: {
-                ...(prevData[key] as object),
-                ...updates
-            }
-        }));
-    }, []);
-
-    // Update the checkForDraft function
+    // 2. Certifique-se de que o checkForDraft carrega atividades e ocorrências corretamente
     const checkForDraft = useCallback(async () => {
-        if (isEditMode) return;
+        if (isEditMode || draftLoadedRef.current) return;
 
-        const draft = await loadRdoDraft();
-        if (draft) {
-            setHasDraft(true);
-            setLastSavedState(draft.lastSaved);
+        try {
+            // Verificar draft específico primeiro
+            let draftJson = null;
+            if (cliente && servico) {
+                const key = `${DRAFT_KEY}_${cliente}_${servico}`;
+                draftJson = await AsyncStorage.getItem(key);
+            }
 
-            Alert.alert(
-                "Rascunho encontrado",
-                `Existe um formulário não finalizado de ${new Date(draft.lastSaved).toLocaleString()}. Deseja continuar de onde parou?`,
-                [
-                    {
-                        text: "Não, começar novo",
-                        style: "cancel",
-                        onPress: () => clearRdoDraft()
-                    },
-                    {
-                        text: "Sim, carregar",
-                        onPress: () => {
-                            // Usar a função loadDraftData
-                            //loadDraftData(draft.data, userInfo);
+            // Se não encontrar, tenta o draft geral
+            if (!draftJson) {
+                draftJson = await AsyncStorage.getItem(DRAFT_KEY);
+            }
 
-                            showGlobalToast(
-                                "success",
-                                "Rascunho carregado com sucesso",
-                                "Continuando de onde parou...",
-                                5000
-                            );
-                        }
-                    }
-                ]
-            );
+            // Se encontrou algum draft
+            if (draftJson) {
+                const draft = JSON.parse(draftJson);
+
+                // Em vez do Alert, configuramos o estado e mostramos a modal
+                setDraftToLoad(draft);
+                setDraftModalVisible(true);
+            }
+        } catch (error) {
+            console.error("Erro ao verificar rascunhos:", error);
         }
-    }, [isEditMode, userInfo]);
+    }, [isEditMode, cliente, servico]);
 
-    // Validação em tempo real
+
+    // Validação em tempo real com debounce
     const debouncedValidate = useRef(
-        debounce(
-            (
-                formData: FormDataInterface,
-            ) => {
-                const errors = validateForm(
-                    formData,
-                );
-                setFormErrors(errors);
-            },
-            300
-        )
+        debounce((currentFormData: FormDataInterface) => {
+            const errors = validateForm(currentFormData);
+            setFormErrors(errors);
+        }, 500)
     ).current;
 
     // Salvar rascunho com debounce
     const saveDraftDebounced = useRef(
         debounce(async () => {
-            if (isEditMode) return;
+            // Não salvar em modo de edição ou se não houve interação do usuário
+            if (isEditMode || !userInteracted) return;
 
             try {
-                await saveRdoDraft(formData);
+                // Criar um objeto completo de draft com todos os dados
+                const completeDraft = {
+                    ...formData,
+                    comentarioGeral,
+                    photos,
+                    inicioOperacao: formatTime(horaInicio),
+                    terminoOperacao: formatTime(horaTermino),
+                    data: formatDate(selectedDate)
+                };
+
+                // Salvar o draft específico se tiver cliente e serviço
+                if (cliente && servico) {
+                    const key = `${DRAFT_KEY}_${cliente}_${servico}`;
+                    await AsyncStorage.setItem(key, JSON.stringify({
+                        data: completeDraft,
+                        lastSaved: new Date().toISOString()
+                    }));
+                }
+
+                // Sempre salvar um draft geral também
+                await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
+                    data: completeDraft,
+                    lastSaved: new Date().toISOString()
+                }));
+
                 setLastSavedState(new Date().toISOString());
             } catch (error) {
-                console.error('Erro ao salvar rascunho automaticamente:', error);
+                console.error('Erro ao salvar rascunho:', error);
             }
-        }, 2000)
+        }, 1000)
     ).current;
 
-    // Manipuladores de eventos para fotos
+    // Handlers de foto
     const handleAddPhoto = (newPhoto: Photo) => {
+        setUserInteracted(true);
         setPhotos(prev => [...prev, newPhoto]);
     };
 
     const handleDeletePhoto = (photoId: string) => {
+        setUserInteracted(true);
         setPhotos(prev => prev.filter(foto => foto.id !== photoId));
     };
 
     const handlePhotoPress = (photo: Photo) => {
-        // Normalizar para o formato esperado pelo FullScreenImage
         const photoForViewer = {
             uri: photo.uri || photo.url || '',
             id: photo.id || photo.timestamp?.toString() || Date.now().toString()
@@ -225,7 +248,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         setSelectedPhoto(null);
     };
 
-    // Upload de imagens para Firebase
+    // Upload de imagens para o Firebase
     const uploadImagesToFirebase = async (photos: Photo[], relatorioId: string): Promise<Photo[]> => {
         try {
             const uploadedPhotos: Photo[] = [];
@@ -234,25 +257,18 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             for (const photo of photos) {
                 currentPhotoIndex++;
 
-                // Verificar se a foto já é uma URL do Firebase
+                // Pular fotos que já são URLs do Firebase
                 if (photo?.uri?.startsWith('https://firebasestorage.googleapis.com')) {
-                    // Se já for uma URL do Firebase, adicionar diretamente
                     uploadedPhotos.push(photo);
                     continue;
                 }
 
-                // Caso contrário, fazer upload apenas de fotos locais
+                // Fazer upload apenas de fotos locais
                 if (photo?.uri?.startsWith('file://') || photo?.uri?.startsWith('content://')) {
-                    // Extrair o nome do arquivo da URI
                     const filename = photo.filename || photo.uri.substring(photo.uri.lastIndexOf('/') + 1);
-
-                    // Criar nome único para evitar colisões
                     const uniqueFilename = `${Date.now()}_${filename}`;
-
-                    // Criar referência no Storage com caminho personalizado para o relatório
                     const storageRef = storage().ref(`relatorios/${relatorioId}/fotos/${uniqueFilename}`);
 
-                    // Fazer upload da imagem com monitoramento de progresso
                     const task = storageRef.putFile(photo.uri);
 
                     // Monitorar progresso
@@ -261,13 +277,9 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                         console.log(`Upload da imagem ${currentPhotoIndex}/${photos.length}: ${progress.toFixed(0)}%`);
                     });
 
-                    // Aguardar conclusão do upload
                     await task;
-
-                    // Obter a URL de download
                     const downloadURL = await storageRef.getDownloadURL();
 
-                    // Adicionar a foto com URL do Firebase na lista
                     uploadedPhotos.push({
                         id: photo.id || Date.now().toString(),
                         uri: downloadURL,
@@ -280,9 +292,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         } catch (error: any) {
             console.error('Erro ao fazer upload das imagens:', error);
 
-            // Mostrar mensagem de erro mais específica
             let errorMsg = 'Erro ao fazer upload das imagens.';
-
             if (error.code === 'storage/unauthorized') {
                 errorMsg = 'Permissão negada para upload de imagens.';
             } else if (error.code === 'storage/canceled') {
@@ -302,98 +312,156 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
 
     // Salvar formulário
     const handleSave = async () => {
-        if (formErrors.length > 0) return;
+        if (formErrors.length > 0) {
+            showGlobalToast('error', 'Erro', 'Corrija os erros antes de salvar', 3000);
+            return;
+        }
 
         try {
             const toastMessage = isEditMode ? 'Atualizando relatório...' : 'Salvando relatório...';
             showGlobalToast('info', 'Aguarde', toastMessage, 2000);
 
-            // Defina um ID para o documento caso seja uma nova criação
+            // Definir ID para o documento
             const docId = isEditMode && relatorioId ? relatorioId : numeroRdo;
 
-            // Upload das imagens para o Firebase Storage
+            // Upload de imagens para o Firebase Storage
             let uploadedPhotos: Photo[] = [];
             if (photos.length > 0) {
                 showGlobalToast('info', 'Aguarde', 'Enviando imagens...', 15000);
                 uploadedPhotos = await uploadImagesToFirebase(photos, docId);
             }
 
-            // Preparar dados do RDO
-            const rdo: FormDataInterface = {
-                id: docId,
-                cliente: formData.cliente,
-                clienteNome: formData.clienteNome,
-                servico: formData.servico,
-                responsavel: formData.responsavel,
-                material: formData.material,
-                numeroRdo: formData.numeroRdo,
-                funcao: formData.cargo,
-                cargo: formData.cargo,
-                inicioOperacao: formData.inicioOperacao,
-                terminoOperacao: formData.terminoOperacao,
-                data: formData.data,
+            // Preparar dados do RDO com validação para undefined
+            let rdo: any = {
+                id: docId || '',
+                cliente: formData.cliente || '',
+                clienteNome: formData.clienteNome || '',
+                servico: formData.servico || '',
+                responsavel: formData.responsavel || '',
+                material: formData.material || '',
+                numeroRdo: formData.numeroRdo || '',
+                funcao: formData.cargo || '',
+                cargo: formData.cargo || '',
+                inicioOperacao: formatTime(horaInicio),
+                terminoOperacao: formatTime(horaTermino),
+                data: formatDate(selectedDate),
                 condicaoTempo: {
-                    manha: formData.condicaoTempo.manha,
-                    tarde: formData.condicaoTempo.tarde,
-                    noite: formData.condicaoTempo.noite
+                    manha: formData.condicaoTempo?.manha || '',
+                    tarde: formData.condicaoTempo?.tarde || '',
+                    noite: formData.condicaoTempo?.noite || ''
                 },
-                profissionais: formData.profissionais?.map(p => ({
-                    tipo: p.tipo,
-                    quantidade: (p.quantidade),
-                    id: p.id
-                })),
-                equipamentos: formData.equipamentos?.map(e => ({
-                    tipo: e.tipo,
-                    quantidade: (e.quantidade),
-                    id: e.id
-                })),
-                atividades: atividadesRealizadas.map(a => ({
-                    descricao: a.descricao,
-                    observacao: a.observacao
-                })),
-                ocorrencias: ocorrencias.filter(o => o.tipo && o.descricao),
-                comentarioGeral: comentarioGeral,
-                diaSemana: formData.diaSemana,
-                // Usar as URLs do Firebase em vez das URIs locais
-                photos: uploadedPhotos.map(p => ({ uri: p.uri, id: p.id, filename: p.filename })),
-                createdAt: "",
-                createdBy: "",
-                updatedAt: "",
-                updatedBy: "",
+                profissionais: Array.isArray(formData.profissionais)
+                    ? formData.profissionais.map(p => ({
+                        tipo: p.tipo || '',
+                        quantidade: p.quantidade || '1',
+                        id: p.id || `prof_${Date.now()}`
+                    }))
+                    : [],
+                equipamentos: Array.isArray(formData.equipamentos)
+                    ? formData.equipamentos.map(e => ({
+                        tipo: e.tipo || '',
+                        quantidade: e.quantidade || '1',
+                        id: e.id || `equip_${Date.now()}`
+                    }))
+                    : [],
+                atividades: Array.isArray(formData.atividades)
+                    ? formData.atividades.map(a => ({
+                        descricao: a.descricao || '',
+                        observacao: a.observacao || ''
+                        // Removido o id daqui, pois pode estar causando problemas
+                    }))
+                    : [],
+                ocorrencias: Array.isArray(formData.ocorrencias)
+                    ? formData.ocorrencias
+                        .filter(o => o.tipo && o.descricao)
+                        .map(o => ({
+                            tipo: o.tipo || '',
+                            descricao: o.descricao || ''
+                            // Removido o id daqui, pois pode estar causando problemas
+                        }))
+                    : [],
+                comentarioGeral: formData.comentarioGeral || '',
+                diaSemana: formData.diaSemana || '',
+                photos: uploadedPhotos.map(p => ({
+                    uri: p.uri || '',
+                    id: p.id || `photo_${Date.now()}`,
+                    filename: p.filename || ''
+                }))
             };
 
-            // Se for modo de edição, manter dados originais de criação
+            // Manter dados originais de criação em modo de edição
             if (isEditMode && relatorioData) {
-                rdo.createdAt = relatorioData.createdAt || firestore.Timestamp.now();
-                rdo.createdBy = relatorioData.createdBy || userInfo?.user || '';
-                // Adicionar campo de última atualização
+                // Usar somente valores que sabemos que existem no documento original
+                if (relatorioData.createdAt) {
+                    rdo.createdAt = relatorioData.createdAt;
+                } else {
+                    rdo.createdAt = firestore.Timestamp.now();
+                }
+
+                if (relatorioData.createdBy) {
+                    rdo.createdBy = relatorioData.createdBy;
+                } else {
+                    rdo.createdBy = userInfo?.user || '';
+                }
+
+                // Sempre definir updatedAt e updatedBy para valores conhecidos
                 rdo.updatedAt = firestore.Timestamp.now();
                 rdo.updatedBy = userInfo?.id || '';
             } else {
-                // Criação normal
+                // Para novos documentos
                 rdo.createdAt = firestore.Timestamp.now();
                 rdo.createdBy = userInfo?.id || '';
+                rdo.updatedAt = null;
+                rdo.updatedBy = '';
             }
 
-            // Salvar no Firestore - atualizando ou criando novo documento
+            // Log antes de salvar
+            console.log("Preparando para salvar. isEditMode:", isEditMode, "relatorioId:", relatorioId);
+
+            // Como teste, remover manualmente qualquer propriedade undefined ou null
+            // Esta abordagem rigorosa vai garantir que nenhum valor undefined chegue ao Firestore
+            const cleanObject = (obj: any) => {
+                Object.keys(obj).forEach(key => {
+                    if (obj[key] === undefined) {
+                        console.log(`Removendo propriedade undefined: ${key}`);
+                        delete obj[key];
+                    } else if (obj[key] === null && key !== 'updatedAt') {
+                        // Permitimos null apenas para updatedAt
+                        console.log(`Convertendo null para string vazia: ${key}`);
+                        obj[key] = '';
+                    } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+                        cleanObject(obj[key]);
+                    }
+                });
+                return obj;
+            };
+
+            // Limpar o objeto para garantir que não haja undefined
+            rdo = cleanObject(rdo);
+
+            // Salvar no Firestore
             if (isEditMode && relatorioId) {
+                console.log("Atualizando documento existente");
                 await firestore()
                     .collection('relatoriosRDO')
                     .doc(relatorioId)
                     .update(rdo);
 
-                const sucessoMsg = 'Relatório atualizado com sucesso';
-                showGlobalToast('success', 'Sucesso', sucessoMsg, 4000);
+                showGlobalToast('success', 'Sucesso', 'Relatório atualizado com sucesso', 4000);
             } else {
+                console.log("Criando novo documento");
                 await firestore()
                     .collection('relatoriosRDO')
                     .doc(numeroRdo)
                     .set(rdo);
 
-                const sucessoMsg = 'Relatório registrado com sucesso';
-                showGlobalToast('success', 'Sucesso', sucessoMsg, 4000);
+                showGlobalToast('success', 'Sucesso', 'Relatório registrado com sucesso', 4000);
             }
 
+            // Limpar rascunhos após salvar com sucesso
+            if (cliente && servico) {
+                await clearRdoDraftWithId(cliente, servico);
+            }
             await clearRdoDraft();
 
             if (navigation) {
@@ -401,6 +469,8 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             }
         } catch (error: any) {
             console.error('Erro ao salvar relatório:', error);
+            console.error('Detalhes do erro:', JSON.stringify(error));
+
             showGlobalToast(
                 'error',
                 'Erro',
@@ -410,7 +480,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         }
     };
 
-    // Gerar número de RDO
+    // Effect para gerar número do RDO
     useEffect(() => {
         if (!isEditMode) {
             const gerarNumeroRdo = async () => {
@@ -443,7 +513,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         }
     }, [isEditMode]);
 
-    // Definir dia da semana quando a data mudar
+    // Effect para definir dia da semana quando a data mudar
     useEffect(() => {
         const diaSemanaIndex = selectedDate.getDay();
         const diaSemanaValue = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'][diaSemanaIndex];
@@ -451,112 +521,104 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             diaSemana: diaSemanaValue,
             data: formatDate(selectedDate)
         });
-    }, [selectedDate]);
+    }, [selectedDate, saveFormData]);
 
-    // Preencher dados em modo de edição
+    // Effect para preencher dados em modo de edição
     useEffect(() => {
         if (isEditMode && relatorioData) {
-            // Guardar o ID do relatório para uso na atualização
+            // Marcar que os dados não estão carregados
+            setIsDataLoaded(false);
+
+            console.log("Iniciando carregamento do relatório para edição:", relatorioData.id);
+
+            // 1. Definir ID do relatório e número do RDO
             setRelatorioId(relatorioData.id);
             setNumeroRdo(relatorioData.numeroRdo || '');
 
-            console.log("Toda a informação salva:", relatorioData)
+            // 2. Processar estados que estão fora do formData
 
-            // Converter a data de string para Date
+            // Data
             if (relatorioData.data) {
-                const [dia, mes, ano] = relatorioData.data.split('/').map(Number);
-                const data = new Date(ano, mes - 1, dia);
-                setSelectedDate(data);
+                try {
+                    const [dia, mes, ano] = relatorioData.data.split('/').map(Number);
+                    if (!isNaN(dia) && !isNaN(mes) && !isNaN(ano)) {
+                        const data = new Date(ano, mes - 1, dia);
+                        setSelectedDate(data);
+                    }
+                } catch (e) {
+                    console.error("Erro ao processar data do relatório:", e);
+                }
             }
 
-            // Preencher horas de operação
+            // Horários
             if (relatorioData.inicioOperacao) {
-                const [hora, minuto] = relatorioData.inicioOperacao.split(':').map(Number);
-                const inicioTime = new Date();
-                inicioTime.setHours(hora, minuto, 0);
-                setHoraInicio(inicioTime);
+                try {
+                    const [hora, minuto] = relatorioData.inicioOperacao.split(':').map(Number);
+                    if (!isNaN(hora) && !isNaN(minuto)) {
+                        const inicioTime = new Date();
+                        inicioTime.setHours(hora, minuto, 0);
+                        setHoraInicio(inicioTime);
+                    }
+                } catch (e) {
+                    console.error("Erro ao processar hora de início:", e);
+                }
             }
 
             if (relatorioData.terminoOperacao) {
-                const [hora, minuto] = relatorioData.terminoOperacao.split(':').map(Number);
-                const terminoTime = new Date();
-                terminoTime.setHours(hora, minuto, 0);
-                setHoraTermino(terminoTime);
-            }
-
-            // Preencher outros campos do formulário
-            saveFormData({
-                cliente: relatorioData.cliente || '',
-                servico: relatorioData.servico || '',
-                material: relatorioData.material || '',
-                diaSemana: relatorioData.diaSemana || '',
-                condicaoTempo: {
-                    manha: relatorioData.condicaoTempo.manha || '',
-                    tarde: relatorioData.condicaoTempo.tarde || '',
-                    noite: relatorioData.condicaoTempo.noite || '',
+                try {
+                    const [hora, minuto] = relatorioData.terminoOperacao.split(':').map(Number);
+                    if (!isNaN(hora) && !isNaN(minuto)) {
+                        const terminoTime = new Date();
+                        terminoTime.setHours(hora, minuto, 0);
+                        setHoraTermino(terminoTime);
+                    }
+                } catch (e) {
+                    console.error("Erro ao processar hora de término:", e);
                 }
-            });
-
-            // Preencher arrays de dados
-            saveFormData({
-                profissionais: Array.isArray(relatorioData.profissionais) && relatorioData.profissionais.length > 0
-                    ? relatorioData.profissionais.map(prof => ({
-                        ...prof,
-                        id: prof.id || Date.now().toString() + Math.random().toString(36).substr(2, 9)
-                    }))
-                    : [],
-                equipamentos: Array.isArray(relatorioData.equipamentos) && relatorioData.equipamentos.length > 0
-                    ? relatorioData.equipamentos.map(equip => ({
-                        ...equip,
-                        id: equip.id || Date.now().toString() + Math.random().toString(36).substr(2, 9)
-                    }))
-                    : []
-            });
-
-            if (Array.isArray(relatorioData.atividades) && relatorioData.atividades.length > 0) {
-                setAtividadesRealizadas([...relatorioData.atividades]);
-            } else {
-                setAtividadesRealizadas([{ descricao: '', observacao: '' }]);
             }
 
-            if (Array.isArray(relatorioData.ocorrencias) && relatorioData.ocorrencias.length > 0) {
-                setOcorrencias([...relatorioData.ocorrencias]);
-            }
-
-            if (Array.isArray(relatorioData.photos) && relatorioData.photos.length > 0) {
-                const existingPhotos = relatorioData.photos.map(photo => ({
-                    uri: photo.uri || '',
-                    id: photo.id || Date.now().toString(),
-                    filename: photo.filename || ''
-                }));
-                setPhotos(existingPhotos);
-            }
-
+            // Comentário e fotos
             setComentarioGeral(relatorioData.comentarioGeral || '');
 
-            // Atualizar o formData principal
-            setFormData(prev => ({
-                ...prev,
-                id: relatorioData.id || '',
-                cliente: relatorioData.cliente || '',
-                clienteNome: relatorioData.clienteNome || '',
-                servico: relatorioData.servico || '',
-                responsavel: relatorioData.responsavel || userInfo?.user || '',
-                material: relatorioData.material || '',
-                numeroRdo: relatorioData.numeroRdo || '',
-                funcao: relatorioData.funcao || '',
-                cargo: relatorioData.funcao || userInfo?.cargo || '',
-                inicioOperacao: relatorioData.inicioOperacao || '',
-                terminoOperacao: relatorioData.terminoOperacao || '',
-                data: relatorioData.data || '',
-                diaSemana: relatorioData.diaSemana || '',
-                condicaoTempo: relatorioData.condicaoTempo || { manha: '', tarde: '', noite: '' },
-                comentarioGeral: relatorioData.comentarioGeral || ''
-            }));
-        }
-    }, [isEditMode, relatorioData, userInfo]);
+            if (Array.isArray(relatorioData.photos) && relatorioData.photos.length > 0) {
+                setPhotos(relatorioData.photos);
+            }
 
-    // Configurar usuário e parâmetros
+            // 3. Usar setTimeout para aplicar o formData com um pequeno atraso
+            setTimeout(() => {
+                console.log("Aplicando dados do relatório ao formData com delay:", {
+                    profissionais: relatorioData.profissionais?.length || 0,
+                    equipamentos: relatorioData.equipamentos?.length || 0
+                });
+
+                // Aplicar relatorioData diretamente ao formData
+                setFormData(relatorioData);
+
+                // Marcar que os dados foram carregados após um curto período
+                setTimeout(() => {
+                    setIsDataLoaded(true);
+                    console.log("Dados marcados como carregados!");
+                }, 300);
+            }, 500);
+        } else if (!isEditMode) {
+            // Se não estiver no modo de edição, marcar como carregado imediatamente
+            setIsDataLoaded(true);
+        }
+    }, [isEditMode, relatorioData]);
+
+    // Função de debug que pode ser usada se necessário 
+    const logFormDataStatus = () => {
+        console.log("Status atual do formData:", {
+            id: formData.id,
+            cliente: formData.cliente,
+            profissionais: formData.profissionais?.map(p => ({ id: p.id, tipo: p.tipo, quantidade: p.quantidade })),
+            equipamentos: formData.equipamentos?.map(e => ({ id: e.id, tipo: e.tipo, quantidade: e.quantidade })),
+            atividades: formData.atividades?.length,
+            ocorrencias: formData.ocorrencias?.length
+        });
+    };
+
+    // Effect para configurar dados de usuário e parâmetros
     useEffect(() => {
         if (userInfo) {
             setFormData(prev => ({
@@ -567,74 +629,264 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         }
 
         if (cliente) {
-            saveFormData({
-                cliente,
-            });
+            setFormData(prev => ({
+                ...prev,
+                cliente
+            }));
         }
 
         if (servico) {
-            saveFormData({
-                servico,
-            });
+            setFormData(prev => ({
+                ...prev,
+                servico
+            }));
         }
 
         const generateUniqueId = () => Date.now().toString() + Math.random().toString(36).substr(2, 9);
 
-        if (formData.profissionais?.length === 0) {
-            saveFormData({
+        if (!formData.profissionais || formData.profissionais.length === 0) {
+            setFormData(prev => ({
+                ...prev,
                 profissionais: [{ tipo: '', quantidade: '1', id: generateUniqueId() }]
-            });
+            }));
         }
 
-        if (formData.equipamentos?.length === 0) {
-            saveFormData({
-                profissionais: [{ tipo: '', quantidade: '1', id: generateUniqueId() }]
-            });
+        if (!formData.equipamentos || formData.equipamentos.length === 0) {
+            setFormData(prev => ({
+                ...prev,
+                equipamentos: [{ tipo: '', quantidade: '1', id: generateUniqueId() }]
+            }));
         }
+    }, [userInfo, cliente, servico, formData.profissionais, formData.equipamentos]);
 
-    }, [userInfo, cliente, servico]);
-
-    // Verificar rascunho ao montar
+    // Effect para verificar rascunho ao montar
     useEffect(() => {
-        checkForDraft();
+        if (!draftLoadedRef.current) {
+            checkForDraft();
+        }
     }, [checkForDraft]);
 
-    // Efeito para validação do formulário
+    // Effect para validação do formulário
     useEffect(() => {
-        debouncedValidate(
-            formData,
-        );
-    }, [
-        formData,
-    ]);
-
-    // Efeito para salvar rascunho
-    useEffect(() => {
-        saveDraftDebounced();
-        console.log("Salvando draft apos uma alteração")
+        debouncedValidate(formData);
         return () => {
-            saveDraftDebounced.cancel(); // Cancelar debounce ao desmontar
+            debouncedValidate.cancel();
+        };
+    }, [formData, debouncedValidate]);
+
+    // Effect para salvar rascunho antes de sair da tela
+    useEffect(() => {
+        return () => {
+            // Salvar uma última vez quando o componente desmontar (se não estiver em modo de edição)
+            if (!isEditMode && formData.cliente) {
+                const saveBeforeLeaving = async () => {
+                    // No saveDraftDebounced
+                    const updatedFormData: FormDataInterface = {
+                        ...formData,
+                        // Use spread operator para garantir uma cópia completa
+                        comentarioGeral: comentarioGeral,
+                        photos: [...photos],
+                        inicioOperacao: formatTime(horaInicio),
+                        terminoOperacao: formatTime(horaTermino),
+                        data: formatDate(selectedDate)
+                    };
+
+                    console.log("Salvando rascunho com atividades:", updatedFormData.atividades);
+                    console.log("Salvando rascunho com ocorrências:", updatedFormData.ocorrencias);
+                    // Se cliente e serviço específicos, salvar esse rascunho
+                    if (cliente && servico) {
+                        await saveRdoDraftWithId(updatedFormData, cliente, servico);
+                    }
+
+                    // Sempre salvar rascunho geral também
+                    await saveRdoDraft(updatedFormData);
+                    console.log("Rascunho salvo ao sair da tela");
+                };
+
+                saveBeforeLeaving();
+            }
         };
     }, [
+        isEditMode,
         formData,
+        comentarioGeral,
+        photos,
+        horaInicio,
+        horaTermino,
+        selectedDate,
+        cliente,
+        servico
     ]);
 
     useEffect(() => {
-        console.log
-            (formData.condicaoTempo.manha,
-                formData.condicaoTempo.tarde,
-                formData.condicaoTempo.noite)
+        // Não salvar em modo de edição, se não tiver cliente (formulário vazio) ou se não houve interação
+        if (isEditMode || !formData.cliente || !userInteracted) return;
+
+        // Salvar draft quando qualquer alteração importante acontecer
+        saveDraftDebounced();
+
+        return () => {
+            saveDraftDebounced.cancel();
+        };
     }, [
-        formData.condicaoTempo.manha,
-        formData.condicaoTempo.tarde,
-        formData.condicaoTempo.noite,
+        isEditMode,
+        formData,
+        comentarioGeral,
+        photos,
+        selectedDate,
+        horaInicio,
+        horaTermino,
+        userInteracted // Adicionar userInteracted como dependência
     ]);
 
+    // 4. useEffect para salvar ao sair da tela (sem debounce)
+    useEffect(() => {
+        return () => {
+            // Salvar uma última vez quando o componente desmontar (se não estiver em modo de edição e houve interação)
+            if (!isEditMode && formData.cliente && userInteracted) {
+                const saveBeforeLeaving = async () => {
+                    // No saveDraftDebounced
+                    const updatedFormData: FormDataInterface = {
+                        ...formData,
+                        // Use spread operator para garantir uma cópia completa
+                        comentarioGeral: comentarioGeral,
+                        photos: [...photos],
+                        inicioOperacao: formatTime(horaInicio),
+                        terminoOperacao: formatTime(horaTermino),
+                        data: formatDate(selectedDate)
+                    };
+
+                    console.log("Salvando rascunho com atividades:", updatedFormData.atividades);
+                    console.log("Salvando rascunho com ocorrências:", updatedFormData.ocorrencias);
+                    // Se cliente e serviço específicos, salvar esse rascunho
+                    if (cliente && servico) {
+                        await saveRdoDraftWithId(updatedFormData, cliente, servico);
+                    }
+
+                    // Sempre salvar rascunho geral também
+                    await saveRdoDraft(updatedFormData);
+                    console.log("Rascunho salvo ao sair da tela");
+                };
+
+                saveBeforeLeaving();
+            }
+        };
+    }, [
+        isEditMode,
+        formData,
+        comentarioGeral,
+        photos,
+        horaInicio,
+        horaTermino,
+        selectedDate,
+        cliente,
+        servico,
+        userInteracted // Adicionar como dependência
+    ]);
+
+    const clearDrafts = async () => {
+        try {
+            if (cliente && servico) {
+                await AsyncStorage.removeItem(`${DRAFT_KEY}_${cliente}_${servico}`);
+            }
+            await AsyncStorage.removeItem(DRAFT_KEY);
+            setDraftModalVisible(false);
+        } catch (error) {
+            console.error("Erro ao limpar rascunhos:", error);
+        }
+    };
+
+    // 4. Função para carregar os dados do rascunho
+    const loadDraftData = () => {
+        if (!draftToLoad) return;
+
+        const draftData = draftToLoad.data;
+
+        // 1. Atualizar o formData principal sem provocar nova interação
+        setFormData(draftData);
+
+        // 2. Atualizar os estados de suporte
+
+        // Data
+        if (draftData.data) {
+            try {
+                const [dia, mes, ano] = draftData.data.split('/').map(Number);
+                if (!isNaN(dia) && !isNaN(mes) && !isNaN(ano)) {
+                    setSelectedDate(new Date(ano, mes - 1, dia));
+                }
+            } catch (e) {
+                console.error("Erro ao converter data:", e);
+            }
+        }
+
+        // Horários
+        if (draftData.inicioOperacao) {
+            try {
+                const [hora, minuto] = draftData.inicioOperacao.split(':').map(Number);
+                const time = new Date();
+                time.setHours(hora, minuto, 0);
+                setHoraInicio(time);
+            } catch (e) {
+                console.error("Erro ao converter hora início:", e);
+            }
+        }
+
+        if (draftData.terminoOperacao) {
+            try {
+                const [hora, minuto] = draftData.terminoOperacao.split(':').map(Number);
+                const time = new Date();
+                time.setHours(hora, minuto, 0);
+                setHoraTermino(time);
+            } catch (e) {
+                console.error("Erro ao converter hora término:", e);
+            }
+        }
+
+        // Comentário e fotos
+        setComentarioGeral(draftData.comentarioGeral || '');
+        setPhotos(draftData.photos || []);
+
+        // Manter o último horário salvo do draft carregado
+        setLastSavedState(draftToLoad.lastSaved);
+
+        draftLoadedRef.current = true;
+        setDraftModalVisible(false);
+
+        showGlobalToast(
+            "success",
+            "Rascunho carregado com sucesso",
+            "",
+            3000
+        );
+
+        // Importante: Não definimos userInteracted como true aqui, pois estamos apenas carregando dados, 
+        // não é uma interação do usuário
+    };
+
+
+    // Effect para carregar rascunho da notificação
+    useEffect(() => {
+        const checkDraftFromNotification = async () => {
+            if (source === 'draft_notification' && openDraft) {
+                try {
+                    const draft = await loadRdoDraft();
+                    if (draft) {
+                        loadDraftData();
+                    }
+                } catch (error) {
+                    console.error('Erro ao carregar rascunho da notificação:', error);
+                }
+            }
+        };
+        checkDraftFromNotification();
+    }, [source, openDraft]);
+
+    // Preparação do título do header
     const headerTitle = isEditMode ? "Editar Relatório RDO" : "Relatório Diário de Operação";
 
+    // Início do componente renderizado
     return (
         <SafeAreaView style={styles.safeArea}>
-
             <ModernHeader
                 title={headerTitle}
                 iconName="clipboard-text"
@@ -646,6 +898,23 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                 photo={selectedPhoto}
                 onClose={handleCloseFullScreen}
             />
+
+            <DraftConfirmationModal
+                visible={draftModalVisible}
+                lastSavedDate={draftToLoad?.lastSaved || new Date().toISOString()}
+                onCancel={clearDrafts}
+                onConfirm={loadDraftData}
+            />
+
+
+            {lastSavedState && !isEditMode && (
+                <View style={styles.draftIndicator}>
+                    <MaterialCommunityIcons name="content-save-outline" size={16} color={customTheme.colors.onPrimary} />
+                    <Text style={styles.draftText}>
+                        Rascunho salvo: {new Date(lastSavedState).toLocaleTimeString()}
+                    </Text>
+                </View>
+            )}
 
             <ScrollView
                 style={styles.scrollView}
@@ -679,17 +948,23 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                         saveFormData={saveFormData}
                     />
 
-                    {/* Professionals */}
-                    <Professionals
-                        formData={formData}
-                        saveFormData={saveFormData}
-                    />
-
-                    {/* Equipment */}
-                    <Equipment
-                        formData={formData}
-                        saveFormData={saveFormData}
-                    />
+                    {isEditMode && !isDataLoaded ? (
+                        <View style={{ padding: 20, alignItems: 'center' }}>
+                            <ActivityIndicator size="large" color={customTheme.colors.primary} />
+                            <Text style={{ marginTop: 10 }}>Carregando dados...</Text>
+                        </View>
+                    ) : (
+                        <>
+                            <Professionals
+                                formData={formData}
+                                saveFormData={saveFormData}
+                            />
+                            <Equipment
+                                formData={formData}
+                                saveFormData={saveFormData}
+                            />
+                        </>
+                    )}
 
                     {/* Activities */}
                     <Activities
@@ -760,6 +1035,20 @@ const styles = StyleSheet.create({
         padding: 16,
         backgroundColor: customTheme.colors.surface,
         elevation: 2,
+    },
+    draftIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 6,
+        backgroundColor: customTheme.colors.primary,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0',
+        justifyContent: 'center',
+    },
+    draftText: {
+        fontSize: 12,
+        marginLeft: 6,
+        color: customTheme.colors.onPrimary,
     },
     buttonContainer: {
         marginTop: 32,

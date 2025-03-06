@@ -265,7 +265,6 @@ export default function LogisticaScreen({ navigation }: any) {
         return unsubscribe;
     }, [navigation, isOnline]);
 
-    // Renderiza o botão de ação com estado bloqueado/desbloqueado
     const renderActionButton = (
         icon: string,
         text: string,

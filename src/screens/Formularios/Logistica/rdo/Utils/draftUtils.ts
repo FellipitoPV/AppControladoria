@@ -1,108 +1,237 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Atividade, Equipamento, FormDataInterface, Profissional } from '../Types/rdoTypes';
+import { FormDataInterface } from '../Types/rdoTypes';
+import NotificationService from '../../../../../service/NotificationService';
 
-// Função para salvar múltiplos rascunhos (um para cada cliente/serviço)
-export const saveRdoDraftWithId = async (
-    formData: FormDataInterface,
-    clienteId: string,
-    servicoId: string
-): Promise<void> => {
-    try {
-        const key = `rdo_draft_${clienteId}_${servicoId}`;
-        const draftData = {
-            data: formData,
-            lastSaved: new Date().toISOString(),
-            clienteId,
-            servicoId
-        };
-        await AsyncStorage.setItem(key, JSON.stringify(draftData));
-        console.log(`Rascunho do RDO para cliente ${clienteId} e serviço ${servicoId} salvo`);
-    } catch (error) {
-        console.error('Erro ao salvar rascunho específico do RDO:', error);
-        throw error;
-    }
-};
+// Chave padrão para o rascunho
+const DRAFT_KEY = 'rdoDraft';
+const DRAFT_NOTIFICATION_ID = 'rdo_draft_notification'; // ID para notificações de rascunho
 
-// Utilitários
+// Funções de utilidade para formatação
 export const formatDate = (date: Date): string => {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
 };
 
 export const formatTime = (date: Date): string => {
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
 };
 
-// Funções de rascunho
+// Variável para controlar a frequência das notificações
+let lastNotificationTime = 0;
+const NOTIFICATION_THROTTLE = 5000; // 5 segundos entre notificações
+
+// Função atualizada para ativar notificação de rascunho
+export const activateDraftNotification = () => {
+  try {
+    console.log("Ativando notificação de rascunho com NotificationService");
+
+    // Cancelar notificações anteriores
+    NotificationService.cancelAllNotifications();
+
+    // Usar o método disponível no NotificationService
+    // Vamos usar localNotification em vez de localNotificationSchedule
+    NotificationService.localNotification(
+      "Relatório Diario de Operação Pendente",
+      "Você tem um formulário RDO não concluído. Toque para continuar."
+    );
+
+    console.log("Notificação de rascunho enviada");
+    return true;
+  } catch (error) {
+    console.error('Erro ao ativar notificação de rascunho:', error);
+    return false;
+  }
+};
+
+// Modificar a função de salvar rascunho para incluir throttle de notificações
 export const saveRdoDraft = async (data: FormDataInterface): Promise<void> => {
-    try {
-        console.log("Draft com isso :", data)
-        const draft = {
-            data,
-            lastSaved: new Date().toISOString()
-        };
-        await AsyncStorage.setItem('rdoDraft', JSON.stringify(draft));
-    } catch (error) {
-        console.error('Erro ao salvar rascunho:', error);
-    }
+  try {
+    const draft = {
+      data,
+      lastSaved: new Date().toISOString()
+    };
+
+    console.log("Atividades salvas no draft: ", data.atividades);
+    await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    console.log("Rascunho salvo:", new Date().toLocaleTimeString());
+
+    // Verificar se já passou tempo suficiente desde a última notificação
+    const now = Date.now();
+    // if (now - lastNotificationTime > NOTIFICATION_THROTTLE) {
+    //   // Ativar notificação de rascunho
+    //   activateDraftNotification();
+    //   lastNotificationTime = now;
+    // }
+
+    NotificationService.scheduleRepeatingNotification(
+      "Relatório Diario de Operação em andamento...",
+      "Toque para continuar o formulario.",
+      "RdoForm",
+    )
+
+  } catch (error) {
+    console.error('Erro ao salvar rascunho:', error);
+  }
 };
 
-export const loadRdoDraft = async (): Promise<{ data: FormDataInterface; lastSaved: string } | null> => {
-    try {
-        const draftJson = await AsyncStorage.getItem('rdoDraft');
-        if (draftJson) {
-            return JSON.parse(draftJson);
-        }
-        return null;
-    } catch (error) {
-        console.error('Erro ao carregar rascunho:', error);
-        return null;
+// Função para desativar notificação de rascunho
+export const deactivateDraftNotification = () => {
+  try {
+    NotificationService.cancelAllNotifications();
+    console.log("Notificações de rascunho desativadas");
+    return true;
+  } catch (error) {
+    console.error('Erro ao desativar notificação de rascunho:', error);
+    return false;
+  }
+};
+
+// Função para verificar rascunhos pendentes ao iniciar o app
+export const checkPendingDrafts = async (): Promise<boolean> => {
+  try {
+    const draftJson = await AsyncStorage.getItem(DRAFT_KEY);
+    if (draftJson) {
+      const draft = JSON.parse(draftJson);
+      const lastSaved = new Date(draft.lastSaved);
+      const now = new Date();
+
+      // Se o rascunho foi salvo nas últimas 24 horas
+      if ((now.getTime() - lastSaved.getTime()) < 24 * 60 * 60 * 1000) {
+        return activateDraftNotification();
+      }
     }
+    return false;
+  } catch (error) {
+    console.error('Erro ao verificar rascunhos pendentes:', error);
+    return false;
+  }
+};
+
+// Restante das funções permanece o mesmo
+export const loadRdoDraft = async (): Promise<{ data: FormDataInterface; lastSaved: string } | null> => {
+  try {
+    const draftJson = await AsyncStorage.getItem(DRAFT_KEY);
+    if (draftJson) {
+      // Desativar notificação quando o rascunho for carregado
+      deactivateDraftNotification();
+      return JSON.parse(draftJson);
+    }
+    return null;
+  } catch (error) {
+    console.error('Erro ao carregar rascunho:', error);
+    return null;
+  }
 };
 
 export const clearRdoDraft = async (): Promise<void> => {
-    try {
-        await AsyncStorage.removeItem('rdoDraft');
-    } catch (error) {
-        console.error('Erro ao limpar rascunho:', error);
-    }
+  try {
+    await AsyncStorage.removeItem(DRAFT_KEY);
+    console.log('Rascunho removido com sucesso');
+
+    // Desativar notificação quando rascunho for limpo
+    NotificationService.cancelAllNotifications()
+    deactivateDraftNotification();
+  } catch (error) {
+    console.error('Erro ao limpar rascunho:', error);
+  }
 };
 
-// Função de validação
-export const validateForm = (
-    formData: FormDataInterface,
-    material: string,
-    tempoManha: string,
-    tempoTarde: string,
-    tempoNoite: string,
-    profissionais: Profissional[],
-    equipamentos: Equipamento[],
-    atividades: Atividade[]
-): string[] => {
-    const errors: string[] = [];
+// Versões com ID específico
+export const saveRdoDraftWithId = async (
+  formData: FormDataInterface,
+  clienteId: string,
+  servicoId: string
+): Promise<void> => {
+  try {
+    const key = `rdo_draft_${clienteId}_${servicoId}`;
+    const draftData = {
+      data: formData,
+      lastSaved: new Date().toISOString()
+    };
+    await AsyncStorage.setItem(key, JSON.stringify(draftData));
+    console.log(`Rascunho salvo para cliente ${clienteId} e serviço ${servicoId}`);
 
-    if (!formData.cliente) errors.push('Selecione um cliente');
-    if (!formData.servico) errors.push('Selecione um serviço');
-    if (!material) errors.push('Selecione um material');
-    if (!tempoManha) errors.push('Informe a condição do tempo pela manhã');
-    if (!tempoTarde) errors.push('Informe a condição do tempo pela tarde');
-    if (!tempoNoite) errors.push('Informe a condição do tempo pela noite');
+    // Notificação modificada com throttle igual à versão padrão
+    const now = Date.now();
+    // if (now - lastNotificationTime > NOTIFICATION_THROTTLE) {
+    //   // Usar o método disponível no NotificationService
+    //   NotificationService.localNotification(
+    //     "Relatório Diario de Operação Pendente",
+    //     `Você tem um RDO não concluído para ${clienteId}. Toque para continuar.`
+    //   );
 
-    // Validar profissionais
-    const profissionaisValidos = profissionais.every(p => p.tipo && p.quantidade);
-    if (!profissionaisValidos) errors.push('Preencha corretamente todos os profissionais');
+    //   lastNotificationTime = now;
+    // }
 
-    // Validar equipamentos
-    const equipamentosValidos = equipamentos.every(e => e.tipo && e.quantidade);
-    if (!equipamentosValidos) errors.push('Preencha corretamente todos os equipamentos');
+  } catch (error) {
+    console.error('Erro ao salvar rascunho específico:', error);
+  }
+};
 
-    // Validar atividades
-    const atividadesValidas = atividades.every(a => a.descricao);
-    if (!atividadesValidas) errors.push('Preencha a descrição de todas as atividades');
+export const loadRdoDraftWithId = async (
+  clienteId: string,
+  servicoId: string
+): Promise<{ data: FormDataInterface; lastSaved: string } | null> => {
+  try {
+    const key = `rdo_draft_${clienteId}_${servicoId}`;
+    const draftJson = await AsyncStorage.getItem(key);
 
-    return errors;
+    // Desativar notificações
+    NotificationService.cancelAllNotifications();
+
+    if (draftJson) {
+      return JSON.parse(draftJson);
+    }
+    return null;
+  } catch (error) {
+    console.error('Erro ao carregar rascunho específico:', error);
+    return null;
+  }
+};
+
+export const clearRdoDraftWithId = async (
+  clienteId: string,
+  servicoId: string
+): Promise<void> => {
+  try {
+    const key = `rdo_draft_${clienteId}_${servicoId}`;
+    await AsyncStorage.removeItem(key);
+    console.log(`Rascunho removido para cliente ${clienteId} e serviço ${servicoId}`);
+
+    // Desativar notificações
+    NotificationService.cancelAllNotifications();
+  } catch (error) {
+    console.error('Erro ao limpar rascunho específico:', error);
+  }
+};
+
+// Função de teste para verificar se o NotificationService está funcionando
+export const testDraftNotification = () => {
+  try {
+    console.log("Testando notificação imediata");
+
+    // Enviar uma notificação imediata
+    NotificationService.localNotification(
+      "Teste de Notificação RDO",
+      "Esta é uma notificação de teste do draftUtils"
+    );
+
+    console.log("Notificação de teste enviada");
+    return true;
+  } catch (error) {
+    console.error('Erro ao testar notificação:', error);
+    return false;
+  }
+};
+
+// Função para listar os métodos disponíveis no NotificationService
+export const inspectNotificationService = () => {
+  console.log("Métodos disponíveis no NotificationService:");
+  for (const key in NotificationService) {
+    console.log(`- ${key}`);
+  }
 };

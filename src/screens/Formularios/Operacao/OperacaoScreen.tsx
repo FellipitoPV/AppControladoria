@@ -17,6 +17,9 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import firestore from '@react-native-firebase/firestore';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import ActionButton from '../../../assets/components/ActionButton';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -39,6 +42,7 @@ export default function OperacaoScreen({ navigation }: any) {
     const [lavagensAgendadas, setLavagensAgendadas] = useState<any[]>([]);
 
     const [agendamentosPendentes, setAgendamentosPendentes] = useState(0);
+    const [hasDraft, setHasDraft] = useState(false);
 
     // Primeiro, vamos criar funções auxiliares para datas
     const getStartOfDay = () => {
@@ -188,6 +192,16 @@ export default function OperacaoScreen({ navigation }: any) {
         }
     };
 
+    const checkForDraft = async () => {
+        try {
+            const draftJson = await AsyncStorage.getItem('rdoDraft');
+            setHasDraft(!!draftJson); // Converte para boolean
+        } catch (error) {
+            console.error("Erro ao verificar rascunhos:", error);
+            setHasDraft(false);
+        }
+    };
+
     useEffect(() => {
         fetchAgendamentosPendentes();
 
@@ -205,6 +219,17 @@ export default function OperacaoScreen({ navigation }: any) {
     }, []);
 
     useEffect(() => {
+        checkForDraft();
+
+        const unsubscribe = navigation.addListener('focus', () => {
+            checkForDraft();
+        });
+
+        return unsubscribe;
+    }, [navigation]);
+
+
+    useEffect(() => {
         const loadStats = async () => {
             const novasStats = await fetchLavagemStats();
             setStats(novasStats);
@@ -220,9 +245,42 @@ export default function OperacaoScreen({ navigation }: any) {
         return unsubscribe;
     }, [navigation]);
 
+    const renderActionButton = (
+        icon: string,
+        text: string,
+        onPress: () => void,
+        badge?: number
+    ) => {
+        return (
+            <TouchableOpacity
+                style={styles.actionButton}
+                onPress={onPress}
+            >
+                <View style={styles.actionIconContainer}>
+                    <View style={[
+                        styles.actionIcon,
+                        { backgroundColor: customTheme.colors.primaryContainer }
+                    ]}>
+                        <MaterialCommunityIcons name={icon} size={24} color={customTheme.colors.primary} />
+                    </View>
+                    {badge !== undefined && badge > 0 && (
+                        <View style={styles.badgeContainer}>
+                            <Text style={styles.badgeText}>
+                                {badge > 99 ? '99+' : badge}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+                <Text style={styles.actionText}>
+                    {text}
+                </Text>
+            </TouchableOpacity>
+        );
+    };
+
     return (
         <Surface style={styles.container}>
-            
+
             {/* Header */}
             <ModernHeader
                 title="Operação"
@@ -273,65 +331,19 @@ export default function OperacaoScreen({ navigation }: any) {
                 <View style={styles.actionsContainer}>
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('LavagemForm')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.primaryContainer }]}>
-                                <Icon name="add" size={24} color={customTheme.colors.primary} />
-                            </View>
-                            <Text style={styles.actionText}>Nova Lavagem</Text>
-                        </TouchableOpacity>
+                        <ActionButton
+                            icon="file-document-edit"
+                            text="Relatório Diário"
+                            onPress={() => navigation.navigate('RdoForm')}
+                            noticeText={hasDraft ? "Rascunho disponível..." : undefined}
+                            noticeColor={customTheme.colors.primary}
+                        />
 
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('LavagemAgend')}
-                        >
-                            <View style={styles.actionIconContainer}>
-                                <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.secondaryContainer }]}>
-                                    <Icon name="event-available" size={24} color={customTheme.colors.secondary} />
-                                </View>
-                                {agendamentosPendentes > 0 && (
-                                    <View style={styles.badgeContainer}>
-                                        <Text style={styles.badgeText}>
-                                            {agendamentosPendentes > 99 ? '99+' : agendamentosPendentes}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-                            <Text style={styles.actionText}>Agendar</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('LavagemEstoq')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.tertiaryContainer }]}>
-                                <Icon name="inventory" size={24} color={customTheme.colors.tertiary} />
-                            </View>
-                            <Text style={styles.actionText}>Produtos</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('LavagemHist')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.tertiaryContainer }]}>
-                                <Icon name="history" size={24} color={customTheme.colors.tertiary} />
-                            </View>
-                            <Text style={styles.actionText}>Histórico</Text>
-                        </TouchableOpacity>
-
-                        {/* TODO Pegar um exemplo de relatorio de lavagem deles */}
-                        {/* <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('RelatorioLavagens')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.primaryContainer }]}>
-                                <Icon name="bar-chart" size={24} color={customTheme.colors.primary} />
-                            </View>
-                            <Text style={styles.actionText}>Relatórios</Text>
-                        </TouchableOpacity> */}
+                        <ActionButton
+                            icon="archive-search"
+                            text="Histórico de RDO"
+                            onPress={() => navigation.navigate('RdoHist')}
+                        />
                     </View>
                 </View>
 
@@ -373,8 +385,8 @@ const styles = StyleSheet.create({
     actionsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 16,
-        alignItems: 'stretch', // Garante que todos os itens se esticam para mesma altura
+        justifyContent: 'space-between',
+        gap: 5,
     },
 
     actionButton: {

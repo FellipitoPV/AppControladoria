@@ -15,7 +15,7 @@ export const formatTime = (date: Date): string => {
     });
 };
 
-// Validate the form data
+// Validate the form data - funciona bem com o formData consolidado
 export const validateForm = (
     formData: FormDataInterface,
 ): string[] => {
@@ -31,10 +31,10 @@ export const validateForm = (
     if (!formData.condicaoTempo.noite) errors.push("Informe a condição do tempo pela noite");
 
     // Validate professionals
-    if (formData.profissionais?.length === 0) {
+    if (!formData.profissionais || formData.profissionais.length === 0) {
         errors.push("Adicione pelo menos um profissional");
     } else {
-        const profissionaisInvalidos = formData.profissionais?.some(
+        const profissionaisInvalidos = formData.profissionais.some(
             p => !p.tipo || !p.quantidade || p.quantidade === '0'
         );
         if (profissionaisInvalidos) {
@@ -43,10 +43,10 @@ export const validateForm = (
     }
 
     // Validate equipment
-    if (formData.equipamentos?.length === 0) {
+    if (!formData.equipamentos || formData.equipamentos.length === 0) {
         errors.push("Adicione pelo menos um equipamento");
     } else {
-        const equipamentosInvalidos = formData.equipamentos?.some(
+        const equipamentosInvalidos = formData.equipamentos.some(
             e => !e.tipo || !e.quantidade || e.quantidade === '0'
         );
         if (equipamentosInvalidos) {
@@ -55,11 +55,15 @@ export const validateForm = (
     }
 
     // Validate activities
-    const atividadesInvalidas = formData.atividades?.some(
-        a => !a.descricao || a.descricao.trim() === ''
-    );
-    if (atividadesInvalidas) {
-        errors.push("Preencha a descrição de todas as atividades");
+    if (!formData.atividades || formData.atividades.length === 0) {
+        errors.push("Adicione pelo menos uma atividade");
+    } else {
+        const atividadesInvalidas = formData.atividades.some(
+            a => !a.descricao || a.descricao.trim() === ''
+        );
+        if (atividadesInvalidas) {
+            errors.push("Preencha a descrição de todas as atividades");
+        }
     }
 
     return errors;
@@ -88,4 +92,27 @@ export const getStartOfMonth = (): Date => {
     date.setDate(1);
     date.setHours(0, 0, 0, 0);
     return date;
+};
+
+// Função auxiliar para preparar formData para salvamento
+export const prepareFormDataForSave = (
+    formData: FormDataInterface,
+    selectedDate: Date,
+    horaInicio: Date,
+    horaTermino: Date,
+    atividadesRealizadas: Atividade[] = [],
+    ocorrencias: Ocorrencia[] = [],
+    comentarioGeral: string = '',
+    photos: Photo[] = []
+): FormDataInterface => {
+    return {
+        ...formData,
+        data: formatDate(selectedDate),
+        inicioOperacao: formatTime(horaInicio),
+        terminoOperacao: formatTime(horaTermino),
+        atividades: atividadesRealizadas,
+        ocorrencias: ocorrencias,
+        comentarioGeral: comentarioGeral,
+        photos: photos
+    };
 };

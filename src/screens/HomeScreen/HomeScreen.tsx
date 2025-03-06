@@ -31,7 +31,7 @@ import UpdateNotification from './components/UpdateNotification';
 import storage from '@react-native-firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UserProfileModal from './components/UserInfoModal';
-import TestNotificationButtons from './components/TestNotificationButtons';
+import NotificationService from '../../service/NotificationService';
 
 interface CarouselItem {
     id: string;
@@ -42,7 +42,7 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 32; // Mesma largura útil que o QuickActionsGrid
 
 export default function HomeScreen({ navigation }: { navigation: any }) {
-    const { userInfo, isLoading, clearUserInfo } = useUser();
+    const { userInfo, isLoading, clearUserInfo, updateUserInfo } = useUser();
     const { isOnline } = useNetwork();
 
     const [updateModalVisible, setUpdateModalVisible] = useState(false);
@@ -175,6 +175,18 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         checkFirstTimeUser();
     }, []);
 
+    useEffect(() => {
+        // Start recurring notifications when the component mounts
+        // if (isOnline) {
+        //     NotificationService.scheduleRepeatingNotification();
+        // }
+
+        // Clean up by canceling all notifications when the component unmounts
+        return () => {
+            NotificationService.cancelAllNotifications();
+        };
+    }, [isOnline]);
+
     // Função para esconder o tooltip
     const dismissTooltip = () => {
         Animated.timing(tooltipOpacity, {
@@ -293,7 +305,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             return (
                 <View style={styles.offlinePlaceholder}>
                     <Icon
-                        name="cloud-off"
+                        name="cloud-off-outline"
                         size={40}
                         color={customTheme.colors.onSurfaceVariant}
                     />
@@ -399,6 +411,80 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         </Card>
     );
 
+    // Add this near the beginning of your HomeScreen function after declaring state variables
+    useEffect(() => {
+        const checkAuthentication = async (): Promise<void> => {
+            try {
+                // Check if user is loading
+                if (isLoading) {
+                    return;
+                }
+
+                // If userInfo is null, user is not logged in
+                if (!userInfo) {
+                    // Try to update user info from AsyncStorage
+                    try {
+                        await updateUserInfo();
+                    } catch (error) {
+                        console.error('Failed to update user info:', error);
+
+                        // Neither Firebase nor AsyncStorage have user data, redirect to Login
+                        navigation.reset({
+                            index: 0,
+                            routes: [{ name: 'Login' }],
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking authentication:', error);
+                // Redirect to login on any error
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Login' }],
+                });
+            }
+        };
+
+        checkAuthentication();
+    }, [isLoading, userInfo, navigation]); // Depend on isLoading and userInfo states
+
+    const TestNotificationButtons = () => {
+        if (__DEV__) { // Only show in development mode
+            return (
+                <View style={styles.testButtonsContainer}>
+                    <TouchableOpacity
+                        style={styles.testButton}
+                        onPress={() => NotificationService.localNotification(
+                            'Test Notification',
+                            'This is a test notification'
+                        )}
+                    >
+                        <Text style={styles.testButtonText}>Send Test Notification</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.testButton}
+                        onPress={() =>
+                            NotificationService.scheduleRepeatingNotification(
+                                "Está é uma mensagem repetitiva de teste",
+                                "Caso esteja vendo isso o tempo todo, então está correto!"
+                            )
+                        }
+                    >
+                        <Text style={styles.testButtonText}>Start 5s Recurring Notifications</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.testButton}
+                        onPress={() => NotificationService.cancelAllNotifications()}
+                    >
+                        <Text style={styles.testButtonText}>Cancel All Notifications</Text>
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+        return null;
+    };
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -531,6 +617,25 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 }
 
 const styles = StyleSheet.create({
+    testButtonsContainer: {
+        marginHorizontal: 16,
+        marginTop: 16,
+        backgroundColor: customTheme.colors.surfaceVariant,
+        borderRadius: 16,
+        padding: 16,
+    },
+    testButton: {
+        backgroundColor: customTheme.colors.primary,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        marginVertical: 6,
+        alignItems: 'center',
+    },
+    testButtonText: {
+        color: customTheme.colors.onPrimary,
+        fontWeight: '500',
+    },
     avatarWrapper: {
         position: 'relative',
     },
