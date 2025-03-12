@@ -22,6 +22,7 @@ import { hasAccess } from '../../Adm/components/admTypes';
 import { ProgramacaoEquipamento } from './Components/logisticTypes';
 import { useNetwork } from '../../../contexts/NetworkContext';
 import database from '@react-native-firebase/database';
+import ActionButton from '../../../assets/components/ActionButton';
 
 const { width } = Dimensions.get('window');
 
@@ -338,7 +339,7 @@ export default function LogisticaScreen({ navigation }: any) {
             >
 
                 {/* Cards de Estatísticas */}
-                <View style={styles.statsGrid}>
+                {/* <View style={styles.statsGrid}>
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
@@ -368,64 +369,40 @@ export default function LogisticaScreen({ navigation }: any) {
                             <Text style={styles.statsLabel}>Este Mês</Text>
                         </Card.Content>
                     </Card>
-
-                </View>
+                </View> */}
 
                 {/* Ações com verificação de acesso */}
                 <View style={styles.actionsContainer}>
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
 
-                        {renderActionButton(
-                            "calendar-plus",  // Changed from "plus"
-                            "Agendar Operação",  // More specific name
-                            () => navigation.navigate('LogisticaProgram'),
-                            'novaProgramacao'
-                        )}
+                        {/* <ActionButton
+                            icon="calendar-plus"
+                            text="Agendar Operação"
+                            onPress={() => navigation.navigate('LogisticaProgram')}
+                        /> */}
 
-                        {renderActionButton(
-                            "clock-outline",  // More descriptive for pending schedules
-                            "Operações Pendentes",  // Clearer description
-                            () => navigation.navigate('OperacaoProgram'),
-                            'agendamentos',
-                            agendamentosPendentes
-                        )}
+                        {/* <ActionButton
+                            icon="clock-outline"
+                            text="Operações Pendentes"
+                            onPress={() => navigation.navigate('OperacaoProgram')}
+                            badge={agendamentosPendentes}
+                        /> */}
 
-                        {renderActionButton(
-                            "file-document-multiple",  // More appropriate for historical records
-                            "Histórico de Operações",  // More specific
-                            () => navigation.navigate('LogisticaHist'),
-                        )}
+                        {/* <ActionButton
+                            icon="file-document-multiple"
+                            text="Histórico de Operações"
+                            onPress={() => navigation.navigate('LogisticaHist')}
+                        /> */}
 
-                        {renderActionButton(
-                            "file-document-edit",  // Suggests form/report creation
-                            "Relatório Diário",  // Shortened for clarity
-                            () => navigation.navigate('RdoForm'),
-                        )}
-
-                        {renderActionButton(
-                            "archive-search",  // Suggests searching through archives
-                            "Arquivo de Relatórios",  // More descriptive name
-                            () => navigation.navigate('RdoHist'),
-                        )}
+                        <ActionButton
+                            icon="archive-search"
+                            text="Histórico de RDO"
+                            onPress={() => navigation.navigate('RdoHist')}
+                        />
 
                     </View>
                 </View>
-
-                {/* Próximas Lavagens Agendadas */}
-                {lavagensAgendadas.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Próximas Lavagens</Text>
-                        {lavagensAgendadas.map((lavagem, index) => (
-                            <Card key={index} style={styles.agendamentoCard}>
-                                <Card.Content>
-                                    <></>
-                                    {/* Implementar card de agendamento */}
-                                </Card.Content>
-                            </Card>
-                        ))}
-                    </View>
-                )}
 
                 {/* Lavagens Recentes */}
                 {lavagensRecentes.length > 0 && (
@@ -518,7 +495,7 @@ const styles = StyleSheet.create({
     actionsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 16,
+        gap: 12,
         alignItems: 'stretch', // Garante que todos os itens se esticam para mesma altura
     },
     statsCard: {
@@ -555,11 +532,6 @@ const styles = StyleSheet.create({
     },
     section: {
         marginBottom: 24,
-    },
-    agendamentoCard: {
-        marginBottom: 12,
-        borderRadius: 12,
-        elevation: 2,
     },
     lavagemCard: {
         marginBottom: 12,

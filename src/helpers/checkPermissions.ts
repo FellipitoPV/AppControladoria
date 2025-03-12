@@ -8,12 +8,11 @@ import {
     request,
     checkNotifications,
 } from 'react-native-permissions';
-import PushNotification from 'react-native-push-notification';
 
 const logPermissionStatus = (permission: string, status: PermissionStatus) => {
     switch (status) {
         case RESULTS.GRANTED:
-            console.log(`Permissão concedida: ${permission}`);
+            // console.log(`Permissão concedida: ${permission}`);
             break;
         case RESULTS.DENIED:
             console.log(`Permissão negada: ${permission}`);
@@ -46,7 +45,7 @@ const checkAndRequestPermission = async (permission: Permission): Promise<Permis
 // Modificação para checkPermissions.ts
 const checkPermissions = async (): Promise<boolean> => {
     if (Platform.OS === 'android') {
-        console.log('[LOG] Solicitando permissões...');
+        // console.log('[LOG] Solicitando permissões...');
 
         const permissionsToCheck: Permission[] = [
             PERMISSIONS.ANDROID.CAMERA,
@@ -82,7 +81,7 @@ const checkPermissions = async (): Promise<boolean> => {
         }
 
         if (allGranted) {
-            console.log('[LOG] Todas as permissões foram concedidas.');
+            // console.log('[LOG] Todas as permissões foram concedidas.');
 
             // IMPORTANTE: Remova a configuração do PushNotification.configure daqui
             // para evitar sobrescrever a configuração do index.js

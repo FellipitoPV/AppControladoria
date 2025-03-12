@@ -252,7 +252,6 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
         return hora; // Retorna o horário original se já estiver no formato HH:mm
     };
 
-
     const gerarRelatorioExcel = async () => {
         if (lavagens.length === 0) {
             showGlobalToast('error', 'Erro', 'Não há dados para gerar o relatório', 4000);
@@ -402,7 +401,6 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
 
                         <Text style={[styles.modalText, { marginTop: 10 }]}>
                             Caso você já esteja conectado à rede local da Ecologika, então isso significa que o servidor está fora do ar ou desligado.
-                            Entre em contato com o Administrador do sistema para mais detalhes.
                         </Text>
                     </View>
 

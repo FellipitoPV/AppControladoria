@@ -20,7 +20,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ModernHeader from '../../../assets/components/ModernHeader';
-import { showGlobalToast } from '../../../helpers/GlobalApi';
+import { showGlobalToast, verificarConectividadeAPI } from '../../../helpers/GlobalApi';
 import { customTheme } from '../../../theme/theme';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
@@ -159,36 +159,6 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
         setShowRotina(!showRotina);
     };
 
-    // Verificar conectividade com o servidor
-    const verificarConectividade = async () => {
-        try {
-            showGlobalToast('info', 'Aguarde', 'Verificando conexão com o servidor...', 10000);
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // timeout de 5 segundos
-
-            const response = await fetch('http://192.168.1.222:3000/ping', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-
-            if (response.ok) {
-                return true;
-            } else {
-                throw new Error('Servidor respondeu com erro');
-            }
-
-        } catch (error) {
-            console.error('Erro ao verificar conectividade:', error);
-            return false;
-        }
-    };
-
     const formatarDataParaNomeArquivo = (data: string) => {
         const partes = data.split('/');
         return `${partes[0]}-${partes[1]}-${partes[2]}`;
@@ -213,7 +183,7 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
             setLoading(true);
 
             // Verificar conectividade primeiro
-            const conectado = await verificarConectividade();
+            const conectado = await verificarConectividadeAPI();
             if (!conectado) {
                 setLoading(false);
                 setIsConnectionModalVisible(true);
@@ -352,7 +322,6 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
 
                         <Text style={[styles.modalText, { marginTop: 10 }]}>
                             Caso você já esteja conectado à rede local da Ecologika, então isso significa que o servidor está fora do ar ou desligado.
-                            Entre em contato com o Administrador do sistema para mais detalhes.
                         </Text>
                     </View>
 

@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, SafeAreaView, Alert, ActivityIndicator } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, ScrollView, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import { Surface, Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -10,15 +10,7 @@ import storage from '@react-native-firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import types and utils
-import {
-    FormDataInterface,
-    RootStackParamList,
-    Profissional,
-    Equipamento,
-    Atividade,
-    Ocorrencia,
-    Photo
-} from './Types/rdoTypes';
+import { FormDataInterface, RootStackParamList, Photo } from './Types/rdoTypes';
 
 // Import components
 import GeneralInfo from './Components/GeneralInfo';
@@ -29,7 +21,6 @@ import { customTheme } from '../../../../theme/theme';
 import Comments from './Components/Comments';
 import Occurrences from './Components/Occurrences';
 import OperationHours from './Components/OperationHours';
-import PhotoSection from './Components/PhotoSection';
 import Professionals from './Components/Professionals';
 import WeatherConditions from './Components/WeatherConditions';
 import Equipment from './Components/Equipment';
@@ -37,11 +28,17 @@ import Activities from './Components/Activities';
 import SaveButton from '../../../../assets/components/SaveButton';
 import PhotoGalleryEnhanced from '../../Lavagem/Components/PhotoGallery';
 import FullScreenImage from '../../../../assets/components/FullScreenImage';
-import { User } from '../../../Adm/components/admTypes';
 import { validateForm, formatDate, formatTime } from './Utils/formUtils';
-import { loadRdoDraftWithId, loadRdoDraft, clearRdoDraftWithId, clearRdoDraft, saveRdoDraftWithId, saveRdoDraft } from './Utils/draftUtils';
+import {
+    loadRdoDraft,
+    clearRdoDraftWithId,
+    clearRdoDraft,
+    saveRdoDraftWithId,
+    saveRdoDraft,
+} from './Utils/draftUtils';
 import DraftConfirmationModal from '../../../../assets/components/DraftConfirmationModal';
-import { useRoute } from '@react-navigation/native';
+import { removeAllNotifications } from '../../../../helpers/notificationChannel';
+import NotificationService from '../../../../service/NotificationService';
 
 // Funções de utilidade para o draft system
 const DRAFT_KEY = 'rdoDraft';
@@ -194,7 +191,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                 const completeDraft = {
                     ...formData,
                     comentarioGeral,
-                    photos,
+                    photos: photos,
                     inicioOperacao: formatTime(horaInicio),
                     terminoOperacao: formatTime(horaTermino),
                     data: formatDate(selectedDate)
@@ -216,6 +213,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                 }));
 
                 setLastSavedState(new Date().toISOString());
+                console.log("Aparentemente salvo?")
             } catch (error) {
                 console.error('Erro ao salvar rascunho:', error);
             }
@@ -324,6 +322,15 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             // Definir ID para o documento
             const docId = isEditMode && relatorioId ? relatorioId : numeroRdo;
 
+            // Apenas definir horaTermino como o horário atual se NÃO estiver no modo de edição
+            let terminoOperacaoValue = formatTime(horaTermino);
+
+            if (!isEditMode) {
+                const horaTerminoAtual = new Date();
+                setHoraTermino(horaTerminoAtual);
+                terminoOperacaoValue = formatTime(horaTerminoAtual);
+            }
+
             // Upload de imagens para o Firebase Storage
             let uploadedPhotos: Photo[] = [];
             if (photos.length > 0) {
@@ -343,7 +350,8 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                 funcao: formData.cargo || '',
                 cargo: formData.cargo || '',
                 inicioOperacao: formatTime(horaInicio),
-                terminoOperacao: formatTime(horaTermino),
+                // Usar o valor apropriado para terminoOperacao
+                terminoOperacao: terminoOperacaoValue,
                 data: formatDate(selectedDate),
                 condicaoTempo: {
                     manha: formData.condicaoTempo?.manha || '',
@@ -462,7 +470,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             if (cliente && servico) {
                 await clearRdoDraftWithId(cliente, servico);
             }
-            await clearRdoDraft();
+            await clearDrafts();
 
             if (navigation) {
                 navigation.goBack();
@@ -499,13 +507,13 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                         }
                     }
 
-                    const numeroFormatado = proximoNumero.toString().padStart(4, '0');
+                    const numeroFormatado = proximoNumero.toString().padStart(3, '0');
                     setNumeroRdo(numeroFormatado);
                     setFormData((prev: FormDataInterface) => ({ ...prev, numeroRdo: numeroFormatado }));
                 } catch (error) {
                     console.error('Erro ao gerar número do RDO:', error);
-                    setNumeroRdo('0001');
-                    setFormData((prev: FormDataInterface) => ({ ...prev, numeroRdo: '0001' }));
+                    setNumeroRdo('001');
+                    setFormData((prev: FormDataInterface) => ({ ...prev, numeroRdo: '001' }));
                 }
             };
 
@@ -606,18 +614,6 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         }
     }, [isEditMode, relatorioData]);
 
-    // Função de debug que pode ser usada se necessário 
-    const logFormDataStatus = () => {
-        console.log("Status atual do formData:", {
-            id: formData.id,
-            cliente: formData.cliente,
-            profissionais: formData.profissionais?.map(p => ({ id: p.id, tipo: p.tipo, quantidade: p.quantidade })),
-            equipamentos: formData.equipamentos?.map(e => ({ id: e.id, tipo: e.tipo, quantidade: e.quantidade })),
-            atividades: formData.atividades?.length,
-            ocorrencias: formData.ocorrencias?.length
-        });
-    };
-
     // Effect para configurar dados de usuário e parâmetros
     useEffect(() => {
         if (userInfo) {
@@ -661,7 +657,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
 
     // Effect para verificar rascunho ao montar
     useEffect(() => {
-        if (!draftLoadedRef.current) {
+        if (!isEditMode && !draftLoadedRef.current) {
             checkForDraft();
         }
     }, [checkForDraft]);
@@ -674,56 +670,25 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         };
     }, [formData, debouncedValidate]);
 
-    // Effect para salvar rascunho antes de sair da tela
-    useEffect(() => {
-        return () => {
-            // Salvar uma última vez quando o componente desmontar (se não estiver em modo de edição)
-            if (!isEditMode && formData.cliente) {
-                const saveBeforeLeaving = async () => {
-                    // No saveDraftDebounced
-                    const updatedFormData: FormDataInterface = {
-                        ...formData,
-                        // Use spread operator para garantir uma cópia completa
-                        comentarioGeral: comentarioGeral,
-                        photos: [...photos],
-                        inicioOperacao: formatTime(horaInicio),
-                        terminoOperacao: formatTime(horaTermino),
-                        data: formatDate(selectedDate)
-                    };
-
-                    console.log("Salvando rascunho com atividades:", updatedFormData.atividades);
-                    console.log("Salvando rascunho com ocorrências:", updatedFormData.ocorrencias);
-                    // Se cliente e serviço específicos, salvar esse rascunho
-                    if (cliente && servico) {
-                        await saveRdoDraftWithId(updatedFormData, cliente, servico);
-                    }
-
-                    // Sempre salvar rascunho geral também
-                    await saveRdoDraft(updatedFormData);
-                    console.log("Rascunho salvo ao sair da tela");
-                };
-
-                saveBeforeLeaving();
-            }
-        };
-    }, [
-        isEditMode,
-        formData,
-        comentarioGeral,
-        photos,
-        horaInicio,
-        horaTermino,
-        selectedDate,
-        cliente,
-        servico
-    ]);
-
+    // Salvar Draft ao modificar algo
     useEffect(() => {
         // Não salvar em modo de edição, se não tiver cliente (formulário vazio) ou se não houve interação
         if (isEditMode || !formData.cliente || !userInteracted) return;
 
         // Salvar draft quando qualquer alteração importante acontecer
         saveDraftDebounced();
+
+        // Criar um objeto completo que inclui as fotos do estado photos
+        const formDataWithPhotos = {
+            ...formData,
+            photos: photos, // Incluir explicitamente as fotos do estado
+            comentarioGeral: comentarioGeral,
+        };
+
+        // Passar o objeto completo para a função de salvamento
+        saveRdoDraft(formDataWithPhotos);
+
+        console.log("Salvando fotos no draft:", photos.length);
 
         return () => {
             saveDraftDebounced.cancel();
@@ -736,52 +701,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         selectedDate,
         horaInicio,
         horaTermino,
-        userInteracted // Adicionar userInteracted como dependência
-    ]);
-
-    // 4. useEffect para salvar ao sair da tela (sem debounce)
-    useEffect(() => {
-        return () => {
-            // Salvar uma última vez quando o componente desmontar (se não estiver em modo de edição e houve interação)
-            if (!isEditMode && formData.cliente && userInteracted) {
-                const saveBeforeLeaving = async () => {
-                    // No saveDraftDebounced
-                    const updatedFormData: FormDataInterface = {
-                        ...formData,
-                        // Use spread operator para garantir uma cópia completa
-                        comentarioGeral: comentarioGeral,
-                        photos: [...photos],
-                        inicioOperacao: formatTime(horaInicio),
-                        terminoOperacao: formatTime(horaTermino),
-                        data: formatDate(selectedDate)
-                    };
-
-                    console.log("Salvando rascunho com atividades:", updatedFormData.atividades);
-                    console.log("Salvando rascunho com ocorrências:", updatedFormData.ocorrencias);
-                    // Se cliente e serviço específicos, salvar esse rascunho
-                    if (cliente && servico) {
-                        await saveRdoDraftWithId(updatedFormData, cliente, servico);
-                    }
-
-                    // Sempre salvar rascunho geral também
-                    await saveRdoDraft(updatedFormData);
-                    console.log("Rascunho salvo ao sair da tela");
-                };
-
-                saveBeforeLeaving();
-            }
-        };
-    }, [
-        isEditMode,
-        formData,
-        comentarioGeral,
-        photos,
-        horaInicio,
-        horaTermino,
-        selectedDate,
-        cliente,
-        servico,
-        userInteracted // Adicionar como dependência
+        userInteracted
     ]);
 
     const clearDrafts = async () => {
@@ -791,6 +711,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             }
             await AsyncStorage.removeItem(DRAFT_KEY);
             setDraftModalVisible(false);
+            NotificationService.cancelAllNotifications();
         } catch (error) {
             console.error("Erro ao limpar rascunhos:", error);
         }
@@ -800,8 +721,10 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
     const loadDraftData = () => {
         if (!draftToLoad) return;
 
-        const draftData = draftToLoad.data;
+        const draftData: FormDataInterface = draftToLoad.data;
 
+        console.log("Data completa:", draftData)
+        console.log("Photos dentro da data do draft:", draftData.photos)
         // 1. Atualizar o formData principal sem provocar nova interação
         setFormData(draftData);
 
@@ -863,7 +786,6 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         // não é uma interação do usuário
     };
 
-
     // Effect para carregar rascunho da notificação
     useEffect(() => {
         const checkDraftFromNotification = async () => {
@@ -906,7 +828,6 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                 onConfirm={loadDraftData}
             />
 
-
             {lastSavedState && !isEditMode && (
                 <View style={styles.draftIndicator}>
                     <MaterialCommunityIcons name="content-save-outline" size={16} color={customTheme.colors.onPrimary} />
@@ -940,6 +861,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                         setHoraTermino={setHoraTermino}
                         formData={formData}
                         setFormData={setFormData}
+                        isEditing={mode}
                     />
 
                     {/* Weather Conditions */}
@@ -1012,10 +934,11 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
 
                         <SaveButton
                             onPress={handleSave}
-                            text="Salvar Relatório"
+                            text={isEditMode ? "Salvar Alterações" : "Finalizar Relatório Diário"}  
                             iconName="content-save"
                             disabled={formErrors.length > 0}
                         />
+
                     </View>
                 </Surface>
             </ScrollView>

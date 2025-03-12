@@ -55,9 +55,8 @@ export const saveRdoDraft = async (data: FormDataInterface): Promise<void> => {
       lastSaved: new Date().toISOString()
     };
 
-    console.log("Atividades salvas no draft: ", data.atividades);
     await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    console.log("Rascunho salvo:", new Date().toLocaleTimeString());
+    console.log("Rascunho salvo às:", new Date().toLocaleTimeString());
 
     // Verificar se já passou tempo suficiente desde a última notificação
     const now = Date.now();
@@ -69,24 +68,12 @@ export const saveRdoDraft = async (data: FormDataInterface): Promise<void> => {
 
     NotificationService.scheduleRepeatingNotification(
       "Relatório Diario de Operação em andamento...",
-      "Toque para continuar o formulario.",
+      "Toque aqui para continuar o formulario.",
       "RdoForm",
     )
 
   } catch (error) {
     console.error('Erro ao salvar rascunho:', error);
-  }
-};
-
-// Função para desativar notificação de rascunho
-export const deactivateDraftNotification = () => {
-  try {
-    NotificationService.cancelAllNotifications();
-    console.log("Notificações de rascunho desativadas");
-    return true;
-  } catch (error) {
-    console.error('Erro ao desativar notificação de rascunho:', error);
-    return false;
   }
 };
 
@@ -117,7 +104,7 @@ export const loadRdoDraft = async (): Promise<{ data: FormDataInterface; lastSav
     const draftJson = await AsyncStorage.getItem(DRAFT_KEY);
     if (draftJson) {
       // Desativar notificação quando o rascunho for carregado
-      deactivateDraftNotification();
+      NotificationService.cancelAllNotifications()
       return JSON.parse(draftJson);
     }
     return null;
@@ -134,7 +121,6 @@ export const clearRdoDraft = async (): Promise<void> => {
 
     // Desativar notificação quando rascunho for limpo
     NotificationService.cancelAllNotifications()
-    deactivateDraftNotification();
   } catch (error) {
     console.error('Erro ao limpar rascunho:', error);
   }

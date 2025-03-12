@@ -29,7 +29,7 @@ import RegisterScreen from './src/screens/Login/RegisterScreen';
 import ProfileScreen from './src/screens/HomeScreen/components/ProfileScreen';
 import OperacaoScreen from './src/screens/Formularios/Operacao/OperacaoScreen';
 import ListaProgramacoes from './src/screens/Formularios/Logistica/ListaProgramacoes';
-import FormularioProgramacao from './src/screens/Formularios/Logistica/Components/FormularioProgramacao';
+import FormularioProgramacao from './src/screens/Formularios/Logistica/FormularioProgramacao/FormularioProgramacao';
 import RelatorioLavagens from './src/screens/Formularios/Lavagem/RelatorioLavagens';
 import MyAccessScreen from './src/screens/HomeScreen/components/MyAccessScreen';
 import EditUserAccessScreen from './src/screens/Adm/EditUserAccessScreen';
@@ -42,6 +42,7 @@ import LoginScreen from './src/screens/Login/LoginScreen';
 
 // Importar funções de notificação
 import { setNotificationNavigationHandler, removeRepeatingNotification } from './src/helpers/notificationChannel';
+import ReuniaoComponent from './src/screens/Reuniao/MeetingsScreen';
 
 // Defina os tipos das rotas para o seu navegador
 interface RootStackParamList {
@@ -331,6 +332,7 @@ export default function App() {
 
               {/* Contatos */}
               <Stack.Screen name="Contatos" component={ContatosScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Reuniao" component={ReuniaoComponent} options={{ headerShown: false }} />
             </Stack.Navigator>
             <Toast config={toastConfig} position='top' />
             <FlashMessage position="top" />

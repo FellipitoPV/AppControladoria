@@ -142,39 +142,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         checkDismissedUpdates();
     }, [updateInfo]);
 
-    // Verifique se é o primeiro acesso do usuário
-    useEffect(() => {
-        const checkFirstTimeUser = async () => {
-            try {
-                const hasVisitedBefore = await AsyncStorage.getItem('hasVisitedHome');
-
-                if (!hasVisitedBefore) {
-                    // É o primeiro acesso, mostrar o tooltip
-                    setShowAvatarTooltip(true);
-
-                    // Animar o tooltip aparecendo
-                    Animated.sequence([
-                        // Pequeno delay para garantir que a UI esteja pronta
-                        Animated.delay(500),
-                        // Fade in
-                        Animated.timing(tooltipOpacity, {
-                            toValue: 1,
-                            duration: 500,
-                            useNativeDriver: true
-                        })
-                    ]).start();
-
-                    // Marcar que o usuário já visitou
-                    await AsyncStorage.setItem('hasVisitedHome', 'true');
-                }
-            } catch (error) {
-                console.error('Erro ao verificar primeiro acesso:', error);
-            }
-        };
-
-        checkFirstTimeUser();
-    }, []);
-
     useEffect(() => {
         // Start recurring notifications when the component mounts
         // if (isOnline) {
@@ -550,7 +517,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 <ScrollView style={styles.content}>
                     {renderCarouselContent()}
                     <QuickActionsGrid />
-                    <TestNotificationButtons />
+                    {/* <TestNotificationButtons /> */}
                     <DevelopmentAlert />
                     {/* Resto do conteúdo ... */}
                 </ScrollView>

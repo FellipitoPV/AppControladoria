@@ -28,7 +28,6 @@ interface HistoricoRdoProps {
 export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
     const { userInfo } = useUser();
 
-    const [relatorios, setRelatorios] = useState<FormDataInterface[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -55,7 +54,7 @@ export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
                 .orderBy('createdAt', 'desc')
                 .get();
 
-            console.log(`Quantidade de relatórios: ${snapshot.size}`);
+            // console.log(`Quantidade de relatórios: ${snapshot.size}`);
 
             const dados = snapshot.docs.map(doc => {
                 const data = doc.data() as FormDataInterface;
@@ -460,7 +459,6 @@ export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
                             id: equip.id
                         })) || [],
                         atividades: selectedRelatorio.atividades || [],
-                        // Explicitly ensure photos are passed and have the correct structure
                         photos: selectedRelatorio.photos?.map(photo => ({
                             uri: photo.uri || '',
                             id: photo.id || ''

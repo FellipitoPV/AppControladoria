@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     View,
     ScrollView,
@@ -16,36 +16,28 @@ import database from '@react-native-firebase/database';
 import { useUser } from '../../../../contexts/userContext';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
 import { customTheme } from '../../../../theme/theme';
-import EquipmentSection from './EquipmentSection';
-import { Equipment, Container, ClienteInterface, ProgramacaoEquipamento, clientes, listaTiposEquipamentos, listaTiposContainers } from './logisticTypes';
+import { Equipment, Container, ClienteInterface, ProgramacaoEquipamento, clientes, listaTiposEquipamentos, listaTiposContainers } from '../Components/logisticTypes';
 import ModernHeader from '../../../../assets/components/ModernHeader';
+import { DropdownRef, Equipamento } from '../rdo/Types/rdoTypes';
+import EquipmentSection from './EquipmentSection';
 
-export interface SelectedEquipment extends Equipment {
-    quantidade: number;
-}
 
-export interface SelectedContainer extends Container {
-    quantidade: number;
-}
 
 const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
     const { userInfo } = useUser();
     const [loading, setLoading] = useState(false);
 
     // Estados para os campos do formulário
-    const [cliente, setCliente] = useState('');
     const [endereco, setEndereco] = useState('');
     const [dataEntrega, setDataEntrega] = useState(new Date());
-    const [equipamentoSelecionado, setEquipamentoSelecionado] = useState<Equipment | null>(null);
     const [observacoes, setObservacoes] = useState('');
     const [clienteSelecionado, setClienteSelecionado] = useState<ClienteInterface | null>(null);
-    const [enderecoCustomizado, setEnderecoCustomizado] = useState(false);
     const [loadingAddress, setLoadingAddress] = useState(false);
 
     const [formErrors, setFormErrors] = useState<string[]>([]);
 
-    const [equipamentosSelecionados, setEquipamentosSelecionados] = useState<SelectedEquipment[]>([]);
-    const [containersSelecionados, setContainersSelecionados] = useState<SelectedContainer[]>([]);
+    const [equipamentosSelecionados, setEquipamentosSelecionados] = useState<Equipment[]>([]);
+    const [containersSelecionados, setContainersSelecionados] = useState<Container[]>([]);
 
     // Estados para controles de UI
     const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
@@ -53,6 +45,14 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
     // Estados para validação
     const [clienteError, setClienteError] = useState(false);
     const [equipamentoError, setEquipamentoError] = useState(false);
+
+    // Add refs for dropdowns like in the second example
+    const clienteRef = useRef<DropdownRef>(null);
+
+    // Format date like in the second example
+    const formatDate = (date: Date): string => {
+        return date.toLocaleDateString('pt-BR');
+    };
 
     const generateId = () => {
         const timestamp = Date.now().toString(36);
@@ -80,14 +80,14 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
         }
 
         // Validação das quantidades dos equipamentos selecionados
-        equipamentosSelecionados.forEach((equip: SelectedEquipment) => {
+        equipamentosSelecionados.forEach((equip: Equipment) => {
             if (!equip.quantidade || equip.quantidade <= 0) {
                 errors.push(`Quantidade inválida para o equipamento do tipo ${equip.tipo}`);
             }
         });
 
         // Validação das quantidades dos containers selecionados
-        containersSelecionados.forEach((container: SelectedContainer) => {
+        containersSelecionados.forEach((container: Container) => {
             if (!container.quantidade || container.quantidade <= 0) {
                 errors.push(`Quantidade inválida para o container ${container.tipo}${container.capacidade ? ` de ${container.capacidade}` : ''}`);
             }
@@ -171,7 +171,7 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
 
     const handleClienteSelect = async (cliente: ClienteInterface) => {
         setClienteSelecionado(cliente);
-        setEndereco("")
+        setEndereco("");
         setClienteError(false);
     };
 
@@ -183,9 +183,9 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
     };
 
     const buscarEnderecoPorCnpj = async (cnpj: string) => {
-        setLoading(true)
+        setLoadingAddress(true);
         try {
-            console.log("Iniciando busca por CNPJ")
+            console.log("Iniciando busca por CNPJ");
             // Remove caracteres especiais do CNPJ
             const localCnpj = cnpj.replace(/[^\d]/g, '');
 
@@ -205,7 +205,7 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
             throw error;
         }
         finally {
-            setLoading(false)
+            setLoadingAddress(false);
         }
     };
 
@@ -269,7 +269,7 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
                             <Icon
-                                name="information"
+                                name="information-outline"
                                 size={20}
                                 color={customTheme.colors.primary}
                             />
@@ -279,140 +279,150 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
                         </View>
 
                         <View style={styles.inputGroup}>
-                            {/* Cliente Dropdown */}
-                            <View style={styles.inputContainer}>
-                                <View style={styles.inputHeader}>
-                                    <Icon
-                                        name="domain"
-                                        size={20}
-                                        color={customTheme.colors.primary}
-                                    />
-                                    <Text style={styles.inputTitle}>Cliente</Text>
-                                </View>
-                                <View style={styles.dropdownContainer}>
-                                    <Dropdown
-                                        style={[
-                                            styles.dropdown,
-                                            clienteError && styles.dropdownError
-                                        ]}
-                                        containerStyle={styles.dropdownList}
-                                        placeholderStyle={styles.placeholderStyle}
-                                        selectedTextStyle={styles.selectedTextStyle}
-                                        inputSearchStyle={styles.dropdownSearchInput}
-                                        data={clientes}
-                                        autoScroll={false}
-                                        maxHeight={300}
-                                        search
-                                        searchPlaceholder="Buscar cliente..."
-                                        labelField="razaoSocial"
-                                        valueField="cnpjCpf"
-                                        placeholder="Selecione o Cliente"
-                                        value={clienteSelecionado?.cnpjCpf}
-                                        onChange={item => {
-                                            const clienteEncontrado = clientes.find(c => c.cnpjCpf === item.cnpjCpf);
-                                            if (clienteEncontrado) {
-                                                handleClienteSelect(clienteEncontrado);
-                                                setClienteError(false);
-                                            }
-                                        }}
-                                        renderItem={item => (
-                                            <View style={styles.dropdownItem}>
-                                                <Text style={styles.dropdownItemLabel}>
-                                                    {item.razaoSocial}
-                                                </Text>
-                                                <Text style={styles.dropdownItemCnpj}>
-                                                    {item.cnpjCpf}
-                                                </Text>
-                                            </View>
-                                        )}
-                                    />
-                                </View>
-                            </View>
-
-                            {/* Endereço Input Atualizado */}
-                            <View style={styles.inputContainer}>
-                                <View style={styles.inputHeader}>
-                                    <Icon
-                                        name="map-marker"
-                                        size={20}
-                                        color={customTheme.colors.primary}
-                                    />
-                                    <Text style={styles.inputTitle}>Endereço</Text>
-                                </View>
-                                <View style={styles.enderecoWrapper}>
-                                    <TextInput
-                                        mode="outlined"
-                                        style={styles.enderecoText}
-                                        value={endereco}
-                                        onChangeText={setEndereco}
-                                        placeholder="Digite o endereço"
-                                        multiline
-                                        numberOfLines={3}
-                                        textAlignVertical="top"
-                                    />
-                                    <View style={styles.enderecoActions}>
-                                        <TouchableOpacity
-                                            style={[
-                                                styles.enderecoCnpjButton,
-                                                loadingAddress && styles.enderecoCnpjButtonLoading
-                                            ]}
-                                            onPress={handleBuscarEnderecoCnpj}
-                                            disabled={loadingAddress}
-                                        >
-                                            {loadingAddress ? (
-                                                <View style={styles.loadingContainer}>
-                                                    <ActivityIndicator
-                                                        size="small"
-                                                        color={customTheme.colors.onPrimary}
-                                                    />
-                                                    <Text style={styles.enderecoCnpjButtonText}>
-                                                        Buscando...
-                                                    </Text>
-                                                </View>
-                                            ) : (
-                                                <Text style={styles.enderecoCnpjButtonText}>
-                                                    Preencher com CNPJ
-                                                </Text>
-                                            )}
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.enderecoGpsButton}
-                                            onPress={() => {
-                                                // Combinando nome do cliente e endereço para pesquisa
-                                                const searchQuery = `${clienteSelecionado?.razaoSocial || ''} ${endereco}`.trim();
-                                                const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`;
-                                                Linking.openURL(url);
-                                            }}
-                                        >
+                            {/* Cliente Dropdown - Updated to match second example */}
+                            <TouchableOpacity
+                                style={styles.dropdownContainer}
+                                activeOpacity={0.7}
+                                onPress={() => clienteRef.current?.open()}
+                            >
+                                <Dropdown
+                                    ref={clienteRef}
+                                    autoScroll={false}
+                                    style={styles.dropdown}
+                                    placeholderStyle={styles.placeholderStyle}
+                                    selectedTextStyle={styles.selectedTextStyle}
+                                    inputSearchStyle={styles.dropdownSearchInput}
+                                    iconStyle={styles.iconStyle}
+                                    data={clientes.map(c => ({
+                                        label: c.razaoSocial,
+                                        value: c.cnpjCpf,
+                                        icon: 'domain',
+                                    }))}
+                                    containerStyle={styles.dropdownList}
+                                    maxHeight={300}
+                                    search
+                                    searchPlaceholder="Buscar cliente..."
+                                    labelField="label"
+                                    valueField="value"
+                                    placeholder="Selecione o Cliente"
+                                    value={clienteSelecionado?.cnpjCpf}
+                                    onChange={item => {
+                                        const clienteEncontrado = clientes.find(c => c.cnpjCpf === item.value);
+                                        if (clienteEncontrado) {
+                                            handleClienteSelect(clienteEncontrado);
+                                            setClienteError(false);
+                                        }
+                                    }}
+                                    renderLeftIcon={() => (
+                                        <Icon
+                                            style={styles.dropdownIcon}
+                                            name="domain"
+                                            size={24}
+                                            color={customTheme.colors.primary}
+                                        />
+                                    )}
+                                    renderItem={item => (
+                                        <View style={styles.dropdownItem}>
                                             <Icon
-                                                name="crosshairs-gps"
-                                                size={24}
+                                                name={item.icon}
+                                                size={20}
                                                 color={customTheme.colors.primary}
                                             />
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
+                                            <Text style={styles.dropdownItemLabel}>
+                                                {item.label}
+                                            </Text>
+                                        </View>
+                                    )}
+                                />
+                            </TouchableOpacity>
+
+                            {/* Endereço Input - Improved styling */}
+                            <TextInput
+                                mode="outlined"
+                                label="Endereço"
+                                value={endereco}
+                                onChangeText={setEndereco}
+                                placeholder="Digite o endereço"
+                                multiline
+                                numberOfLines={4}
+                                style={styles.input}
+                                textAlignVertical="top"
+                                left={<TextInput.Icon icon={() => (
+                                    <Icon
+                                        name="map-marker"
+                                        size={24}
+                                        color={customTheme.colors.primary}
+                                    />
+                                )} />}
+                            />
+
+                            {/* CNPJ and GPS buttons */}
+                            <View style={styles.enderecoActions}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.actionButton,
+                                        loadingAddress && styles.actionButtonLoading
+                                    ]}
+                                    onPress={handleBuscarEnderecoCnpj}
+                                    disabled={loadingAddress}
+                                >
+                                    {loadingAddress ? (
+                                        <View style={styles.loadingContainer}>
+                                            <ActivityIndicator
+                                                size="small"
+                                                color={customTheme.colors.onPrimary}
+                                            />
+                                            <Text style={styles.actionButtonText}>
+                                                Buscando...
+                                            </Text>
+                                        </View>
+                                    ) : (
+                                        <View style={styles.buttonContent}>
+                                            <Icon name="card-account-details" size={18} color={customTheme.colors.onPrimary} />
+                                            <Text style={styles.actionButtonText}>
+                                                Preencher com CNPJ
+                                            </Text>
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.gpsButton}
+                                    onPress={() => {
+                                        // Combinando nome do cliente e endereço para pesquisa
+                                        const searchQuery = `${clienteSelecionado?.razaoSocial || ''} ${endereco}`.trim();
+                                        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`;
+                                        Linking.openURL(url);
+                                    }}
+                                >
+                                    <Icon
+                                        name="crosshairs-gps"
+                                        size={22}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.gpsButtonText}>Ver no Mapa</Text>
+                                </TouchableOpacity>
                             </View>
 
                             {/* Data de Entrega */}
-                            <View style={styles.inputContainer}>
-                                <View style={styles.inputHeader}>
-                                    <Icon
-                                        name="calendar"
-                                        size={20}
-                                        color={customTheme.colors.primary}
-                                    />
-                                    <Text style={styles.inputTitle}>Data da Operação</Text>
-                                </View>
-                                <TouchableOpacity
-                                    style={styles.dateInput}
-                                    onPress={() => setMostrarSeletorData(true)}
-                                >
-                                    <Text style={styles.dateText}>
-                                        {dataEntrega.toLocaleDateString('pt-BR')}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                            <TouchableOpacity
+                                style={styles.datePickerContainer}
+                                onPress={() => setMostrarSeletorData(true)}
+                            >
+                                <TextInput
+                                    mode="outlined"
+                                    label="Data da Operação"
+                                    value={formatDate(dataEntrega)}
+                                    editable={false}
+                                    style={styles.input}
+                                    left={<TextInput.Icon icon={() => (
+                                        <Icon
+                                            name="calendar"
+                                            size={24}
+                                            color={customTheme.colors.primary}
+                                        />
+                                    )} />}
+                                />
+                            </TouchableOpacity>
 
                             {mostrarSeletorData && (
                                 <DateTimePicker
@@ -428,22 +438,13 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
 
                     {/* Equipamentos Section */}
                     <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Icon
-                                name="forklift"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                            <Text variant="titleMedium" style={styles.sectionTitle}>
-                                Equipamentos
-                            </Text>
-                        </View>
 
                         <View style={styles.equipmentContainer}>
                             <EquipmentSection
                                 equipamentosSelecionados={equipamentosSelecionados}
                                 containersSelecionados={containersSelecionados}
                                 onAddEquipment={(item: Equipment) => {
+                                    console.log("Equipamento adicionado: ", item)
                                     setEquipamentosSelecionados(prev => [...prev, { ...item, quantidade: 1 }]);
                                 }}
                                 onRemoveEquipment={(id: string) => {
@@ -499,25 +500,23 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <View style={styles.observacoesContainer}>
-                                <TextInput
-                                    mode="outlined"
-                                    value={observacoes}
-                                    onChangeText={setObservacoes}
-                                    placeholder="Digite suas observações aqui..."
-                                    multiline
-                                    numberOfLines={4}
-                                    style={styles.observacoesInput}
-                                    textAlignVertical="top"
-                                    left={<TextInput.Icon icon={() => (
-                                        <Icon
-                                            name="pencil"
-                                            size={24}
-                                            color={customTheme.colors.primary}
-                                        />
-                                    )} />}
-                                />
-                            </View>
+                            <TextInput
+                                mode="outlined"
+                                value={observacoes}
+                                onChangeText={setObservacoes}
+                                placeholder="Digite suas observações aqui..."
+                                multiline
+                                numberOfLines={4}
+                                style={styles.observacoesInput}
+                                textAlignVertical="top"
+                                left={<TextInput.Icon icon={() => (
+                                    <Icon
+                                        name="pencil"
+                                        size={24}
+                                        color={customTheme.colors.primary}
+                                    />
+                                )} />}
+                            />
                         </View>
                     </View>
 
@@ -561,82 +560,62 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
                             </View>
                         </TouchableOpacity>
                     </View>
-
                 </Surface>
             </ScrollView>
         </SafeAreaView>
     );
-
-
 };
 
 const styles = StyleSheet.create({
-    enderecoCnpjButton: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        backgroundColor: customTheme.colors.primary,
-        borderRadius: 4,
-        minWidth: 140,
-    },
-    enderecoCnpjButtonLoading: {
-        opacity: 0.8,
-    },
-    loadingContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-    },
-    enderecoCnpjButtonText: {
-        fontSize: 14,
-        color: customTheme.colors.onPrimary,
-    },
-    enderecoWrapper: {
-        backgroundColor: customTheme.colors.surface,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 8,
-        padding: 12,
-        minHeight: 50,
-    },
-    enderecoText: {
+    safeArea: {
+        flex: 1,
         backgroundColor: '#FFFFFF',
-        minHeight: 40,
-        paddingVertical: 8,
-        textAlignVertical: 'top',
     },
-    enderecoActions: {
+    scrollView: {
+        flex: 1,
+    },
+    formContainer: {
+        padding: 16,
+        backgroundColor: customTheme.colors.surface,
+        elevation: 2,
+    },
+    section: {
+        marginBottom: 24, // Reduced margin for more compact layout
+    },
+    sectionHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: 12,
-        paddingTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.outlineVariant,
+        gap: 10,
+        marginBottom: 16, // Reduced margin
     },
-    inputContainer: {
-        gap: 8,
-        marginBottom: 16,
-    },
-    inputHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    inputTitle: {
-        fontSize: 16,
+    sectionTitle: {
         color: customTheme.colors.onSurface,
-        fontWeight: '500',
+        fontWeight: '600',
+        fontSize: 18,
+    },
+    inputGroup: {
+        gap: 12, // Reduced gap for more compact layout
+    },
+    input: {
+        backgroundColor: '#FFFFFF',
+    },
+    observacoesInput: {
+        backgroundColor: '#FFFFFF',
+        minHeight: 120, // Reduced height
+        textAlignVertical: 'top',
+        paddingTop: 12,
     },
     dropdownContainer: {
-        borderWidth: 1,
         borderColor: customTheme.colors.outline,
         borderRadius: 8,
         backgroundColor: '#FFFFFF',
+        height: 56,
     },
     dropdown: {
         height: 56,
+        borderColor: customTheme.colors.outline,
         borderRadius: 8,
+        borderWidth: 1,
         paddingHorizontal: 16,
         backgroundColor: '#FFFFFF',
     },
@@ -647,56 +626,97 @@ const styles = StyleSheet.create({
         backgroundColor: customTheme.colors.surface,
         elevation: 3,
     },
-    dropdownSearchInput: {
-        height: 40,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 4,
+    dropdownIcon: {
+        marginRight: 12,
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 12,
+    },
+    dropdownItemLabel: {
+        flex: 1,
+        fontSize: 16,
         color: customTheme.colors.onSurface,
+    },
+    placeholderStyle: {
+        fontSize: 16,
+        color: customTheme.colors.onSurfaceVariant,
     },
     selectedTextStyle: {
         fontSize: 16,
         color: customTheme.colors.onSurface,
         fontWeight: '500',
     },
-    placeholderStyle: {
-        fontSize: 16,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    dropdownItem: {
-        padding: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: customTheme.colors.outlineVariant,
-    },
-    dropdownItemLabel: {
-        fontSize: 16,
-        color: customTheme.colors.onSurface,
-        marginBottom: 4,
-    },
-    dropdownItemCnpj: {
-        fontSize: 12,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    dropdownError: {
-        borderColor: customTheme.colors.error,
-        borderWidth: 2,
-    },
-    enderecoGpsButton: {
-        padding: 8,
-    },
-    dateInput: {
-        backgroundColor: customTheme.colors.surface,
-        padding: 12,
-        borderRadius: 8,
-        borderWidth: 1,
+    dropdownSearchInput: {
+        height: 40,
         borderColor: customTheme.colors.outline,
-        height: 56,
-    },
-    dateText: {
-        fontSize: 16,
+        borderRadius: 4,
         color: customTheme.colors.onSurface,
+    },
+    iconStyle: {
+        width: 24,
+        height: 24,
+    },
+    equipmentContainer: {
+        backgroundColor: customTheme.colors.surface,
+        gap: 16,
+    },
+    datePickerContainer: {
+        flex: 1,
+    },
+    enderecoActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: -4, // Negative margin to bring it closer to the input
+        marginBottom: 8,
+    },
+    actionButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        backgroundColor: customTheme.colors.primary,
+        borderRadius: 6,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    actionButtonLoading: {
+        opacity: 0.8,
+    },
+    actionButtonText: {
+        fontSize: 14,
+        color: customTheme.colors.onPrimary,
+    },
+    buttonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    gpsButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: customTheme.colors.primary,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    gpsButtonText: {
+        fontSize: 14,
+        color: customTheme.colors.primary,
+    },
+    loadingContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
     },
     buttonContainer: {
-        marginTop: 12,
+        marginTop: 8,
         marginBottom: 24,
         gap: 16,
     },
@@ -719,9 +739,8 @@ const styles = StyleSheet.create({
     saveButton: {
         backgroundColor: customTheme.colors.primary,
         borderRadius: 8,
-        padding: 16,
+        padding: 14, // Slightly reduced padding
         elevation: 3,
-        minHeight: 56,
     },
     saveButtonContent: {
         flexDirection: 'row',
@@ -741,55 +760,6 @@ const styles = StyleSheet.create({
     saveButtonTextDisabled: {
         color: customTheme.colors.onSurfaceDisabled,
     },
-    observacoesContainer: {
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 8,
-    },
-    observacoesInput: {
-        backgroundColor: '#FFFFFF',
-        minHeight: 150,
-        textAlignVertical: 'top',
-        paddingTop: 12,
-        paddingBottom: 12,
-    },
-    equipmentContainer: {
-        backgroundColor: customTheme.colors.surface,
-        borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        borderRadius: 8,
-        padding: 16,
-        gap: 16,
-    },
-    safeArea: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-    },
-    scrollView: {
-        flex: 1,
-    },
-    formContainer: {
-        padding: 16,
-        backgroundColor: customTheme.colors.surface,
-        elevation: 2,
-    },
-    section: {
-        marginBottom: 32,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        marginBottom: 20,
-    },
-    sectionTitle: {
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
-        fontSize: 18,
-    },
-    inputGroup: {
-        gap: 16,
-    },
 });
-
 
 export default FormularioProgramacao;

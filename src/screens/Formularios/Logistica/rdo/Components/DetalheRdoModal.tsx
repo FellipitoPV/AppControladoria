@@ -16,6 +16,11 @@ import { customTheme } from '../../../../../theme/theme';
 import { FormDataInterface, MATERIAIS, CONDICOES_TEMPO, DIAS_SEMANA, Photo } from '../Types/rdoTypes';
 import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
 import FullScreenImage from '../../../../../assets/components/FullScreenImage';
+import { hasAccess } from '../../../../Adm/components/admTypes';
+import { useUser } from '../../../../../contexts/userContext';
+import { showGlobalToast, verificarConectividadeAPI } from '../../../../../helpers/GlobalApi';
+import RNFS from 'react-native-fs';
+import Share from 'react-native-share';
 
 interface DetalheRdoModalProps {
     visible: boolean;
@@ -28,19 +33,26 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
     onClose,
     relatorio
 }) => {
+    const { userInfo } = useUser();
     const navigation = useNavigation<NavigationProp<ParamListBase>>();
 
     const [loadingPhotos, setLoadingPhotos] = useState<{ [key: string]: boolean }>({});
     const [isEditLoading, setIsEditLoading] = useState(false);
+    const [isPdfLoading, setIsPdfLoading] = useState(false);
 
     const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>({ uri: "", id: "" });
     const [isPhotoModalVisible, setIsPhotoModalVisible] = useState(false);
+
+    const canEdit = () => userInfo && hasAccess(userInfo, 'operacao', 2);
 
     // Animação de slide
     const screenHeight = Dimensions.get('screen').height;
     const slideAnim = useRef(new Animated.Value(screenHeight)).current;
 
     useEffect(() => {
+        const podeEdit = canEdit();
+        // console.log("Usuario pode editar? ", podeEdit);
+
         if (visible) {
             // Animar entrada
             Animated.spring(slideAnim, {
@@ -98,6 +110,125 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
             cliente: relatorio.cliente,
             servico: relatorio.servico
         });
+    };
+
+    const handleGeneratePdf = async () => {
+        try {
+            setIsPdfLoading(true);
+
+            // Verificar conectividade primeiro (reutilizando sua função existente)
+            const conectado = await verificarConectividadeAPI();
+            if (!conectado) {
+                setIsPdfLoading(false);
+                // Se você tiver um modal de conexão, use-o aqui
+                // setIsConnectionModalVisible(true);
+                showGlobalToast(
+                    'error',
+                    'Sem conexão com o servidor.',
+                    'O Servidor para gerar documentos se encontra fora do alcance...',
+                    10000
+                );
+                return;
+            }
+
+            // Mostrar toast de processamento (se você tiver essa função)
+            if (typeof showGlobalToast === 'function') {
+                showGlobalToast(
+                    'info',
+                    'Gerando PDF',
+                    'O servidor está processando seu relatório...',
+                    10000
+                );
+            }
+
+            // URL da API - ajuste conforme seu ambiente
+            const apiUrl = 'http://192.168.1.222:3000/gerar-relatorio-rdo';
+
+            // Fazer a solicitação para a API
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(relatorio)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Erro do servidor:', errorText);
+                throw new Error(`Erro na resposta do servidor: ${errorText}`);
+            }
+
+            // Mostrar toast de sucesso (se você tiver essa função)
+            if (typeof showGlobalToast === 'function') {
+                showGlobalToast(
+                    'success',
+                    'PDF Gerado com Sucesso!',
+                    '',
+                    5000
+                );
+            }
+
+            // Criar nome do arquivo com timestamp
+            const fileName = `RDO_${relatorio.numeroRdo || 'sem_numero'}_${Date.now()}.pdf`;
+            const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
+
+            // Converter resposta para base64
+            const data = await response.blob();
+            const reader = new FileReader();
+            reader.readAsDataURL(data);
+
+            reader.onload = async () => {
+                try {
+                    // Remover cabeçalho do base64 data URL
+                    const base64Data = reader.result?.toString().split(',')[1];
+
+                    if (!base64Data) {
+                        throw new Error('Erro ao processar arquivo PDF');
+                    }
+
+                    // Salvar arquivo
+                    await RNFS.writeFile(filePath, base64Data, 'base64');
+
+                    // Compartilhar arquivo
+                    await Share.open({
+                        url: `file://${filePath}`,
+                        type: 'application/pdf',
+                        filename: fileName
+                    });
+
+                    // Mostrar mensagem de sucesso
+                    if (typeof showGlobalToast === 'function') {
+                        showGlobalToast('success', 'Sucesso', 'PDF gerado com sucesso!', 4000);
+                    }
+
+                    // Limpar arquivo após compartilhar
+                    await RNFS.unlink(filePath);
+
+                } catch (error) {
+                    console.warn('Erro ao processar ou compartilhar PDF:', error);
+                    // if (typeof showGlobalToast === 'function') {
+                    //     showGlobalToast('error', 'Erro', 'Erro ao processar o PDF', 4000);
+                    // }
+                }
+            };
+
+            reader.onerror = () => {
+                if (typeof showGlobalToast === 'function') {
+                    showGlobalToast('error', 'Erro', 'Erro ao processar o arquivo', 4000);
+                }
+            };
+
+        } catch (error) {
+            console.error('Erro ao gerar PDF:', error);
+            if (typeof showGlobalToast === 'function') {
+                showGlobalToast('error', 'Erro', 'Não foi possível gerar o PDF', 4000);
+            }
+
+        } finally {
+            setIsPdfLoading(false);
+            onClose(); // Fechar o modal após a operação (opcional)
+        }
     };
 
     const handleOpenPhoto = (photo: Photo) => {
@@ -181,6 +312,25 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                 </View>
 
                                 <View style={styles.headerActions}>
+                                    <TouchableOpacity
+                                        onPress={handleGeneratePdf}
+                                        style={styles.pdfButton}
+                                        activeOpacity={0.7}
+                                        disabled={isPdfLoading}
+                                    >
+                                        {isPdfLoading ? (
+                                            <ActivityIndicator
+                                                size="small"
+                                                color={customTheme.colors.primary}
+                                            />
+                                        ) : (
+                                            <MaterialCommunityIcons
+                                                name="file-pdf-box"
+                                                size={24}
+                                                color={customTheme.colors.primary}
+                                            />
+                                        )}
+                                    </TouchableOpacity>
 
                                     <TouchableOpacity
                                         onPress={async () => {
@@ -209,7 +359,7 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                                 size="small"
                                                 color={customTheme.colors.primary}
                                             />
-                                        ) : (
+                                        ) : canEdit() && (
                                             <MaterialCommunityIcons
                                                 name="pencil"
                                                 size={24}
@@ -445,6 +595,10 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
 };
 
 const styles = StyleSheet.create({
+    pdfButton: {
+        padding: 8,
+        marginRight: 8,
+    },
     photoItemContainer: {
         width: '33.3%',
         aspectRatio: 1,

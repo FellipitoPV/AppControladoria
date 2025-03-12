@@ -13,7 +13,7 @@ let navigationHandler: NavigationHandler | null = null;
  */
 export const setNotificationNavigationHandler = (handler: NavigationHandler) => {
     navigationHandler = handler;
-    console.log('Navigation handler set up');
+    // console.log('Navigation handler set up');
 };
 
 /**

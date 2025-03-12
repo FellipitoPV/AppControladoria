@@ -54,7 +54,7 @@ class NotificationService {
         screen?: string,
         params?: any
     ) => {
-        console.log(`⚠ Notificação repetitiva iniciada com sucesso para tela: ${screen}`);
+        // console.log(` Notificação repetitiva iniciada com sucesso para tela: ${screen}`);
 
         const notificationId = 1; // Você pode usar qualquer número inteiro único
 
@@ -70,6 +70,10 @@ class NotificationService {
             message: message,
             date: new Date(Date.now() + 5000), // 5 segundos a partir de agora
             smallIcon: "ic_notification", // Use um ícone mínimo personalizado
+            largeIconUrl: '',
+            bigLargeIcon: '',
+            bigLargeIconUrl: '',
+            largeIcon: '',
             repeatType: 'time',
             repeatTime: 5000, // Repetir a cada 5 segundos
             onlyAlertOnce: true,

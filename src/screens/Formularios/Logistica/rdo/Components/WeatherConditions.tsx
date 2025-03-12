@@ -24,6 +24,13 @@ const WeatherConditions: React.FC<GeneralInfoProps> = ({
         });
     };
 
+    // Adicione esta função antes do return no seu componente
+    const getWeatherIcon = (value: string): string | undefined => {
+        if (!value) return undefined;
+        const selectedCondition = CONDICOES_TEMPO.find(item => item.value === value);
+        return selectedCondition?.icon;
+    };
+
     return (
         <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -39,130 +46,160 @@ const WeatherConditions: React.FC<GeneralInfoProps> = ({
 
             <View style={styles.inputGroup}>
                 {/* Tempo pela Manhã */}
-                <TouchableOpacity
-                    style={styles.dropdownContainer}
-                    activeOpacity={0.7}
-                    onPress={() => tempoManhaRef.current?.open()}
-                >
-                    <Dropdown
-                        ref={tempoManhaRef}
-                        style={styles.dropdown}
-                        placeholderStyle={styles.placeholderStyle}
-                        selectedTextStyle={styles.selectedTextStyle}
-                        iconStyle={styles.iconStyle}
-                        data={CONDICOES_TEMPO}
-                        maxHeight={300}
-                        labelField="label"
-                        valueField="value"
-                        placeholder="Condição do tempo pela manhã"
-                        value={formData.condicaoTempo.manha}
-                        onChange={item => updateWeatherCondition('manha', item.value)}
-                        renderLeftIcon={() => (
-                            <MaterialCommunityIcons
-                                style={styles.dropdownIcon}
-                                name="weather-sunset-up"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                        )}
-                        renderItem={item => (
-                            <View style={styles.dropdownItem}>
+                <View style={styles.periodContainer}>
+                    <View style={styles.periodLabel}>
+                        <MaterialCommunityIcons
+                            name="weather-sunset-up"
+                            size={18}
+                            color={customTheme.colors.primary}
+                        />
+                        <Text style={styles.periodText}>Manhã</Text>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.dropdownContainer}
+                        activeOpacity={0.7}
+                        onPress={() => tempoManhaRef.current?.open()}
+                    >
+                        <Dropdown
+                            ref={tempoManhaRef}
+                            style={styles.dropdown}
+                            placeholderStyle={styles.placeholderStyle}
+                            selectedTextStyle={styles.selectedTextStyle}
+                            iconStyle={styles.iconStyle}
+                            data={CONDICOES_TEMPO}
+                            maxHeight={300}
+                            labelField="label"
+                            valueField="value"
+                            placeholder="Selecione a condição"
+                            value={formData.condicaoTempo.manha}
+                            onChange={item => updateWeatherCondition('manha', item.value)}
+                            renderLeftIcon={() => (
                                 <MaterialCommunityIcons
-                                    name={item.icon}
+                                    style={styles.dropdownIcon}
+                                    name={getWeatherIcon(formData.condicaoTempo.manha) || "weather-sunset-up"}
                                     size={20}
                                     color={customTheme.colors.primary}
                                 />
-                                <Text style={styles.dropdownLabel}>
-                                    {item.label}
-                                </Text>
-                            </View>
-                        )}
-                    />
-                </TouchableOpacity>
+                            )}
+                            renderItem={item => (
+                                <View style={styles.dropdownItem}>
+                                    <MaterialCommunityIcons
+                                        name={item.icon}
+                                        size={20}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.dropdownLabel}>
+                                        {item.label}
+                                    </Text>
+                                </View>
+                            )}
+                        />
+                    </TouchableOpacity>
+                </View>
 
                 {/* Tempo pela Tarde */}
-                <TouchableOpacity
-                    style={styles.dropdownContainer}
-                    activeOpacity={0.7}
-                    onPress={() => tempoTardeRef.current?.open()}
-                >
-                    <Dropdown
-                        ref={tempoTardeRef}
-                        style={styles.dropdown}
-                        placeholderStyle={styles.placeholderStyle}
-                        selectedTextStyle={styles.selectedTextStyle}
-                        iconStyle={styles.iconStyle}
-                        data={CONDICOES_TEMPO}
-                        maxHeight={300}
-                        labelField="label"
-                        valueField="value"
-                        placeholder="Condição do tempo pela tarde"
-                        value={formData.condicaoTempo.tarde}
-                        onChange={item => updateWeatherCondition('tarde', item.value)}
-                        renderLeftIcon={() => (
-                            <MaterialCommunityIcons
-                                style={styles.dropdownIcon}
-                                name="weather-sunny"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                        )}
-                        renderItem={item => (
-                            <View style={styles.dropdownItem}>
+                <View style={styles.periodContainer}>
+                    <View style={styles.periodLabel}>
+                        <MaterialCommunityIcons
+                            name="weather-sunny"
+                            size={18}
+                            color={customTheme.colors.primary}
+                        />
+                        <Text style={styles.periodText}>Tarde</Text>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.dropdownContainer}
+                        activeOpacity={0.7}
+                        onPress={() => tempoTardeRef.current?.open()}
+                    >
+                        <Dropdown
+                            ref={tempoTardeRef}
+                            style={styles.dropdown}
+                            placeholderStyle={styles.placeholderStyle}
+                            selectedTextStyle={styles.selectedTextStyle}
+                            iconStyle={styles.iconStyle}
+                            data={CONDICOES_TEMPO}
+                            maxHeight={300}
+                            labelField="label"
+                            valueField="value"
+                            placeholder="Selecione a condição"
+                            value={formData.condicaoTempo.tarde}
+                            onChange={item => updateWeatherCondition('tarde', item.value)}
+                            renderLeftIcon={() => (
                                 <MaterialCommunityIcons
-                                    name={item.icon}
+                                    style={styles.dropdownIcon}
+                                    name={getWeatherIcon(formData.condicaoTempo.tarde) || "weather-sunny"}
                                     size={20}
                                     color={customTheme.colors.primary}
                                 />
-                                <Text style={styles.dropdownLabel}>
-                                    {item.label}
-                                </Text>
-                            </View>
-                        )}
-                    />
-                </TouchableOpacity>
+                            )}
+                            renderItem={item => (
+                                <View style={styles.dropdownItem}>
+                                    <MaterialCommunityIcons
+                                        name={item.icon}
+                                        size={20}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.dropdownLabel}>
+                                        {item.label}
+                                    </Text>
+                                </View>
+                            )}
+                        />
+                    </TouchableOpacity>
+                </View>
 
                 {/* Tempo pela Noite */}
-                <TouchableOpacity
-                    style={styles.dropdownContainer}
-                    activeOpacity={0.7}
-                    onPress={() => tempoNoiteRef.current?.open()}
-                >
-                    <Dropdown
-                        ref={tempoNoiteRef}
-                        style={styles.dropdown}
-                        placeholderStyle={styles.placeholderStyle}
-                        selectedTextStyle={styles.selectedTextStyle}
-                        iconStyle={styles.iconStyle}
-                        data={CONDICOES_TEMPO}
-                        maxHeight={300}
-                        labelField="label"
-                        valueField="value"
-                        placeholder="Condição do tempo pela noite"
-                        value={formData.condicaoTempo.noite}
-                        onChange={item => updateWeatherCondition('noite', item.value)}
-                        renderLeftIcon={() => (
-                            <MaterialCommunityIcons
-                                style={styles.dropdownIcon}
-                                name="weather-night"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                        )}
-                        renderItem={item => (
-                            <View style={styles.dropdownItem}>
+                <View style={styles.periodContainer}>
+                    <View style={styles.periodLabel}>
+                        <MaterialCommunityIcons
+                            name="weather-night"
+                            size={18}
+                            color={customTheme.colors.primary}
+                        />
+                        <Text style={styles.periodText}>Noite</Text>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.dropdownContainer}
+                        activeOpacity={0.7}
+                        onPress={() => tempoNoiteRef.current?.open()}
+                    >
+                        <Dropdown
+                            ref={tempoNoiteRef}
+                            style={styles.dropdown}
+                            placeholderStyle={styles.placeholderStyle}
+                            selectedTextStyle={styles.selectedTextStyle}
+                            iconStyle={styles.iconStyle}
+                            data={CONDICOES_TEMPO}
+                            maxHeight={300}
+                            labelField="label"
+                            valueField="value"
+                            placeholder="Selecione a condição"
+                            value={formData.condicaoTempo.noite}
+                            onChange={item => updateWeatherCondition('noite', item.value)}
+                            renderLeftIcon={() => (
                                 <MaterialCommunityIcons
-                                    name={item.icon}
+                                    style={styles.dropdownIcon}
+                                    name={getWeatherIcon(formData.condicaoTempo.noite) || "weather-night"}
                                     size={20}
                                     color={customTheme.colors.primary}
                                 />
-                                <Text style={styles.dropdownLabel}>
-                                    {item.label}
-                                </Text>
-                            </View>
-                        )}
-                    />
-                </TouchableOpacity>
+                            )}
+                            renderItem={item => (
+                                <View style={styles.dropdownItem}>
+                                    <MaterialCommunityIcons
+                                        name={item.icon}
+                                        size={20}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.dropdownLabel}>
+                                        {item.label}
+                                    </Text>
+                                </View>
+                            )}
+                        />
+                    </TouchableOpacity>
+                </View>
             </View>
         </View>
     );
@@ -184,7 +221,22 @@ const styles = StyleSheet.create({
         fontSize: 18,
     },
     inputGroup: {
-        gap: 10,
+        gap: 16,
+    },
+    periodContainer: {
+        width: '100%',
+    },
+    periodLabel: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+        paddingLeft: 4,
+        gap: 6,
+    },
+    periodText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: customTheme.colors.primary,
     },
     dropdownContainer: {
         borderColor: customTheme.colors.outline,

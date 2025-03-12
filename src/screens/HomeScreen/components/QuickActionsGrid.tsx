@@ -85,6 +85,13 @@ const QuickActionsGrid = () => {
             }
         },
         {
+            id: '97', 
+            title: 'Reuniao',
+            icon: 'presentation-play',
+            color: customTheme.colors.primary,
+            route: 'Reuniao',
+        },
+        {
             id: '98',
             title: 'Acessos',
             icon: 'account-cog',

@@ -34,7 +34,7 @@ const UserProfileModal = ({ visible, onClose, userInfo, onLogout, updateInfo, on
         const randomNumber = Math.random();
         const shouldShowEasterEgg = randomNumber < 0.25;
         setShowEasterEgg(shouldShowEasterEgg);
-        console.log("Quantidade recebida do esterEgg:", randomNumber)
+        // console.log("Quantidade recebida do esterEgg:", randomNumber)
     }, []);
 
     const handleRickRoll = async () => {

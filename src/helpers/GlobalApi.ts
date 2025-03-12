@@ -349,14 +349,20 @@ const removeDuplicateFromPending = async (compostagemData: Compostagem): Promise
 export const showGlobalToast = (
     type: 'success' | 'error' | 'info',
     text1: string,
-    text2: string,
-    visibilityTime: number,
+    text2?: string,
+    visibilityTime?: number,
     from?: 'top' | 'bottom',
     countdown?: boolean
 ) => {
     if (countdown) {
         // Iniciamos com o número de segundos (visibilityTime em ms convertido para segundos)
-        let seconds = Math.floor(visibilityTime / 1000);
+        let seconds = 5000; // 5 Segundos por padrão
+
+        if (visibilityTime !== null && visibilityTime !== undefined) {
+            let hasSecconds = Math.floor(visibilityTime / 1000);
+        }
+
+
         const intervalId = setInterval(() => {
             seconds--;
             if (seconds >= 0) {
@@ -389,6 +395,36 @@ export const showGlobalToast = (
             position: from || 'top',
             visibilityTime,
         });
+    }
+};
+
+// Verificar conectividade com o servidor
+export const verificarConectividadeAPI = async () => {
+    try {
+        showGlobalToast('info', 'Aguarde', 'Verificando conexão com o servidor...', 10000);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // timeout de 5 segundos
+
+        const response = await fetch('http://192.168.1.222:3000/ping', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+            return true;
+        } else {
+            throw new Error('Servidor respondeu com erro');
+        }
+
+    } catch (error) {
+        console.error('Erro ao verificar conectividade:', error);
+        return false;
     }
 };
 

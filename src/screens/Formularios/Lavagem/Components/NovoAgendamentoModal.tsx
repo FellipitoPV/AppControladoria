@@ -78,19 +78,19 @@ const NovoAgendamentoModal: React.FC<NovoAgendamentoModalProps> = ({
     }, [visible]);
 
     const handleDismiss = () => {
-            Animated.spring(slideAnim, {
-                toValue: 800,
-                bounciness: 2,
-                speed: 20,
-                useNativeDriver: true
-            }).start();
-    
-            // Definir um timeout um pouco menor que a duração esperada da animação
-            setTimeout(() => {
-                onDismiss();
-                resetForm()
-            }, 50); // 300ms é geralmente suficiente para a animação com esses parâmetros
-        };
+        Animated.spring(slideAnim, {
+            toValue: 800,
+            bounciness: 2,
+            speed: 20,
+            useNativeDriver: true
+        }).start();
+
+        // Definir um timeout um pouco menor que a duração esperada da animação
+        setTimeout(() => {
+            onDismiss();
+            resetForm()
+        }, 50); // 300ms é geralmente suficiente para a animação com esses parâmetros
+    };
 
     const resetForm = () => {
         setPlacaSelecionada('');
@@ -179,6 +179,7 @@ const NovoAgendamentoModal: React.FC<NovoAgendamentoModalProps> = ({
                                         style={styles.dropdown}
                                         placeholderStyle={styles.placeholderStyle}
                                         selectedTextStyle={styles.selectedTextStyle}
+                                        inputSearchStyle={{ color: customTheme.colors.onSurface }}
                                         data={placasItems}
                                         search
                                         maxHeight={300}

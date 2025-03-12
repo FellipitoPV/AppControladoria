@@ -23,20 +23,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
-interface LavagemStats {
+interface RelatoriosStats {
     hoje: number;
     semana: number;
     mes: number;
     total: number;
 }
 
+
 export default function OperacaoScreen({ navigation }: any) {
-    const [stats, setStats] = useState<LavagemStats>({
+    const [stats, setStats] = useState<RelatoriosStats>({
         hoje: 0,
         semana: 0,
         mes: 0,
         total: 0
     });
+
 
     const [lavagensRecentes, setLavagensRecentes] = useState<any[]>([]);
     const [lavagensAgendadas, setLavagensAgendadas] = useState<any[]>([]);
@@ -67,23 +69,18 @@ export default function OperacaoScreen({ navigation }: any) {
         return date;
     };
 
-    // Função para formatar a data no formato do Firestore
-    const formatFirestoreDate = (date: Date) => {
-        return date.toLocaleDateString('pt-BR');
-    };
-
-    const fetchLavagemStats = async () => {
+    const fetchRelatoriosStats = async () => {
         try {
-            // Datas de referência como timestamps
+            // Datas de referência
             const hoje = new Date();
             hoje.setHours(0, 0, 0, 0);
 
             const inicioSemana = getStartOfWeek();
             const inicioMes = getStartOfMonth();
 
-            // Buscar todos os registros da coleção registroLavagens
+            // Buscar todos os registros da coleção relatoriosRDO
             const snapshot = await firestore()
-                .collection('registroLavagens')
+                .collection('relatoriosRDO')
                 .get();
 
             let statsHoje = 0;
@@ -100,21 +97,21 @@ export default function OperacaoScreen({ navigation }: any) {
                     return;
                 }
 
-                let dataLavagem: Date;
+                let dataRelatorio: Date;
 
                 try {
                     // Tenta primeiro parsear como string DD/MM/YYYY
                     if (typeof dados.data === 'string' && dados.data.includes('/')) {
                         const [dia, mes, ano] = dados.data.split('/');
-                        dataLavagem = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+                        dataRelatorio = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
                     }
                     // Se for um timestamp do Firestore
                     else if (dados.data && dados.data.toDate) {
-                        dataLavagem = dados.data.toDate();
+                        dataRelatorio = dados.data.toDate();
                     }
                     // Se for uma data JavaScript
                     else if (dados.data instanceof Date) {
-                        dataLavagem = dados.data;
+                        dataRelatorio = dados.data;
                     }
                     else {
                         console.warn('Formato de data não reconhecido:', dados.data);
@@ -122,23 +119,18 @@ export default function OperacaoScreen({ navigation }: any) {
                     }
 
                     // Normaliza a hora para meia-noite
-                    dataLavagem.setHours(0, 0, 0, 0);
+                    dataRelatorio.setHours(0, 0, 0, 0);
 
                     // Comparar usando timestamps
-                    if (dataLavagem.getTime() === hoje.getTime()) {
+                    if (dataRelatorio.getTime() === hoje.getTime()) {
                         statsHoje++;
                     }
-                    if (dataLavagem >= inicioSemana) {
+                    if (dataRelatorio >= inicioSemana) {
                         statsSemana++;
                     }
-                    if (dataLavagem >= inicioMes) {
+                    if (dataRelatorio >= inicioMes) {
                         statsMes++;
                     }
-
-                    // Para debug - identificar o tipo de registro (antigo ou novo)
-                    // const tipoRegistro = dados.createdBy ? 'novo' : 'antigo';
-                    // console.log(`Processado registro ${tipoRegistro} - Data: ${dataLavagem.toLocaleDateString()} - ID: ${doc.id}`);
-
                 } catch (error) {
                     console.warn('Erro ao processar data do documento:', doc.id, error);
                 }
@@ -149,19 +141,6 @@ export default function OperacaoScreen({ navigation }: any) {
 
             const total = snapshot.size;
 
-            // Para debug
-            // console.log('Estatísticas de Lavagem:', {
-            //     hoje: statsHoje,
-            //     semana: statsSemana,
-            //     mes: statsMes,
-            //     total,
-            //     dataReferencia: {
-            //         hoje: hoje.toLocaleDateString(),
-            //         inicioSemana: inicioSemana.toLocaleDateString(),
-            //         inicioMes: inicioMes.toLocaleDateString()
-            //     }
-            // });
-
             return {
                 hoje: statsHoje,
                 semana: statsSemana,
@@ -169,26 +148,13 @@ export default function OperacaoScreen({ navigation }: any) {
                 total
             };
         } catch (error) {
-            console.error('Erro ao buscar estatísticas:', error);
+            console.error('Erro ao buscar estatísticas de relatórios:', error);
             return {
                 hoje: 0,
                 semana: 0,
                 mes: 0,
                 total: 0
             };
-        }
-    };
-
-    const fetchAgendamentosPendentes = async () => {
-        try {
-            const snapshot = await firestore()
-                .collection('agendamentos')
-                .where('concluido', '==', false)
-                .get();
-
-            setAgendamentosPendentes(snapshot.size);
-        } catch (error) {
-            console.error('Erro ao buscar agendamentos pendentes:', error);
         }
     };
 
@@ -203,11 +169,16 @@ export default function OperacaoScreen({ navigation }: any) {
     };
 
     useEffect(() => {
-        fetchAgendamentosPendentes();
+        const loadStats = async () => {
+            const novasStats = await fetchRelatoriosStats();
+            setStats(novasStats);
+        };
 
-        // Atualiza quando a tela receber foco
+        loadStats();
+
+        // Atualizar stats quando o app voltar do background
         const unsubscribe = navigation.addListener('focus', () => {
-            fetchAgendamentosPendentes();
+            loadStats();
         });
 
         return unsubscribe;
@@ -228,63 +199,13 @@ export default function OperacaoScreen({ navigation }: any) {
         return unsubscribe;
     }, [navigation]);
 
-
-    useEffect(() => {
-        const loadStats = async () => {
-            const novasStats = await fetchLavagemStats();
-            setStats(novasStats);
-        };
-
-        loadStats();
-
-        // Opcional: Atualizar stats quando o app voltar do background
-        const unsubscribe = navigation.addListener('focus', () => {
-            loadStats();
-        });
-
-        return unsubscribe;
-    }, [navigation]);
-
-    const renderActionButton = (
-        icon: string,
-        text: string,
-        onPress: () => void,
-        badge?: number
-    ) => {
-        return (
-            <TouchableOpacity
-                style={styles.actionButton}
-                onPress={onPress}
-            >
-                <View style={styles.actionIconContainer}>
-                    <View style={[
-                        styles.actionIcon,
-                        { backgroundColor: customTheme.colors.primaryContainer }
-                    ]}>
-                        <MaterialCommunityIcons name={icon} size={24} color={customTheme.colors.primary} />
-                    </View>
-                    {badge !== undefined && badge > 0 && (
-                        <View style={styles.badgeContainer}>
-                            <Text style={styles.badgeText}>
-                                {badge > 99 ? '99+' : badge}
-                            </Text>
-                        </View>
-                    )}
-                </View>
-                <Text style={styles.actionText}>
-                    {text}
-                </Text>
-            </TouchableOpacity>
-        );
-    };
-
     return (
         <Surface style={styles.container}>
 
             {/* Header */}
             <ModernHeader
-                title="Operação"
-                iconName="car-wash"
+                title="Operacional"
+                iconName="clipboard-list"
                 onBackPress={() => navigation.goBack()}
             />
 
@@ -324,7 +245,6 @@ export default function OperacaoScreen({ navigation }: any) {
                             <Text style={styles.statsLabel}>Este Mês</Text>
                         </Card.Content>
                     </Card>
-
                 </View>
 
                 {/* Ações */}
@@ -338,6 +258,13 @@ export default function OperacaoScreen({ navigation }: any) {
                             noticeText={hasDraft ? "Rascunho disponível..." : undefined}
                             noticeColor={customTheme.colors.primary}
                         />
+
+                        {/* <ActionButton
+                            icon="clock-outline"
+                            text="Operações Pendentes"
+                            onPress={() => navigation.navigate('OperacaoProgram')}
+                            badge={agendamentosPendentes}
+                        /> */}
 
                         <ActionButton
                             icon="archive-search"
@@ -386,54 +313,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
-        gap: 5,
-    },
-
-    actionButton: {
-        width: (width - 48) / 2,
-        height: 120, // Altura fixa para todos os botões
-        padding: 16,
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 12,
-        elevation: 2,
-        justifyContent: 'center', // Centraliza o conteúdo verticalmente
-        alignItems: 'center',
-    },
-
-    actionIconContainer: {
-        position: 'relative',
-        marginBottom: 8,
-        flex: 0, // Impede que o container se expanda
-    },
-
-    actionIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-
-    actionText: {
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
-        fontWeight: '500',
-        textAlign: 'center', // Garante alinhamento centralizado do texto
-    },
-    badgeContainer: {
-        position: 'absolute',
-        top: -8,
-        right: -8,
-        borderRadius: 10,
-        backgroundColor: customTheme.colors.error,
-        padding: 4,
-        borderWidth: 1.5,
-        borderColor: customTheme.colors.surface,
-    },
-
-    badgeText: {
-        color: customTheme.colors.onError,
-        fontWeight: 'bold',
+        gap: 12,
     },
     container: {
         flex: 1,

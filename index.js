@@ -26,8 +26,8 @@ PushNotification.configure({
         const params = userInfo.params;
 
         // Log detalhado para debug
-        console.log("Dados de navegação extraídos:", { screen, params });
-        console.log("Fonte de dados:", userInfo);
+        //console.log("Dados de navegação extraídos:", { screen, params });
+        //console.log("Fonte de dados:", userInfo);
 
         // Verificar se temos dados de navegação
         if (screen) {
@@ -41,13 +41,13 @@ PushNotification.configure({
                         // Navegar diretamente para a tela desejada, sem verificar login
                         console.log(`Executando navegação direta para: ${screen}`);
                         global.navigationRef.current.navigate(screen, params);
-                        console.log("Navegação concluída com sucesso");
+                        //console.log("Navegação concluída com sucesso");
                     } catch (error) {
                         console.error("Erro durante a navegação:", error);
                     }
                 }, 500); // Mantendo 500ms para maior segurança
             } else {
-                console.log("Navigation ref não disponível, armazenando para uso posterior");
+                //console.log("Navigation ref não disponível, armazenando para uso posterior");
                 // Armazenar a navegação para ser processada quando o NavigationContainer estiver pronto
                 global.pendingNotificationNavigation = {
                     screenName: screen,

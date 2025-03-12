@@ -14,6 +14,7 @@ interface OperationHoursProps {
     setHoraTermino: React.Dispatch<React.SetStateAction<Date>>;
     formData: FormDataInterface;
     setFormData: React.Dispatch<React.SetStateAction<FormDataInterface>>;
+    isEditing?: string;
 }
 
 const OperationHours: React.FC<OperationHoursProps> = ({
@@ -22,10 +23,13 @@ const OperationHours: React.FC<OperationHoursProps> = ({
     horaTermino,
     setHoraTermino,
     formData,
-    setFormData
+    setFormData,
+    isEditing
 }) => {
     const [showInicioTimePicker, setShowInicioTimePicker] = useState(false);
     const [showTerminoTimePicker, setShowTerminoTimePicker] = useState(false);
+    
+    const isEditMode = isEditing === 'edit';
 
     const handleInicioTimeChange = (event: any, time?: Date) => {
         setShowInicioTimePicker(false);
@@ -52,63 +56,85 @@ const OperationHours: React.FC<OperationHoursProps> = ({
                     color={customTheme.colors.primary}
                 />
                 <Text variant="titleMedium" style={styles.sectionTitle}>
-                    Horários de Operação
+                    {isEditMode ? "Horários de Operação" : "Início da Operação"}
                 </Text>
             </View>
 
-            <View style={styles.rowInputs}>
-                <TouchableOpacity
-                    style={styles.dateTimeContainer}
-                    onPress={() => setShowInicioTimePicker(true)}
-                >
-                    <TextInput
-                        mode="outlined"
-                        label="Início da Operação"
-                        value={formatTime(horaInicio)}
-                        editable={false}
-                        style={[styles.input, styles.rowInput]}
-                        left={<TextInput.Icon icon={() => (
-                            <MaterialCommunityIcons name="play" size={24} color={customTheme.colors.primary} />
-                        )} />}
-                    />
-                </TouchableOpacity>
+            {isEditMode ? (
+                // Modo de edição - mostrar ambos os horários
+                <View style={styles.rowInputs}>
+                    <TouchableOpacity
+                        style={styles.dateTimeContainer}
+                        onPress={() => setShowInicioTimePicker(true)}
+                    >
+                        <TextInput
+                            mode="outlined"
+                            label="Início da Operação"
+                            value={formatTime(horaInicio)}
+                            editable={false}
+                            style={[styles.input, styles.rowInput]}
+                            left={<TextInput.Icon icon={() => (
+                                <MaterialCommunityIcons name="play" size={24} color={customTheme.colors.primary} />
+                            )} />}
+                        />
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={styles.dateTimeContainer}
-                    onPress={() => setShowTerminoTimePicker(true)}
-                >
-                    <TextInput
-                        mode="outlined"
-                        label="Término da Operação"
-                        value={formatTime(horaTermino)}
-                        editable={false}
-                        style={[styles.input, styles.rowInput]}
-                        left={<TextInput.Icon icon={() => (
-                            <MaterialCommunityIcons name="stop" size={24} color={customTheme.colors.primary} />
-                        )} />}
-                    />
-                </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.dateTimeContainer}
+                        onPress={() => setShowTerminoTimePicker(true)}
+                    >
+                        <TextInput
+                            mode="outlined"
+                            label="Término da Operação"
+                            value={formatTime(horaTermino)}
+                            editable={false}
+                            style={[styles.input, styles.rowInput]}
+                            left={<TextInput.Icon icon={() => (
+                                <MaterialCommunityIcons name="stop" size={24} color={customTheme.colors.primary} />
+                            )} />}
+                        />
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                // Modo de criação - mostrar apenas o horário de início
+                <View style={styles.inputContainer}>
+                    <TouchableOpacity
+                        style={styles.dateTimeContainer}
+                        onPress={() => setShowInicioTimePicker(true)}
+                    >
+                        <TextInput
+                            mode="outlined"
+                            label="Início da Operação"
+                            value={formatTime(horaInicio)}
+                            editable={false}
+                            style={styles.input}
+                            left={<TextInput.Icon icon={() => (
+                                <MaterialCommunityIcons name="play" size={24} color={customTheme.colors.primary} />
+                            )} />}
+                        />
+                    </TouchableOpacity>
+                </View>
+            )}
 
-                {showInicioTimePicker && (
-                    <DateTimePicker
-                        value={horaInicio}
-                        mode="time"
-                        is24Hour={true}
-                        display="default"
-                        onChange={handleInicioTimeChange}
-                    />
-                )}
+            {showInicioTimePicker && (
+                <DateTimePicker
+                    value={horaInicio}
+                    mode="time"
+                    is24Hour={true}
+                    display="default"
+                    onChange={handleInicioTimeChange}
+                />
+            )}
 
-                {showTerminoTimePicker && (
-                    <DateTimePicker
-                        value={horaTermino}
-                        mode="time"
-                        is24Hour={true}
-                        display="default"
-                        onChange={handleTerminoTimeChange}
-                    />
-                )}
-            </View>
+            {showTerminoTimePicker && (
+                <DateTimePicker
+                    value={horaTermino}
+                    mode="time"
+                    is24Hour={true}
+                    display="default"
+                    onChange={handleTerminoTimeChange}
+                />
+            )}
         </View>
     );
 };
@@ -131,6 +157,9 @@ const styles = StyleSheet.create({
     rowInputs: {
         flexDirection: 'row',
         gap: 16,
+    },
+    inputContainer: {
+        width: '100%',
     },
     dateTimeContainer: {
         flex: 1,

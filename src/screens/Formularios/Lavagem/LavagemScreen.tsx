@@ -17,6 +17,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import firestore from '@react-native-firebase/firestore';
+import ActionButton from '../../../assets/components/ActionButton';
 
 const { width } = Dimensions.get('window');
 
@@ -222,7 +223,7 @@ export default function LavagemScreen({ navigation }: any) {
 
     return (
         <Surface style={styles.container}>
-            
+
             {/* Header */}
             <ModernHeader
                 title="Gestão de Lavagens"
@@ -273,75 +274,37 @@ export default function LavagemScreen({ navigation }: any) {
                 <View style={styles.actionsContainer}>
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
-                        <TouchableOpacity
-                            style={styles.actionButton}
+
+                        <ActionButton
+                            icon="plus"
+                            text="Nova Lavagem"
                             onPress={() => navigation.navigate('LavagemForm')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.primaryContainer }]}>
-                                <Icon name="plus" size={24} color={customTheme.colors.primary} />
-                            </View>
-                            <Text style={styles.actionText}>Nova Lavagem</Text>
-                        </TouchableOpacity>
+                        />
 
-                        <TouchableOpacity
-                            style={styles.actionButton}
+                        <ActionButton
+                            icon="calendar-blank-outline"
+                            text="Agendamentos"
                             onPress={() => navigation.navigate('LavagemAgend')}
-                        >
-                            <View style={styles.actionIconContainer}>
-                                <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.secondaryContainer }]}>
-                                    <Icon name="calendar-blank-outline" size={24} color={customTheme.colors.secondary} />
-                                </View>
-                                {agendamentosPendentes > 0 && (
-                                    <View style={styles.badgeContainer}>
-                                        <Text style={styles.badgeText}>
-                                            {agendamentosPendentes > 99 ? '99+' : agendamentosPendentes}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-                            <Text style={styles.actionText}>Agendar</Text>
-                        </TouchableOpacity>
+                        />
 
-                        <TouchableOpacity
-                            style={styles.actionButton}
+                        <ActionButton
+                            icon="package-variant"
+                            text="Produtos"
                             onPress={() => navigation.navigate('LavagemEstoq')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.tertiaryContainer }]}>
-                                <Icon name="package-variant" size={24} color={customTheme.colors.tertiary} />
-                            </View>
-                            <Text style={styles.actionText}>Produtos</Text>
-                        </TouchableOpacity>
+                        />
 
-                        <TouchableOpacity
-                            style={styles.actionButton}
+                        <ActionButton
+                            icon="history"
+                            text="Histórico"
                             onPress={() => navigation.navigate('LavagemHist')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.tertiaryContainer }]}>
-                                <Icon name="history" size={24} color={customTheme.colors.tertiary} />
-                            </View>
-                            <Text style={styles.actionText}>Histórico</Text>
-                        </TouchableOpacity>
+                        />
 
-                        <TouchableOpacity
-                            style={styles.actionButton}
+                        <ActionButton
+                            icon="file-chart"
+                            text="Gerar Relatório"
                             onPress={() => navigation.navigate('LavagemRelat')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.tertiaryContainer }]}>
-                                <Icon name="file-chart" size={24} color={customTheme.colors.tertiary} />
-                            </View>
-                            <Text style={styles.actionText}>Gerar Relatório</Text>
-                        </TouchableOpacity>
+                        />
 
-                        {/* TODO Pegar um exemplo de relatorio de lavagem deles */}
-                        {/* <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => navigation.navigate('RelatorioLavagens')}
-                        >
-                            <View style={[styles.actionIcon, { backgroundColor: customTheme.colors.primaryContainer }]}>
-                                <Icon name="bar-chart" size={24} color={customTheme.colors.primary} />
-                            </View>
-                            <Text style={styles.actionText}>Relatórios</Text>
-                        </TouchableOpacity> */}
                     </View>
                 </View>
 
@@ -383,55 +346,8 @@ const styles = StyleSheet.create({
     actionsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 16,
+        gap: 12,
         alignItems: 'stretch', // Garante que todos os itens se esticam para mesma altura
-    },
-
-    actionButton: {
-        width: (width - 48) / 2,
-        height: 120, // Altura fixa para todos os botões
-        padding: 16,
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 12,
-        elevation: 2,
-        justifyContent: 'center', // Centraliza o conteúdo verticalmente
-        alignItems: 'center',
-    },
-
-    actionIconContainer: {
-        position: 'relative',
-        marginBottom: 8,
-        flex: 0, // Impede que o container se expanda
-    },
-
-    actionIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-
-    actionText: {
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
-        fontWeight: '500',
-        textAlign: 'center', // Garante alinhamento centralizado do texto
-    },
-    badgeContainer: {
-        position: 'absolute',
-        top: -8,
-        right: -8,
-        borderRadius: 10,
-        backgroundColor: customTheme.colors.error,
-        padding: 4,
-        borderWidth: 1.5,
-        borderColor: customTheme.colors.surface,
-    },
-
-    badgeText: {
-        color: customTheme.colors.onError,
-        fontWeight: 'bold',
     },
     container: {
         flex: 1,

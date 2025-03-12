@@ -7,18 +7,10 @@ import { customTheme } from '../../../../theme/theme';
 import { Equipment, Container } from './logisticTypes';
 
 
-export interface SelectedEquipment extends Equipment {
-    quantidade: number;
-}
-
-export interface SelectedContainer extends Container {
-    quantidade: number;
-}
-
 // Props do componente
 interface EquipmentSectionProps {
-    equipamentosSelecionados: SelectedEquipment[];
-    containersSelecionados: SelectedContainer[];
+    equipamentosSelecionados: Equipment[];
+    containersSelecionados: Container[];
     onAddEquipment: (item: Equipment) => void;
     onRemoveEquipment: (id: string) => void;
     onUpdateEquipmentQuantity: (id: string, quantity: number) => void;
@@ -33,7 +25,7 @@ interface EquipmentSectionProps {
 // Helper functions com tipagem
 const formatarTipoEquipamento = (equipment: Equipment): string => {
     // Implemente a lógica de formatação aqui
-    return `${equipment.tipo}`;
+    return `${equipment.label}`;
 };
 
 const formatarTipoContainer = (container: Container): string => {
@@ -67,7 +59,7 @@ const EquipmentSection: React.FC<EquipmentSectionProps> = ({
     equipamentoError = false,
 }) => {
     const renderQuantityControls = (
-        item: SelectedEquipment | SelectedContainer,
+        item: Equipment | Container,
         quantidade: number,
         onUpdate: (id: string, quantity: number) => void
     ) => (
@@ -89,7 +81,7 @@ const EquipmentSection: React.FC<EquipmentSectionProps> = ({
     );
 
     const renderSelectedItem = (
-        item: SelectedEquipment | SelectedContainer,
+        item: Equipment | Container,
         index: number,
         isEquipment: boolean = true
     ) => (
@@ -121,8 +113,8 @@ const EquipmentSection: React.FC<EquipmentSectionProps> = ({
 
                 <View style={styles.itemFooter}>
                     {renderQuantityControls(
-                        item,
-                        item.quantidade,
+                        item.tipo ? item : item,
+                        item?.quantidade ?? 0,
                         isEquipment ? onUpdateEquipmentQuantity : onUpdateContainerQuantity
                     )}
                 </View>

@@ -1,6 +1,7 @@
 import { UserAccess } from "../screens/Adm/components/admTypes";
 
 export type Meeting = {
+    id?: string;
     name: string;
     entrada: string;
     saida: string;
