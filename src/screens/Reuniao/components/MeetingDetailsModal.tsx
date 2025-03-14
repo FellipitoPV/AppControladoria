@@ -15,7 +15,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { customTheme } from '../../../theme/theme';
 import dayjs from 'dayjs';
 import ConfirmationModal from '../../../assets/components/ConfirmationModal';
-import { User } from '../../Adm/components/admTypes';
+import { User } from '../../Adm/types/admTypes';
 
 interface MeetingDetailsModalProps {
     visible: boolean;

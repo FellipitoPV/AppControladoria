@@ -9,7 +9,7 @@ import { Text } from 'react-native-paper';
 import MaterialIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useUser } from '../../../contexts/userContext';
 import { customTheme } from '../../../theme/theme';
-import { AcessoInterface, AcessosType, UserAccess } from '../../Adm/components/admTypes';
+import { AcessoInterface, AcessosType, UserAccess } from '../../Adm/types/admTypes';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
 

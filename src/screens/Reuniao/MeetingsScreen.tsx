@@ -294,7 +294,7 @@ export default function MeetingsScreen({ navigation }: any) {
         <Surface style={styles.container}>
             <ModernHeader
                 title="Reuniões"
-                iconName="calendar-month-outline"
+                iconName="presentation"
                 onBackPress={() => navigation.goBack()}
             />
 

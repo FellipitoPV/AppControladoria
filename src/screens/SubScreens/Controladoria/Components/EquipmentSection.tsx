@@ -17,8 +17,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
 import { customTheme } from '../../../../theme/theme';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
-import { Container, Equipment } from '../Components/logisticTypes';
-import { DropdownRef } from '../rdo/Types/rdoTypes';
+import { Container, Equipment } from '../types/logisticTypes';
+import { DropdownRef } from '../../Operacao/rdo/Types/rdoTypes';
 
 interface EquipmentSectionProps {
     equipamentosSelecionados: Equipment[];
@@ -52,9 +52,6 @@ const EquipmentSection: React.FC<EquipmentSectionProps> = ({
     const [isContainerModal, setIsContainerModal] = useState(false);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editingType, setEditingType] = useState<'equipment' | 'container'>('equipment');
-
-    // Equipment dropdown refs
-    const equipmentRef = useRef<DropdownRef>(null);
 
     // Get the icon for a specific equipment or container type
     const getIcon = (tipoLabel: string, isContainer: boolean): string => {

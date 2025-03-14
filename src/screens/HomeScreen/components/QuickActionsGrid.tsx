@@ -25,7 +25,6 @@ interface QuickAction {
     };
 }
 
-
 const QuickActionsGrid = () => {
     const [currentPage, setCurrentPage] = useState(0);
     const navigation = useNavigation<NavigationProp<ParamListBase>>();
@@ -51,25 +50,25 @@ const QuickActionsGrid = () => {
                 minLevel: 1 // Nível básico para acesso
             }
         },
-        {
-            id: '2',
-            title: 'Compostagem',
-            icon: 'sprout',
-            color: customTheme.colors.primary,
-            route: 'CompostagemScreen',
-            access: {
-                moduleId: 'compostagem',
-                minLevel: 1 // Nível básico para acesso
-            }
-        },
+        // {
+        //     id: '2',
+        //     title: 'Compostagem',
+        //     icon: 'sprout',
+        //     color: customTheme.colors.primary,
+        //     route: 'CompostagemScreen',
+        //     access: {
+        //         moduleId: 'compostagem',
+        //         minLevel: 1 // Nível básico para acesso
+        //     }
+        // },
         {
             id: '3',
-            title: 'Logística',
-            icon: 'truck-delivery',
+            title: 'Controladoria',
+            icon: 'file-document-outline',
             color: customTheme.colors.primary,
-            route: 'LogisticaScreen',
+            route: 'ControladoriaScreen',
             access: {
-                moduleId: 'logistica',
+                moduleId: 'controladoria',
                 minLevel: 1 // Nível básico para acesso
             }
         },
@@ -85,9 +84,20 @@ const QuickActionsGrid = () => {
             }
         },
         {
+            id: '5',
+            title: 'Logística',
+            icon: 'truck-delivery',
+            color: customTheme.colors.primary,
+            route: 'LogisticaScreen',
+            access: {
+                moduleId: 'logistica',
+                minLevel: 1 // Nível básico para acesso
+            }
+        },
+        {
             id: '97', 
             title: 'Reuniao',
-            icon: 'presentation-play',
+            icon: 'presentation',
             color: customTheme.colors.primary,
             route: 'Reuniao',
         },

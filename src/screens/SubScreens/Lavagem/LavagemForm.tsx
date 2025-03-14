@@ -21,7 +21,7 @@ import storage from '@react-native-firebase/storage';
 import SaveButton from '../../../assets/components/SaveButton';
 import PhotoGalleryEnhanced from './Components/PhotoGallery';
 import { ProductsContainer } from './Components/ProductSelection';
-import { Photo } from '../Logistica/rdo/Types/rdoTypes';
+import { Photo } from '../Operacao/rdo/Types/rdoTypes';
 
 const { width } = Dimensions.get('window');
 

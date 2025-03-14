@@ -13,16 +13,13 @@ import {
     Button,
     ProgressBar,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import firestore from '@react-native-firebase/firestore';
-import { useUser } from '../../../contexts/userContext';
-import { hasAccess } from '../../Adm/components/admTypes';
-import { ProgramacaoEquipamento } from './Components/logisticTypes';
-import { useNetwork } from '../../../contexts/NetworkContext';
-import database from '@react-native-firebase/database';
 import ActionButton from '../../../assets/components/ActionButton';
+import { LowStockAlert } from './Components/LowStockAlert';
+import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
 
 const { width } = Dimensions.get('window');
 
@@ -33,9 +30,12 @@ interface LavagemStats {
     total: number;
 }
 
-export default function LogisticaScreen({ navigation }: any) {
-    const { userInfo } = useUser();
-    const { isOnline } = useNetwork();
+export default function LavagemScreen({ navigation }: any) {
+    const {
+        produtos,
+        forceSync,
+        marcarAgendamentoComoConcluido
+    } = useBackgroundSync();
 
     const [stats, setStats] = useState<LavagemStats>({
         hoje: 0,
@@ -46,6 +46,7 @@ export default function LogisticaScreen({ navigation }: any) {
 
     const [lavagensRecentes, setLavagensRecentes] = useState<any[]>([]);
     const [lavagensAgendadas, setLavagensAgendadas] = useState<any[]>([]);
+
     const [agendamentosPendentes, setAgendamentosPendentes] = useState(0);
 
     // Primeiro, vamos criar funções auxiliares para datas
@@ -71,41 +72,9 @@ export default function LogisticaScreen({ navigation }: any) {
         return date;
     };
 
-    // Função atualizada para buscar agendamentos sem responsável
-    const fetchAgendamentosPendentes = async () => {
-        try {
-            if (!isOnline) {
-                console.log('Usuário offline, não é possível buscar agendamentos');
-                return;
-            }
-
-            // Agora usamos o database do Firebase Realtime (não o Firestore)
-            const snapshot = await database()
-                .ref('programacoes')
-                .once('value');
-
-            const data = snapshot.val();
-
-            if (!data) {
-                setAgendamentosPendentes(0);
-                return;
-            }
-
-            // Converter os dados em um array e filtrar apenas os que não têm responsável de operação
-            const programacoesArray: ProgramacaoEquipamento[] = Object.entries(data)
-                .map(([key, value]: [string, any]) => ({
-                    firebaseKey: key,
-                    ...value
-                }));
-
-            // Filtra apenas programações sem responsável de operação
-            const semResponsavel = programacoesArray.filter(prog => !prog.responsavelOperacao);
-
-            setAgendamentosPendentes(semResponsavel.length);
-        } catch (error) {
-            console.error('Erro ao buscar agendamentos pendentes:', error);
-            setAgendamentosPendentes(0);
-        }
+    // Função para formatar a data no formato do Firestore
+    const formatFirestoreDate = (date: Date) => {
+        return date.toLocaleDateString('pt-BR');
     };
 
     const fetchLavagemStats = async () => {
@@ -171,6 +140,10 @@ export default function LogisticaScreen({ navigation }: any) {
                         statsMes++;
                     }
 
+                    // Para debug - identificar o tipo de registro (antigo ou novo)
+                    // const tipoRegistro = dados.createdBy ? 'novo' : 'antigo';
+                    // console.log(`Processado registro ${tipoRegistro} - Data: ${dataLavagem.toLocaleDateString()} - ID: ${doc.id}`);
+
                 } catch (error) {
                     console.warn('Erro ao processar data do documento:', doc.id, error);
                 }
@@ -180,6 +153,19 @@ export default function LogisticaScreen({ navigation }: any) {
             snapshot.docs.forEach(processarDocumento);
 
             const total = snapshot.size;
+
+            // Para debug
+            // console.log('Estatísticas de Lavagem:', {
+            //     hoje: statsHoje,
+            //     semana: statsSemana,
+            //     mes: statsMes,
+            //     total,
+            //     dataReferencia: {
+            //         hoje: hoje.toLocaleDateString(),
+            //         inicioSemana: inicioSemana.toLocaleDateString(),
+            //         inicioMes: inicioMes.toLocaleDateString()
+            //     }
+            // });
 
             return {
                 hoje: statsHoje,
@@ -198,27 +184,16 @@ export default function LogisticaScreen({ navigation }: any) {
         }
     };
 
-    // Funções específicas de verificação de acesso
-    const canAccessNovaProgramacao = () => {
-        if (!userInfo) return false;
-        return hasAccess(userInfo, 'logistica', 1);
-    };
+    const fetchAgendamentosPendentes = async () => {
+        try {
+            const snapshot = await firestore()
+                .collection('agendamentos')
+                .where('concluido', '==', false)
+                .get();
 
-    const canAccessAgendamentos = () => {
-        if (!userInfo) return false;
-        // Permite acesso se tiver nível 1 em logística OU nível 1 em operação
-        return hasAccess(userInfo, 'logistica', 1) || hasAccess(userInfo, 'operacao', 1);
-    };
-
-    // Função que retorna a mensagem apropriada de requisito de acesso
-    const getAccessRequiredMessage = (accessType: 'novaProgramacao' | 'agendamentos') => {
-        switch (accessType) {
-            case 'novaProgramacao':
-                return 'Requer acesso à Logística nível 1';
-            case 'agendamentos':
-                return 'Requer acesso à Logística ou Operação nível 1';
-            default:
-                return 'Acesso não permitido';
+            setAgendamentosPendentes(snapshot.size);
+        } catch (error) {
+            console.error('Erro ao buscar agendamentos pendentes:', error);
         }
     };
 
@@ -254,81 +229,12 @@ export default function LogisticaScreen({ navigation }: any) {
         return unsubscribe;
     }, [navigation]);
 
-    // Adicione isso ao useEffect existente
-    useEffect(() => {
-        fetchAgendamentosPendentes();
-
-        // Atualiza quando a tela receber foco
-        const unsubscribe = navigation.addListener('focus', () => {
-            fetchAgendamentosPendentes();
-        });
-
-        return unsubscribe;
-    }, [navigation, isOnline]);
-
-    const renderActionButton = (
-        icon: string,
-        text: string,
-        onPress: () => void,
-        accessType?: 'novaProgramacao' | 'agendamentos', // Tornar opcional
-        badge?: number
-    ) => {
-        // Se accessType não for fornecido, o botão estará desbloqueado para todos
-        const isBlocked = accessType ? (
-            accessType === 'novaProgramacao'
-                ? !canAccessNovaProgramacao()
-                : !canAccessAgendamentos()
-        ) : false; // Sem restrição de acesso quando accessType não é fornecido
-
-        return (
-            <TouchableOpacity
-                style={[
-                    styles.actionButton,
-                    isBlocked && styles.actionButtonDisabled
-                ]}
-                onPress={isBlocked ? undefined : onPress}
-                disabled={isBlocked}
-            >
-                <View style={styles.actionIconContainer}>
-                    <View style={[
-                        styles.actionIcon,
-                        { backgroundColor: isBlocked ? customTheme.colors.surfaceDisabled : customTheme.colors.primaryContainer }
-                    ]}>
-                        {isBlocked ? (
-                            <MaterialCommunityIcons name="lock" size={24} color={customTheme.colors.onSurfaceDisabled} />
-                        ) : (
-                            <MaterialCommunityIcons name={icon} size={24} color={customTheme.colors.primary} />
-                        )}
-                    </View>
-                    {!isBlocked && badge !== undefined && badge > 0 && (
-                        <View style={styles.badgeContainer}>
-                            <Text style={styles.badgeText}>
-                                {badge > 99 ? '99+' : badge}
-                            </Text>
-                        </View>
-                    )}
-                </View>
-                <Text style={[
-                    styles.actionText,
-                    isBlocked && styles.actionTextDisabled
-                ]}>
-                    {text}
-                </Text>
-                {isBlocked && accessType && (
-                    <Text style={styles.accessRequiredText}>
-                        {getAccessRequiredMessage(accessType)}
-                    </Text>
-                )}
-            </TouchableOpacity>
-        );
-    };
-
     return (
         <Surface style={styles.container}>
 
             {/* Header */}
             <ModernHeader
-                title="Logistica"
+                title="Gestão de Lavagens"
                 iconName="car-wash"
                 onBackPress={() => navigation.goBack()}
             />
@@ -339,11 +245,11 @@ export default function LogisticaScreen({ navigation }: any) {
             >
 
                 {/* Cards de Estatísticas */}
-                {/* <View style={styles.statsGrid}>
+                <View style={styles.statsGrid}>
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <MaterialCommunityIcons name="calendar-today" size={24} color={customTheme.colors.primary} />
+                                <Icon name="calendar-today" size={24} color={customTheme.colors.primary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.hoje}</Text>
                             <Text style={styles.statsLabel}>Hoje</Text>
@@ -353,7 +259,7 @@ export default function LogisticaScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <MaterialCommunityIcons name="calendar-range" size={24} color={customTheme.colors.secondary} />
+                                <Icon name="calendar-week" size={24} color={customTheme.colors.secondary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.semana}</Text>
                             <Text style={styles.statsLabel}>Esta Semana</Text>
@@ -363,46 +269,70 @@ export default function LogisticaScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <MaterialCommunityIcons name="calendar-month" size={24} color={customTheme.colors.tertiary} />
+                                <Icon name="calendar-month" size={24} color={customTheme.colors.tertiary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.mes}</Text>
                             <Text style={styles.statsLabel}>Este Mês</Text>
                         </Card.Content>
                     </Card>
-                </View> */}
 
-                {/* Ações com verificação de acesso */}
+                </View>
+
+                {/* Alerta de Baixo estoque */}
+                <LowStockAlert produtos={produtos} />
+
+                {/* Ações */}
                 <View style={styles.actionsContainer}>
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
 
-                        {/* <ActionButton
-                            icon="calendar-plus"
-                            text="Agendar Operação"
-                            onPress={() => navigation.navigate('LogisticaProgram')}
-                        /> */}
-
-                        {/* <ActionButton
-                            icon="clock-outline"
-                            text="Operações Pendentes"
-                            onPress={() => navigation.navigate('OperacaoProgram')}
-                            badge={agendamentosPendentes}
-                        /> */}
-
-                        {/* <ActionButton
-                            icon="file-document-multiple"
-                            text="Histórico de Operações"
-                            onPress={() => navigation.navigate('LogisticaHist')}
-                        /> */}
+                        <ActionButton
+                            icon="plus"
+                            text="Nova Lavagem"
+                            onPress={() => navigation.navigate('LavagemForm')}
+                        />
 
                         <ActionButton
-                            icon="archive-search"
-                            text="Histórico de RDO"
-                            onPress={() => navigation.navigate('RdoHist')}
+                            icon="calendar-blank-outline"
+                            text="Agendamentos"
+                            onPress={() => navigation.navigate('LavagemAgend')}
+                        />
+
+                        <ActionButton
+                            icon="package-variant"
+                            text="Produtos"
+                            onPress={() => navigation.navigate('LavagemEstoq')}
+                        />
+
+                        <ActionButton
+                            icon="history"
+                            text="Histórico"
+                            onPress={() => navigation.navigate('LavagemHist')}
+                        />
+
+                        <ActionButton
+                            icon="file-chart"
+                            text="Gerar Relatório"
+                            onPress={() => navigation.navigate('LavagemRelat')}
                         />
 
                     </View>
                 </View>
+
+                {/* Próximas Lavagens Agendadas */}
+                {lavagensAgendadas.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Próximas Lavagens</Text>
+                        {lavagensAgendadas.map((lavagem, index) => (
+                            <Card key={index} style={styles.agendamentoCard}>
+                                <Card.Content>
+                                    <></>
+                                    {/* Implementar card de agendamento */}
+                                </Card.Content>
+                            </Card>
+                        ))}
+                    </View>
+                )}
 
                 {/* Lavagens Recentes */}
                 {lavagensRecentes.length > 0 && (
@@ -424,6 +354,12 @@ export default function LogisticaScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+    actionsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+        alignItems: 'stretch', // Garante que todos os itens se esticam para mesma altura
+    },
     container: {
         flex: 1,
         backgroundColor: customTheme.colors.background,
@@ -436,67 +372,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginBottom: 24,
-    },
-    actionButton: {
-        width: (width - 48) / 2,
-        height: 120,
-        padding: 16,
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 12,
-        elevation: 2,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    actionButtonDisabled: {
-        opacity: 0.7,
-        backgroundColor: customTheme.colors.surfaceDisabled,
-    },
-    actionIconContainer: {
-        position: 'relative',
-        marginBottom: 8,
-        flex: 0,
-    },
-    actionIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    actionText: {
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
-        fontWeight: '500',
-        textAlign: 'center',
-    },
-    actionTextDisabled: {
-        color: customTheme.colors.onSurfaceDisabled,
-    },
-    accessRequiredText: {
-        fontSize: 10,
-        color: customTheme.colors.error,
-        textAlign: 'center',
-        marginTop: 4,
-    },
-    badgeContainer: {
-        position: 'absolute',
-        top: -8,
-        right: -8,
-        borderRadius: 10,
-        backgroundColor: customTheme.colors.error,
-        padding: 4,
-        borderWidth: 1.5,
-        borderColor: customTheme.colors.surface,
-    },
-    badgeText: {
-        color: customTheme.colors.onError,
-        fontWeight: 'bold',
-    },
-    actionsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-        alignItems: 'stretch', // Garante que todos os itens se esticam para mesma altura
     },
     statsCard: {
         width: (width - 48) / 3,
@@ -532,6 +407,11 @@ const styles = StyleSheet.create({
     },
     section: {
         marginBottom: 24,
+    },
+    agendamentoCard: {
+        marginBottom: 12,
+        borderRadius: 12,
+        elevation: 2,
     },
     lavagemCard: {
         marginBottom: 12,

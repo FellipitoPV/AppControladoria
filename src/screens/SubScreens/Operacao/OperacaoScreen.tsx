@@ -13,33 +13,38 @@ import {
     Button,
     ProgressBar,
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import firestore from '@react-native-firebase/firestore';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import ActionButton from '../../../assets/components/ActionButton';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
-interface LavagemStats {
+interface RelatoriosStats {
     hoje: number;
     semana: number;
     mes: number;
     total: number;
 }
 
-export default function LavagemScreen({ navigation }: any) {
-    const [stats, setStats] = useState<LavagemStats>({
+// TODO Fazer funcionar o modo de salvar offline
+export default function OperacaoScreen({ navigation }: any) {
+    const [stats, setStats] = useState<RelatoriosStats>({
         hoje: 0,
         semana: 0,
         mes: 0,
         total: 0
     });
 
+
     const [lavagensRecentes, setLavagensRecentes] = useState<any[]>([]);
     const [lavagensAgendadas, setLavagensAgendadas] = useState<any[]>([]);
 
     const [agendamentosPendentes, setAgendamentosPendentes] = useState(0);
+    const [hasDraft, setHasDraft] = useState(false);
 
     // Primeiro, vamos criar funções auxiliares para datas
     const getStartOfDay = () => {
@@ -64,23 +69,18 @@ export default function LavagemScreen({ navigation }: any) {
         return date;
     };
 
-    // Função para formatar a data no formato do Firestore
-    const formatFirestoreDate = (date: Date) => {
-        return date.toLocaleDateString('pt-BR');
-    };
-
-    const fetchLavagemStats = async () => {
+    const fetchRelatoriosStats = async () => {
         try {
-            // Datas de referência como timestamps
+            // Datas de referência
             const hoje = new Date();
             hoje.setHours(0, 0, 0, 0);
 
             const inicioSemana = getStartOfWeek();
             const inicioMes = getStartOfMonth();
 
-            // Buscar todos os registros da coleção registroLavagens
+            // Buscar todos os registros da coleção relatoriosRDO
             const snapshot = await firestore()
-                .collection('registroLavagens')
+                .collection('relatoriosRDO')
                 .get();
 
             let statsHoje = 0;
@@ -97,21 +97,21 @@ export default function LavagemScreen({ navigation }: any) {
                     return;
                 }
 
-                let dataLavagem: Date;
+                let dataRelatorio: Date;
 
                 try {
                     // Tenta primeiro parsear como string DD/MM/YYYY
                     if (typeof dados.data === 'string' && dados.data.includes('/')) {
                         const [dia, mes, ano] = dados.data.split('/');
-                        dataLavagem = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+                        dataRelatorio = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
                     }
                     // Se for um timestamp do Firestore
                     else if (dados.data && dados.data.toDate) {
-                        dataLavagem = dados.data.toDate();
+                        dataRelatorio = dados.data.toDate();
                     }
                     // Se for uma data JavaScript
                     else if (dados.data instanceof Date) {
-                        dataLavagem = dados.data;
+                        dataRelatorio = dados.data;
                     }
                     else {
                         console.warn('Formato de data não reconhecido:', dados.data);
@@ -119,23 +119,18 @@ export default function LavagemScreen({ navigation }: any) {
                     }
 
                     // Normaliza a hora para meia-noite
-                    dataLavagem.setHours(0, 0, 0, 0);
+                    dataRelatorio.setHours(0, 0, 0, 0);
 
                     // Comparar usando timestamps
-                    if (dataLavagem.getTime() === hoje.getTime()) {
+                    if (dataRelatorio.getTime() === hoje.getTime()) {
                         statsHoje++;
                     }
-                    if (dataLavagem >= inicioSemana) {
+                    if (dataRelatorio >= inicioSemana) {
                         statsSemana++;
                     }
-                    if (dataLavagem >= inicioMes) {
+                    if (dataRelatorio >= inicioMes) {
                         statsMes++;
                     }
-
-                    // Para debug - identificar o tipo de registro (antigo ou novo)
-                    // const tipoRegistro = dados.createdBy ? 'novo' : 'antigo';
-                    // console.log(`Processado registro ${tipoRegistro} - Data: ${dataLavagem.toLocaleDateString()} - ID: ${doc.id}`);
-
                 } catch (error) {
                     console.warn('Erro ao processar data do documento:', doc.id, error);
                 }
@@ -146,19 +141,6 @@ export default function LavagemScreen({ navigation }: any) {
 
             const total = snapshot.size;
 
-            // Para debug
-            // console.log('Estatísticas de Lavagem:', {
-            //     hoje: statsHoje,
-            //     semana: statsSemana,
-            //     mes: statsMes,
-            //     total,
-            //     dataReferencia: {
-            //         hoje: hoje.toLocaleDateString(),
-            //         inicioSemana: inicioSemana.toLocaleDateString(),
-            //         inicioMes: inicioMes.toLocaleDateString()
-            //     }
-            // });
-
             return {
                 hoje: statsHoje,
                 semana: statsSemana,
@@ -166,7 +148,7 @@ export default function LavagemScreen({ navigation }: any) {
                 total
             };
         } catch (error) {
-            console.error('Erro ao buscar estatísticas:', error);
+            console.error('Erro ao buscar estatísticas de relatórios:', error);
             return {
                 hoje: 0,
                 semana: 0,
@@ -176,25 +158,27 @@ export default function LavagemScreen({ navigation }: any) {
         }
     };
 
-    const fetchAgendamentosPendentes = async () => {
+    const checkForDraft = async () => {
         try {
-            const snapshot = await firestore()
-                .collection('agendamentos')
-                .where('concluido', '==', false)
-                .get();
-
-            setAgendamentosPendentes(snapshot.size);
+            const draftJson = await AsyncStorage.getItem('rdoDraft');
+            setHasDraft(!!draftJson); // Converte para boolean
         } catch (error) {
-            console.error('Erro ao buscar agendamentos pendentes:', error);
+            console.error("Erro ao verificar rascunhos:", error);
+            setHasDraft(false);
         }
     };
 
     useEffect(() => {
-        fetchAgendamentosPendentes();
+        const loadStats = async () => {
+            const novasStats = await fetchRelatoriosStats();
+            setStats(novasStats);
+        };
 
-        // Atualiza quando a tela receber foco
+        loadStats();
+
+        // Atualizar stats quando o app voltar do background
         const unsubscribe = navigation.addListener('focus', () => {
-            fetchAgendamentosPendentes();
+            loadStats();
         });
 
         return unsubscribe;
@@ -206,16 +190,10 @@ export default function LavagemScreen({ navigation }: any) {
     }, []);
 
     useEffect(() => {
-        const loadStats = async () => {
-            const novasStats = await fetchLavagemStats();
-            setStats(novasStats);
-        };
+        checkForDraft();
 
-        loadStats();
-
-        // Opcional: Atualizar stats quando o app voltar do background
         const unsubscribe = navigation.addListener('focus', () => {
-            loadStats();
+            checkForDraft();
         });
 
         return unsubscribe;
@@ -226,8 +204,8 @@ export default function LavagemScreen({ navigation }: any) {
 
             {/* Header */}
             <ModernHeader
-                title="Gestão de Lavagens"
-                iconName="car-wash"
+                title="Operacional"
+                iconName="clipboard-list"
                 onBackPress={() => navigation.goBack()}
             />
 
@@ -241,7 +219,7 @@ export default function LavagemScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="calendar-today" size={24} color={customTheme.colors.primary} />
+                                <Icon name="today" size={24} color={customTheme.colors.primary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.hoje}</Text>
                             <Text style={styles.statsLabel}>Hoje</Text>
@@ -251,7 +229,7 @@ export default function LavagemScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="calendar-week" size={24} color={customTheme.colors.secondary} />
+                                <Icon name="date-range" size={24} color={customTheme.colors.secondary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.semana}</Text>
                             <Text style={styles.statsLabel}>Esta Semana</Text>
@@ -267,44 +245,32 @@ export default function LavagemScreen({ navigation }: any) {
                             <Text style={styles.statsLabel}>Este Mês</Text>
                         </Card.Content>
                     </Card>
-
                 </View>
 
                 {/* Ações */}
                 <View style={styles.actionsContainer}>
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
-
                         <ActionButton
-                            icon="plus"
-                            text="Nova Lavagem"
-                            onPress={() => navigation.navigate('LavagemForm')}
+                            icon="file-document-edit"
+                            text="Relatório Diário"
+                            onPress={() => navigation.navigate('RdoForm')}
+                            noticeText={hasDraft ? "Rascunho disponível..." : undefined}
+                            noticeColor={customTheme.colors.primary}
                         />
 
-                        <ActionButton
-                            icon="calendar-blank-outline"
-                            text="Agendamentos"
-                            onPress={() => navigation.navigate('LavagemAgend')}
-                        />
+                        {/* <ActionButton
+                            icon="clock-outline"
+                            text="Operações Pendentes"
+                            onPress={() => navigation.navigate('OperacaoProgram')}
+                            badge={agendamentosPendentes}
+                        /> */}
 
                         <ActionButton
-                            icon="package-variant"
-                            text="Produtos"
-                            onPress={() => navigation.navigate('LavagemEstoq')}
+                            icon="archive-search"
+                            text="Histórico de RDO"
+                            onPress={() => navigation.navigate('RdoHist')}
                         />
-
-                        <ActionButton
-                            icon="history"
-                            text="Histórico"
-                            onPress={() => navigation.navigate('LavagemHist')}
-                        />
-
-                        <ActionButton
-                            icon="file-chart"
-                            text="Gerar Relatório"
-                            onPress={() => navigation.navigate('LavagemRelat')}
-                        />
-
                     </View>
                 </View>
 
@@ -346,8 +312,8 @@ const styles = StyleSheet.create({
     actionsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
+        justifyContent: 'space-between',
         gap: 12,
-        alignItems: 'stretch', // Garante que todos os itens se esticam para mesma altura
     },
     container: {
         flex: 1,

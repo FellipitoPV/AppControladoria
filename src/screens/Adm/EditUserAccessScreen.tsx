@@ -14,8 +14,10 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 import { customTheme } from '../../theme/theme';
-import { AcessoInterface, AcessosType, User, UserAccess } from './components/admTypes';
+import { AcessoInterface, AcessosType, User, UserAccess } from './types/admTypes';
 import ModernHeader from '../../assets/components/ModernHeader';
+import { EnhancedSearchContainer, ModernSearchBar } from './components/ModernSearchBar';
+import ConfirmationModal from '../../assets/components/ConfirmationModal';
 
 interface AccessItemProps {
     item: AcessoInterface;
@@ -35,23 +37,16 @@ const AccessItem: React.FC<AccessItemProps> = ({ item, selectedLevel, onLevelSel
             <View style={styles.accessItemHeader}>
                 <View style={styles.accessItemContent}>
                     <View style={styles.iconContainer}>
-                        <Icon
-                            name={item.icon}
-                            size={20}
-                            color={selectedLevel ? customTheme.colors.primary : '#666'}
-                        />
+                        <Icon name={item.icon} size={18} color={selectedLevel ? customTheme.colors.primary : '#666'} />
                     </View>
                     <View style={styles.accessItemText}>
                         <Text style={styles.accessItemLabel}>{item.label}</Text>
-                        <Text style={styles.accessItemDescription}>{item.description}</Text>
+                        <Text numberOfLines={1} style={styles.accessItemDescription}>{item.description}</Text>
                     </View>
                 </View>
                 {selectedLevel !== null && (
-                    <TouchableOpacity
-                        onPress={() => onLevelSelect(item.id, null)}
-                        style={styles.removeButton}
-                    >
-                        <Icon name="close-circle" size={25} color={customTheme.colors.error} />
+                    <TouchableOpacity onPress={() => onLevelSelect(item.id, null)} style={styles.removeButton}>
+                        <Icon name="close-circle" size={22} color={customTheme.colors.error} />
                     </TouchableOpacity>
                 )}
             </View>
@@ -60,16 +55,10 @@ const AccessItem: React.FC<AccessItemProps> = ({ item, selectedLevel, onLevelSel
                 {levels.map((levelOption) => (
                     <TouchableOpacity
                         key={levelOption.level}
-                        style={[
-                            styles.levelButton,
-                            selectedLevel === levelOption.level && styles.levelButtonSelected
-                        ]}
+                        style={[styles.levelButton, selectedLevel === levelOption.level && styles.levelButtonSelected]}
                         onPress={() => onLevelSelect(item.id, levelOption.level)}
                     >
-                        <Text style={[
-                            styles.levelButtonText,
-                            selectedLevel === levelOption.level && styles.levelButtonTextSelected
-                        ]}>
+                        <Text style={[styles.levelButtonText, selectedLevel === levelOption.level && styles.levelButtonTextSelected]}>
                             {levelOption.label}
                         </Text>
                     </TouchableOpacity>
@@ -114,6 +103,7 @@ export default function EditUserAccessScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [selectedAccess, setSelectedAccess] = useState<UserAccess[]>([]);
+
     const [confirmDialogVisible, setConfirmDialogVisible] = useState(false);
 
     useEffect(() => {
@@ -208,8 +198,12 @@ export default function EditUserAccessScreen() {
         });
     };
 
+    const handleSaveAccess = () => {
+        setConfirmDialogVisible(true); // Abrir modal antes de salvar
+    };
+
     // Atualizar handleSaveAccess
-    const handleSaveAccess = async () => {
+    const saveAccess = async () => {
         if (!selectedUser?.id) return;
 
         setLoading(true);
@@ -260,6 +254,13 @@ export default function EditUserAccessScreen() {
             userCargoNormalized.includes(searchTermNormalized);
     });
 
+    // Função auxiliar para extrair primeiro e último nome
+    const getShortName = (fullName: string) => {
+        const parts = fullName.trim().split(' ');
+        if (parts.length === 1) return parts[0];
+        return `${parts[0]} ${parts[parts.length - 1]}`;
+    };
+
     return (
         <View style={styles.container}>
             {!selectedUser ? (
@@ -272,15 +273,11 @@ export default function EditUserAccessScreen() {
                         onBackPress={() => navigation?.goBack()}
                     />
 
-                    <View style={styles.searchContainer}>
-                        <TextInput
-                            placeholder="Buscar usuário..."
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            left={<TextInput.Icon icon="account-search" />}
-                            style={styles.searchInput}
-                        />
-                    </View>
+                    <EnhancedSearchContainer
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        resultCount={filteredUsers.length}
+                    />
 
                     <ScrollView style={styles.userList}>
                         {filteredUsers.map((user) => (
@@ -296,7 +293,7 @@ export default function EditUserAccessScreen() {
                 // Tela de edição de acessos
                 <>
                     <ModernHeader
-                        title={selectedUser.user}
+                        title={getShortName(selectedUser.user)}
                         iconName="account-edit"
                         rightIcon='content-save'
                         rightAction={handleSaveAccess}
@@ -317,44 +314,48 @@ export default function EditUserAccessScreen() {
             )}
 
             {/* Dialog de Confirmação */}
-            <Portal>
-                <Dialog
-                    visible={confirmDialogVisible}
-                    onDismiss={() => setConfirmDialogVisible(false)}
-                    style={styles.dialog}
-                >
-                    <Dialog.Title>Confirmar Alterações</Dialog.Title>
-                    <Dialog.Content>
-                        <Text style={styles.dialogText}>
-                            Tem certeza que deseja salvar as alterações nos acessos de {selectedUser?.user}?
-                        </Text>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <TouchableOpacity
-                            onPress={() => setConfirmDialogVisible(false)}
-                            style={styles.dialogCancelButton}
-                        >
-                            <Text style={styles.dialogCancelText}>Cancelar</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={handleSaveAccess}
-                            style={styles.dialogConfirmButton}
-                            disabled={loading}
-                        >
-                            {loading ? (
-                                <ActivityIndicator color="white" size="small" />
-                            ) : (
-                                <Text style={styles.dialogConfirmText}>Confirmar</Text>
-                            )}
-                        </TouchableOpacity>
-                    </Dialog.Actions>
-                </Dialog>
-            </Portal>
+            <ConfirmationModal
+                visible={confirmDialogVisible}
+                title="Confirmar Alterações"
+                message={`Tem certeza que deseja salvar as alterações nos acessos de ${selectedUser?.user}?`}
+                onCancel={() => setConfirmDialogVisible(false)}
+                onConfirm={saveAccess}
+                loading={loading}
+                confirmText="Salvar"
+                iconName="content-save"
+                colorScheme="primary" // Novo parâmetro para definir o esquema de cores
+            />
+
         </View>
     );
 }
 
 const styles = StyleSheet.create({
+    accessItem: {
+        padding: 12, // Reduzido de 16
+        backgroundColor: 'white',
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
+        marginBottom: 8, // Reduzido de 12
+    },
+    iconContainer: {
+        width: 36, // Reduzido de 42
+        height: 36, // Reduzido de 42
+        borderRadius: 18,
+        backgroundColor: `${customTheme.colors.primary}15`,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    levelSelector: {
+        flexDirection: 'row',
+        gap: 6, // Reduzido de 8
+        marginTop: 6, // Reduzido de 8
+    },
+    accessList: {
+        padding: 16, // Reduzido de 20
+        gap: 8, // Reduzido de 12
+    },
     accessItemHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -383,23 +384,10 @@ const styles = StyleSheet.create({
     levelButtonTextSelected: {
         color: 'white',
     },
-    accessItem: {
-        padding: 16,
-        backgroundColor: 'white',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#e5e5e5',
-        marginBottom: 12,
-    },
     accessItemContent: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-    },
-    levelSelector: {
-        flexDirection: 'row',
-        gap: 8,
-        marginTop: 8,
     },
     accessItemDescription: {
         fontSize: 12,
@@ -409,13 +397,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#ffffff',
-    },
-    searchContainer: {
-        padding: 20,
-        backgroundColor: `${customTheme.colors.primary}10`,
-    },
-    searchInput: {
-        backgroundColor: 'white',
     },
     userList: {
         flex: 1,
@@ -465,18 +446,6 @@ const styles = StyleSheet.create({
         color: customTheme.colors.primary,
         marginTop: 4,
     },
-    accessList: {
-        padding: 20,
-        gap: 12,
-    },
-    iconContainer: {
-        width: 42,
-        height: 42,
-        borderRadius: 24,
-        backgroundColor: `${customTheme.colors.primary}15`,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
     accessItemText: {
         flex: 1,
     },
@@ -484,35 +453,5 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '500',
         color: '#333',
-    },
-    dialog: {
-        backgroundColor: 'white',
-        borderRadius: 12,
-        padding: 8,
-    },
-    dialogText: {
-        fontSize: 16,
-        color: '#666',
-    },
-    dialogCancelButton: {
-        padding: 8,
-        minWidth: 80,
-        alignItems: 'center',
-    },
-    dialogConfirmButton: {
-        padding: 8,
-        minWidth: 80,
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.primary,
-        borderRadius: 8,
-        marginLeft: 8,
-    },
-    dialogCancelText: {
-        color: customTheme.colors.error,
-        fontWeight: '500',
-    },
-    dialogConfirmText: {
-        color: 'white',
-        fontWeight: '500',
     },
 })

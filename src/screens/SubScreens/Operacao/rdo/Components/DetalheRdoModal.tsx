@@ -16,7 +16,7 @@ import { customTheme } from '../../../../../theme/theme';
 import { FormDataInterface, MATERIAIS, CONDICOES_TEMPO, DIAS_SEMANA, Photo } from '../Types/rdoTypes';
 import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
 import FullScreenImage from '../../../../../assets/components/FullScreenImage';
-import { hasAccess } from '../../../../Adm/components/admTypes';
+import { hasAccess } from '../../../../Adm/types/admTypes';
 import { useUser } from '../../../../../contexts/userContext';
 import { showGlobalToast, verificarConectividadeAPI } from '../../../../../helpers/GlobalApi';
 import RNFS from 'react-native-fs';

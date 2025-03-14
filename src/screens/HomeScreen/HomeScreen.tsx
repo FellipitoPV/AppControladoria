@@ -481,7 +481,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                                     <Icon
                                         name="account"
                                         size={30}
-                                        color={customTheme.colors.primary}
+                                        color={customTheme.colors.onPrimary}
                                     />
                                 )}
                             </TouchableOpacity>
@@ -505,6 +505,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                     </View>
                 </View>
 
+                {/* TODO descobrir o porque não está identificando a atualização */}
                 {/* Componente de Notificação de Atualização */}
                 {updateInfo && !updateDismissed && (
                     <UpdateNotification
@@ -752,7 +753,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: customTheme.colors.primaryContainer,
+        backgroundColor: customTheme.colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
         overflow: 'hidden', // Importante para garantir que a imagem respeite o borderRadius
