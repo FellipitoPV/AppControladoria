@@ -181,6 +181,44 @@ export const AcessosType: AcessoInterface[] = [
                 ]
             }
         ]
+    },
+    {
+        id: 'controladoria',
+        label: 'Controladoria',
+        icon: 'file-document-outline',
+        description: 'Sistema de gestão de relatórios documentais',
+        levels: [
+            {
+                level: 1,
+                title: "Operador Básico",
+                description: "Acesso básico ao sistema de controladoria",
+                capabilities: [
+                    "Visualizar histórico de RDO",
+                    "Exportar relatório em PDF"
+                ]
+            },
+            {
+                level: 2,
+                title: "Operador Avançado",
+                description: "Acesso intermediário ao sistema de controladoria",
+                capabilities: [
+                    "Visualizar histórico de RDO",
+                    "Exportar relatório em PDF",
+                    "Editar relatórios anteriores"
+                ]
+            },
+            {
+                level: 3,
+                title: "Administrador",
+                description: "Acesso total ao sistema de controladoria",
+                capabilities: [
+                    "Visualizar histórico de RDO",
+                    "Exportar relatório em PDF",
+                    "Editar relatórios anteriores",
+                    "Gerenciar configurações de relatórios"
+                ]
+            }
+        ]
     }
 ];
 

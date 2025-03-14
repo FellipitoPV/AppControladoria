@@ -225,6 +225,7 @@ export const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProp
                                     placeholderStyle={styles.placeholderStyle}
                                     selectedTextStyle={styles.selectedTextStyle}
                                     data={filteredProfessionals}
+                                    dropdownPosition='top'
                                     labelField="label"
                                     valueField="value"
                                     placeholder="Selecione o profissional"

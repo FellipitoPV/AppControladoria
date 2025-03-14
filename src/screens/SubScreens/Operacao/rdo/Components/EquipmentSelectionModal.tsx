@@ -223,6 +223,7 @@ export const EquipmentSelectionModal: React.FC<EquipmentSelectionModalProps> = (
                                     placeholderStyle={styles.placeholderStyle}
                                     selectedTextStyle={styles.selectedTextStyle}
                                     data={filteredEquipments}
+                                    dropdownPosition='top'
                                     labelField="label"
                                     valueField="value"
                                     placeholder="Selecione o equipamento"

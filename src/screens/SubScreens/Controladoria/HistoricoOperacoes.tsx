@@ -17,7 +17,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useUser } from '../../../contexts/userContext';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { customTheme } from '../../../theme/theme';
-import { ProgramacaoEquipamento, Container } from './Components/logisticTypes';
+import { ProgramacaoEquipamento, Container } from './types/logisticTypes';
 
 const HistoricoOperacoes = ({ navigation }: { navigation: NavigationProp<any> }) => {
     const { userInfo } = useUser();

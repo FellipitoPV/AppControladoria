@@ -3,7 +3,7 @@ import React, { createContext, useState, useContext, useEffect, useRef } from 'r
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { IAgendamentoLavagem } from '../screens/Formularios/Lavagem/Components/lavagemTypes';
+import { IAgendamentoLavagem } from '../screens/SubScreens/Lavagem/Components/lavagemTypes';
 
 export type UnidadeMedida = 'unidade' | 'kilo' | 'litro';
 

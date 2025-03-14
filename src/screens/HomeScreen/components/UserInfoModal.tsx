@@ -4,7 +4,7 @@ import { Text, Surface } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import { useNavigation } from '@react-navigation/native';
-import { User } from '../../Adm/components/admTypes';
+import { User } from '../../Adm/types/admTypes';
 import { VersionInfo } from '../../../helpers/AppUpdater';
 
 interface ProfileMenuItem {
@@ -133,7 +133,7 @@ const UserProfileModal = ({ visible, onClose, userInfo, onLogout, updateInfo, on
                                     <MaterialCommunityIcons
                                         name="account"
                                         size={40}
-                                        color={customTheme.colors.primary}
+                                        color={customTheme.colors.onPrimary}
                                     />
                                 )}
                             </View>
@@ -168,7 +168,7 @@ const UserProfileModal = ({ visible, onClose, userInfo, onLogout, updateInfo, on
                                 <MaterialCommunityIcons
                                     name="music-note"
                                     size={24}
-                                    color={customTheme.colors.primary}
+                                    color={customTheme.colors.onPrimary}
                                 />
                             </TouchableOpacity>
                         )}
@@ -199,8 +199,7 @@ const styles = StyleSheet.create({
         right: 16,
         padding: 8,
         borderRadius: 20,
-        backgroundColor: customTheme.colors.primaryContainer,
-        opacity: 0.7,
+        backgroundColor: customTheme.colors.primary, 
     },
     modalBackground: {
         flex: 1,
@@ -238,7 +237,7 @@ const styles = StyleSheet.create({
         width: 100,
         height: 100,
         borderRadius: 50,
-        backgroundColor: customTheme.colors.primaryContainer,
+        backgroundColor: customTheme.colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,

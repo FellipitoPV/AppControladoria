@@ -19,7 +19,7 @@ import ModernHeader from '../../../assets/components/ModernHeader';
 import { useUser } from '../../../contexts/userContext';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { customTheme } from '../../../theme/theme';
-import { hasAccess } from '../../Adm/components/admTypes';
+import { hasAccess } from '../../Adm/types/admTypes';
 import ConfirmationModal from '../../../assets/components/ConfirmationModal';
 import DetalheLavagemModal from './Components/DetalheLavagemModal';
 import { format } from 'date-fns';

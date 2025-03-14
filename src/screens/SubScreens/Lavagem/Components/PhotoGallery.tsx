@@ -12,7 +12,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { customTheme } from '../../../../theme/theme';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
-import { Photo } from '../../Logistica/rdo/Types/rdoTypes';
+import { Photo } from '../../Controladoria/rdo/Types/rdoTypes';
 
 interface PhotoGalleryProps {
     photos: Array<Photo>;

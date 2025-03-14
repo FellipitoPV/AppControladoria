@@ -1,4 +1,4 @@
-import { UserAccess } from "../screens/Adm/components/admTypes";
+import { UserAccess } from "../screens/Adm/types/admTypes";
 
 export type Meeting = {
     id?: string;

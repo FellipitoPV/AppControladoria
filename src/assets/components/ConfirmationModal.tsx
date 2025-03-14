@@ -21,22 +21,36 @@ interface ConfirmationModalProps {
     loading?: boolean;
     confirmText?: string;
     iconName?: string;
+    colorScheme?: 'primary' | 'error'; // Novo parâmetro
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     visible,
-    title = 'Confirmar Exclusão',
-    message = 'Tem certeza que deseja excluir?',
+    title = 'Confirmar',
+    message = 'Tem certeza que deseja continuar?',
     itemToDelete,
     onCancel,
     onConfirm,
     loading = false,
-    confirmText = 'Excluir',
-    iconName = 'delete-alert'
+    confirmText = 'Confirmar',
+    iconName = 'help-circle',
+    colorScheme = 'error' // Default para manter compatibilidade
 }) => {
+
     // Animação de slide
     const screenHeight = Dimensions.get('screen').height;
     const slideAnim = useRef(new Animated.Value(screenHeight)).current;
+
+    // Cores baseadas no esquema selecionado
+    const getColors = () => {
+        return {
+            main: colorScheme === 'primary' ? customTheme.colors.primary : customTheme.colors.error,
+            container: colorScheme === 'primary' ? customTheme.colors.primaryContainer : customTheme.colors.errorContainer,
+            onContainer: colorScheme === 'primary' ? customTheme.colors.onPrimaryContainer : customTheme.colors.onErrorContainer
+        };
+    };
+
+    const colors = getColors();
 
     useEffect(() => {
         if (visible) {
@@ -96,7 +110,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                                 <Icon
                                     name={iconName}
                                     size={24}
-                                    color={customTheme.colors.error}
+                                    color={colors.main}
                                 />
                                 <Text variant="titleLarge">{title}</Text>
                             </View>
@@ -108,7 +122,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                                 <Icon
                                     name="close"
                                     size={24}
-                                    color={customTheme.colors.error}
+                                    color={colors.main}
                                 />
                             </TouchableOpacity>
                         </View>
@@ -132,9 +146,11 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                                 </View>
                             )}
 
-                            <Text style={styles.warningText}>
-                                Esta ação não pode ser desfeita.
-                            </Text>
+                            {colorScheme === 'error' && (
+                                <Text style={[styles.warningText, { color: colors.main }]}>
+                                    Esta ação não pode ser desfeita.
+                                </Text>
+                            )}
                         </View>
 
                         {/* Botões de Ação */}
@@ -150,8 +166,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                                 mode="contained"
                                 onPress={onConfirm}
                                 loading={loading}
-                                buttonColor={customTheme.colors.errorContainer}
-                                textColor={customTheme.colors.error}
+                                buttonColor={colors.container}
+                                textColor={colors.main}
                                 style={styles.actionButton}
                             >
                                 {confirmText}

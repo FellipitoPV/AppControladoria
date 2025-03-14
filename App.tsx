@@ -13,36 +13,37 @@ import { BackgroundSyncProvider } from './src/contexts/backgroundSyncContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Importar suas telas
-import FormularioOcorrencia from './src/screens/Formularios/ocorrencia/FormularioOcorrencia';
-import RelatorioOcorrenciaList from './src/screens/Formularios/ocorrencia/RelatoriosLista';
-import NovaLavagem from './src/screens/Formularios/Lavagem/LavagemForm';
-import LavagemScreen from './src/screens/Formularios/Lavagem/LavagemScreen';
+import FormularioOcorrencia from './src/screens/SubScreens/ocorrencia/FormularioOcorrencia';
+import RelatorioOcorrenciaList from './src/screens/SubScreens/ocorrencia/RelatoriosLista';
+import NovaLavagem from './src/screens/SubScreens/Lavagem/LavagemForm';
+import LavagemScreen from './src/screens/SubScreens/Lavagem/LavagemScreen';
 import ContatosScreen from './src/screens/Contatos/ContatosScreen';
-import AgendamentoLavagem from './src/screens/Formularios/Lavagem/AgendamentoLavagem';
-import HistoricoLavagem from './src/screens/Formularios/Lavagem/HistoricoLavagem';
-import ControleEstoque from './src/screens/Formularios/Lavagem/ControleEstoque';
-import CompostagemScreen from './src/screens/Formularios/Compostagem/CompostagemScreen';
-import CompostagemForm from './src/screens/Formularios/Compostagem/CompostagemForm';
-import CompostagemHistory from './src/screens/Formularios/Compostagem/CompostagemHistory';
-import LogisticaScreen from './src/screens/Formularios/Logistica/LogisticaScreen';
+import AgendamentoLavagem from './src/screens/SubScreens/Lavagem/AgendamentoLavagem';
+import HistoricoLavagem from './src/screens/SubScreens/Lavagem/HistoricoLavagem';
+import ControleEstoque from './src/screens/SubScreens/Lavagem/ControleEstoque';
+import CompostagemScreen from './src/screens/SubScreens/Compostagem/CompostagemScreen';
+import CompostagemForm from './src/screens/SubScreens/Compostagem/CompostagemForm';
+import CompostagemHistory from './src/screens/SubScreens/Compostagem/CompostagemHistory';
 import RegisterScreen from './src/screens/Login/RegisterScreen';
 import ProfileScreen from './src/screens/HomeScreen/components/ProfileScreen';
-import OperacaoScreen from './src/screens/Formularios/Operacao/OperacaoScreen';
-import ListaProgramacoes from './src/screens/Formularios/Logistica/ListaProgramacoes';
-import FormularioProgramacao from './src/screens/Formularios/Logistica/FormularioProgramacao/FormularioProgramacao';
-import RelatorioLavagens from './src/screens/Formularios/Lavagem/RelatorioLavagens';
+import OperacaoScreen from './src/screens/SubScreens/Operacao/OperacaoScreen';
+import ListaProgramacoes from './src/screens/SubScreens/Controladoria/ListaProgramacoes';
+import FormularioProgramacao from './src/screens/SubScreens/Controladoria/FormularioProgramacao/FormularioProgramacao';
+import RelatorioLavagens from './src/screens/SubScreens/Lavagem/RelatorioLavagens';
 import MyAccessScreen from './src/screens/HomeScreen/components/MyAccessScreen';
 import EditUserAccessScreen from './src/screens/Adm/EditUserAccessScreen';
-import HistoricoOperacoes from './src/screens/Formularios/Logistica/HistoricoOperacoes';
-import RelatorioCompostagem from './src/screens/Formularios/Compostagem/RelatorioCompostagem';
-import RdoForm from './src/screens/Formularios/Logistica/rdo/RdoForm';
-import HistoricoRdo from './src/screens/Formularios/Logistica/rdo/HistoricoRdo';
+import HistoricoOperacoes from './src/screens/SubScreens/Controladoria/HistoricoOperacoes';
+import RelatorioCompostagem from './src/screens/SubScreens/Compostagem/RelatorioCompostagem';
 import ForgotPasswordScreen from './src/screens/Login/ForgotPasswordScreen';
 import LoginScreen from './src/screens/Login/LoginScreen';
 
 // Importar funções de notificação
 import { setNotificationNavigationHandler, removeRepeatingNotification } from './src/helpers/notificationChannel';
 import ReuniaoComponent from './src/screens/Reuniao/MeetingsScreen';
+import HistoricoRdo from './src/screens/SubScreens/Operacao/rdo/HistoricoRdo';
+import RdoForm from './src/screens/SubScreens/Operacao/rdo/RdoForm';
+import ControladoriaScreen from './src/screens/SubScreens/Controladoria/ControladoriaScreen';
+import LogisticaScreen from './src/screens/SubScreens/Logistica/LogisticaScreen';
 
 // Defina os tipos das rotas para o seu navegador
 interface RootStackParamList {
@@ -323,12 +324,15 @@ export default function App() {
               <Stack.Screen name="LogisticaScreen" component={LogisticaScreen} options={{ headerShown: false }} />
               <Stack.Screen name="LogisticaProgram" component={FormularioProgramacao} options={{ headerShown: false }} />
               <Stack.Screen name="LogisticaHist" component={HistoricoOperacoes} options={{ headerShown: false }} />
-              <Stack.Screen name="RdoForm" component={RdoForm} options={{ headerShown: false }} />
-              <Stack.Screen name="RdoHist" component={HistoricoRdo} options={{ headerShown: false }} />
+
+              {/* Controladoria */}
+              <Stack.Screen name="ControladoriaScreen" component={ControladoriaScreen} options={{ headerShown: false }} />
 
               {/* Operacao */}
               <Stack.Screen name="OperacaoScreen" component={OperacaoScreen} options={{ headerShown: false }} />
               <Stack.Screen name="OperacaoProgram" component={ListaProgramacoes} options={{ headerShown: false }} />
+              <Stack.Screen name="RdoForm" component={RdoForm} options={{ headerShown: false }} />
+              <Stack.Screen name="RdoHist" component={HistoricoRdo} options={{ headerShown: false }} />
 
               {/* Contatos */}
               <Stack.Screen name="Contatos" component={ContatosScreen} options={{ headerShown: false }} />

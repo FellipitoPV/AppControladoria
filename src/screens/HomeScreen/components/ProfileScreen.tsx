@@ -37,6 +37,7 @@ const InfoItem: React.FC<InfoItemProps> = ({ icon, label, value, onEdit }) => {
                 />
                 <Text style={styles.infoLabel}>{label}</Text>
             </View>
+
             <View style={styles.infoContent}>
                 <Text style={styles.infoValue}>
                     {value || 'Não informado'}
@@ -49,7 +50,7 @@ const InfoItem: React.FC<InfoItemProps> = ({ icon, label, value, onEdit }) => {
                         <MaterialIcons
                             name="edit"
                             size={20}
-                            color={customTheme.colors.primary}
+                            color={customTheme.colors.onPrimary}
                         />
                     </TouchableOpacity>
                 )}
@@ -519,7 +520,7 @@ const styles = StyleSheet.create({
     editButton: {
         padding: 8,
         borderRadius: 20,
-        backgroundColor: `${customTheme.colors.primary}15`,
+        backgroundColor: customTheme.colors.primary,
     },
     dialog: {
         backgroundColor: 'white',

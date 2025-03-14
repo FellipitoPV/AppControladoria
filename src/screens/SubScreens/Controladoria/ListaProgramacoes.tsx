@@ -18,9 +18,9 @@ import { useNetwork } from '../../../contexts/NetworkContext';
 import { useUser } from '../../../contexts/userContext';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { customTheme } from '../../../theme/theme';
-import { Container, ProgramacaoEquipamento, Responsavel } from './Components/logisticTypes';
+import { Container, ProgramacaoEquipamento, Responsavel } from './types/logisticTypes';
 import ModernHeader from '../../../assets/components/ModernHeader';
-import { hasAccess } from '../../Adm/components/admTypes';
+import { hasAccess } from '../../Adm/types/admTypes';
 
 function alpha(color: string, opacity: number): string {
     const opacityHex = Math.round(opacity * 255).toString(16).padStart(2, '0');

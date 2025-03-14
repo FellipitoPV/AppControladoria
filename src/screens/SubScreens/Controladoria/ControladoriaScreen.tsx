@@ -13,38 +13,40 @@ import {
     Button,
     ProgressBar,
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import firestore from '@react-native-firebase/firestore';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useUser } from '../../../contexts/userContext';
+import { hasAccess } from '../../Adm/types/admTypes';
+import { ProgramacaoEquipamento } from './types/logisticTypes';
+import { useNetwork } from '../../../contexts/NetworkContext';
+import database from '@react-native-firebase/database';
 import ActionButton from '../../../assets/components/ActionButton';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
-interface RelatoriosStats {
+interface LavagemStats {
     hoje: number;
     semana: number;
     mes: number;
     total: number;
 }
 
+export default function ControladoriaScreen({ navigation }: any) {
+    const { userInfo } = useUser();
+    const { isOnline } = useNetwork();
 
-export default function OperacaoScreen({ navigation }: any) {
-    const [stats, setStats] = useState<RelatoriosStats>({
+    const [stats, setStats] = useState<LavagemStats>({
         hoje: 0,
         semana: 0,
         mes: 0,
         total: 0
     });
 
-
     const [lavagensRecentes, setLavagensRecentes] = useState<any[]>([]);
     const [lavagensAgendadas, setLavagensAgendadas] = useState<any[]>([]);
-
     const [agendamentosPendentes, setAgendamentosPendentes] = useState(0);
-    const [hasDraft, setHasDraft] = useState(false);
 
     // Primeiro, vamos criar funções auxiliares para datas
     const getStartOfDay = () => {
@@ -69,18 +71,55 @@ export default function OperacaoScreen({ navigation }: any) {
         return date;
     };
 
-    const fetchRelatoriosStats = async () => {
+    // Função atualizada para buscar agendamentos sem responsável
+    const fetchAgendamentosPendentes = async () => {
         try {
-            // Datas de referência
+            if (!isOnline) {
+                console.log('Usuário offline, não é possível buscar agendamentos');
+                return;
+            }
+
+            // Agora usamos o database do Firebase Realtime (não o Firestore)
+            const snapshot = await database()
+                .ref('programacoes')
+                .once('value');
+
+            const data = snapshot.val();
+
+            if (!data) {
+                setAgendamentosPendentes(0);
+                return;
+            }
+
+            // Converter os dados em um array e filtrar apenas os que não têm responsável de operação
+            const programacoesArray: ProgramacaoEquipamento[] = Object.entries(data)
+                .map(([key, value]: [string, any]) => ({
+                    firebaseKey: key,
+                    ...value
+                }));
+
+            // Filtra apenas programações sem responsável de operação
+            const semResponsavel = programacoesArray.filter(prog => !prog.responsavelOperacao);
+
+            setAgendamentosPendentes(semResponsavel.length);
+        } catch (error) {
+            console.error('Erro ao buscar agendamentos pendentes:', error);
+            setAgendamentosPendentes(0);
+        }
+    };
+
+    const fetchLavagemStats = async () => {
+        try {
+            // Datas de referência como timestamps
             const hoje = new Date();
             hoje.setHours(0, 0, 0, 0);
 
             const inicioSemana = getStartOfWeek();
             const inicioMes = getStartOfMonth();
 
-            // Buscar todos os registros da coleção relatoriosRDO
+            // Buscar todos os registros da coleção registroLavagens
             const snapshot = await firestore()
-                .collection('relatoriosRDO')
+                .collection('registroLavagens')
                 .get();
 
             let statsHoje = 0;
@@ -97,21 +136,21 @@ export default function OperacaoScreen({ navigation }: any) {
                     return;
                 }
 
-                let dataRelatorio: Date;
+                let dataLavagem: Date;
 
                 try {
                     // Tenta primeiro parsear como string DD/MM/YYYY
                     if (typeof dados.data === 'string' && dados.data.includes('/')) {
                         const [dia, mes, ano] = dados.data.split('/');
-                        dataRelatorio = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+                        dataLavagem = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
                     }
                     // Se for um timestamp do Firestore
                     else if (dados.data && dados.data.toDate) {
-                        dataRelatorio = dados.data.toDate();
+                        dataLavagem = dados.data.toDate();
                     }
                     // Se for uma data JavaScript
                     else if (dados.data instanceof Date) {
-                        dataRelatorio = dados.data;
+                        dataLavagem = dados.data;
                     }
                     else {
                         console.warn('Formato de data não reconhecido:', dados.data);
@@ -119,18 +158,19 @@ export default function OperacaoScreen({ navigation }: any) {
                     }
 
                     // Normaliza a hora para meia-noite
-                    dataRelatorio.setHours(0, 0, 0, 0);
+                    dataLavagem.setHours(0, 0, 0, 0);
 
                     // Comparar usando timestamps
-                    if (dataRelatorio.getTime() === hoje.getTime()) {
+                    if (dataLavagem.getTime() === hoje.getTime()) {
                         statsHoje++;
                     }
-                    if (dataRelatorio >= inicioSemana) {
+                    if (dataLavagem >= inicioSemana) {
                         statsSemana++;
                     }
-                    if (dataRelatorio >= inicioMes) {
+                    if (dataLavagem >= inicioMes) {
                         statsMes++;
                     }
+
                 } catch (error) {
                     console.warn('Erro ao processar data do documento:', doc.id, error);
                 }
@@ -148,7 +188,7 @@ export default function OperacaoScreen({ navigation }: any) {
                 total
             };
         } catch (error) {
-            console.error('Erro ao buscar estatísticas de relatórios:', error);
+            console.error('Erro ao buscar estatísticas:', error);
             return {
                 hoje: 0,
                 semana: 0,
@@ -158,27 +198,12 @@ export default function OperacaoScreen({ navigation }: any) {
         }
     };
 
-    const checkForDraft = async () => {
-        try {
-            const draftJson = await AsyncStorage.getItem('rdoDraft');
-            setHasDraft(!!draftJson); // Converte para boolean
-        } catch (error) {
-            console.error("Erro ao verificar rascunhos:", error);
-            setHasDraft(false);
-        }
-    };
-
     useEffect(() => {
-        const loadStats = async () => {
-            const novasStats = await fetchRelatoriosStats();
-            setStats(novasStats);
-        };
+        fetchAgendamentosPendentes();
 
-        loadStats();
-
-        // Atualizar stats quando o app voltar do background
+        // Atualiza quando a tela receber foco
         const unsubscribe = navigation.addListener('focus', () => {
-            loadStats();
+            fetchAgendamentosPendentes();
         });
 
         return unsubscribe;
@@ -190,22 +215,40 @@ export default function OperacaoScreen({ navigation }: any) {
     }, []);
 
     useEffect(() => {
-        checkForDraft();
+        const loadStats = async () => {
+            const novasStats = await fetchLavagemStats();
+            setStats(novasStats);
+        };
 
+        loadStats();
+
+        // Opcional: Atualizar stats quando o app voltar do background
         const unsubscribe = navigation.addListener('focus', () => {
-            checkForDraft();
+            loadStats();
         });
 
         return unsubscribe;
     }, [navigation]);
+
+    // Adicione isso ao useEffect existente
+    useEffect(() => {
+        fetchAgendamentosPendentes();
+
+        // Atualiza quando a tela receber foco
+        const unsubscribe = navigation.addListener('focus', () => {
+            fetchAgendamentosPendentes();
+        });
+
+        return unsubscribe;
+    }, [navigation, isOnline]);
 
     return (
         <Surface style={styles.container}>
 
             {/* Header */}
             <ModernHeader
-                title="Operacional"
-                iconName="clipboard-list"
+                title="Controladoria"
+                iconName="file-document-outline"
                 onBackPress={() => navigation.goBack()}
             />
 
@@ -215,11 +258,11 @@ export default function OperacaoScreen({ navigation }: any) {
             >
 
                 {/* Cards de Estatísticas */}
-                <View style={styles.statsGrid}>
+                {/* <View style={styles.statsGrid}>
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="today" size={24} color={customTheme.colors.primary} />
+                                <MaterialCommunityIcons name="calendar-today" size={24} color={customTheme.colors.primary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.hoje}</Text>
                             <Text style={styles.statsLabel}>Hoje</Text>
@@ -229,7 +272,7 @@ export default function OperacaoScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="date-range" size={24} color={customTheme.colors.secondary} />
+                                <MaterialCommunityIcons name="calendar-range" size={24} color={customTheme.colors.secondary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.semana}</Text>
                             <Text style={styles.statsLabel}>Esta Semana</Text>
@@ -239,25 +282,24 @@ export default function OperacaoScreen({ navigation }: any) {
                     <Card style={styles.statsCard}>
                         <Card.Content>
                             <View style={styles.statsIconContainer}>
-                                <Icon name="calendar-month" size={24} color={customTheme.colors.tertiary} />
+                                <MaterialCommunityIcons name="calendar-month" size={24} color={customTheme.colors.tertiary} />
                             </View>
                             <Text style={styles.statsValue}>{stats.mes}</Text>
                             <Text style={styles.statsLabel}>Este Mês</Text>
                         </Card.Content>
                     </Card>
-                </View>
+                </View> */}
 
-                {/* Ações */}
+                {/* Ações com verificação de acesso */}
                 <View style={styles.actionsContainer}>
                     <Text style={styles.sectionTitle}>Ações</Text>
                     <View style={styles.actionsGrid}>
-                        <ActionButton
-                            icon="file-document-edit"
-                            text="Relatório Diário"
-                            onPress={() => navigation.navigate('RdoForm')}
-                            noticeText={hasDraft ? "Rascunho disponível..." : undefined}
-                            noticeColor={customTheme.colors.primary}
-                        />
+
+                        {/* <ActionButton
+                            icon="calendar-plus"
+                            text="Agendar Operação"
+                            onPress={() => navigation.navigate('LogisticaProgram')}
+                        /> */}
 
                         {/* <ActionButton
                             icon="clock-outline"
@@ -266,28 +308,20 @@ export default function OperacaoScreen({ navigation }: any) {
                             badge={agendamentosPendentes}
                         /> */}
 
+                        {/* <ActionButton
+                            icon="file-document-multiple"
+                            text="Histórico de Operações"
+                            onPress={() => navigation.navigate('LogisticaHist')}
+                        /> */}
+
                         <ActionButton
                             icon="archive-search"
                             text="Histórico de RDO"
                             onPress={() => navigation.navigate('RdoHist')}
                         />
+
                     </View>
                 </View>
-
-                {/* Próximas Lavagens Agendadas */}
-                {lavagensAgendadas.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Próximas Lavagens</Text>
-                        {lavagensAgendadas.map((lavagem, index) => (
-                            <Card key={index} style={styles.agendamentoCard}>
-                                <Card.Content>
-                                    <></>
-                                    {/* Implementar card de agendamento */}
-                                </Card.Content>
-                            </Card>
-                        ))}
-                    </View>
-                )}
 
                 {/* Lavagens Recentes */}
                 {lavagensRecentes.length > 0 && (
@@ -309,12 +343,6 @@ export default function OperacaoScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-    actionsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        gap: 12,
-    },
     container: {
         flex: 1,
         backgroundColor: customTheme.colors.background,
@@ -323,33 +351,11 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 16,
     },
-    statsGrid: {
+    actionsGrid: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 24,
-    },
-    statsCard: {
-        width: (width - 48) / 3,
-        borderRadius: 12,
-        elevation: 2,
-    },
-    statsIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: customTheme.colors.surfaceVariant,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    statsValue: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: customTheme.colors.onSurface,
-    },
-    statsLabel: {
-        fontSize: 12,
-        color: customTheme.colors.onSurfaceVariant,
+        flexWrap: 'wrap',
+        gap: 12,
+        alignItems: 'stretch', // Garante que todos os itens se esticam para mesma altura
     },
     actionsContainer: {
         marginBottom: 24,
@@ -362,11 +368,6 @@ const styles = StyleSheet.create({
     },
     section: {
         marginBottom: 24,
-    },
-    agendamentoCard: {
-        marginBottom: 12,
-        borderRadius: 12,
-        elevation: 2,
     },
     lavagemCard: {
         marginBottom: 12,

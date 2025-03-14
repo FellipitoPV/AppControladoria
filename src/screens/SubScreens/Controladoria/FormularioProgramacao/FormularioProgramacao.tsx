@@ -16,10 +16,10 @@ import database from '@react-native-firebase/database';
 import { useUser } from '../../../../contexts/userContext';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
 import { customTheme } from '../../../../theme/theme';
-import { Equipment, Container, ClienteInterface, ProgramacaoEquipamento, clientes, listaTiposEquipamentos, listaTiposContainers } from '../Components/logisticTypes';
+import { Equipment, Container, ClienteInterface, ProgramacaoEquipamento, clientes, listaTiposEquipamentos, listaTiposContainers } from '../types/logisticTypes';
 import ModernHeader from '../../../../assets/components/ModernHeader';
-import { DropdownRef, Equipamento } from '../rdo/Types/rdoTypes';
-import EquipmentSection from './EquipmentSection';
+import { DropdownRef, Equipamento } from '../../Operacao/rdo/Types/rdoTypes';
+import EquipmentSection from '../Components/EquipmentSection';
 
 
 

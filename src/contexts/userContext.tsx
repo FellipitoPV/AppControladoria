@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User } from '../screens/Adm/components/admTypes';
+import { User } from '../screens/Adm/types/admTypes';
 
 interface UserContextData {
     userInfo: User | null;
