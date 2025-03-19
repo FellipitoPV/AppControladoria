@@ -49,6 +49,7 @@ type RdoFormRouteProp = RouteProp<RootStackParamList, 'RdoForm'> & {
         servico?: string;
         mode?: string;
         relatorioData?: FormDataInterface;
+        onGoBack: () => void;
     };
 };
 
@@ -87,7 +88,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         responsavel: userInfo?.user || '',
         material: '',
         numeroRdo: '',
-        funcao: '',
+        funcao: userInfo?.cargo || "",
         inicioOperacao: '',
         terminoOperacao: '',
         data: '',
@@ -265,7 +266,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                 if (photo?.uri?.startsWith('file://') || photo?.uri?.startsWith('content://')) {
                     const filename = photo.filename || photo.uri.substring(photo.uri.lastIndexOf('/') + 1);
                     const uniqueFilename = `${Date.now()}_${filename}`;
-                    const storageRef = storage().ref(`relatorios/${relatorioId}/fotos/${uniqueFilename}`);
+                    const storageRef = storage().ref(`relatoriosPhotos/${relatorioId}/fotos/${uniqueFilename}`);
 
                     const task = storageRef.putFile(photo.uri);
 
@@ -352,7 +353,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                 inicioOperacao: formatTime(horaInicio),
                 // Usar o valor apropriado para terminoOperacao
                 terminoOperacao: terminoOperacaoValue,
-                data: formatDate(selectedDate),
+                data: formData.data,
                 condicaoTempo: {
                     manha: formData.condicaoTempo?.manha || '',
                     tarde: formData.condicaoTempo?.tarde || '',
@@ -473,6 +474,10 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             await clearDrafts();
 
             if (navigation) {
+
+                if (route?.params?.onGoBack) {
+                    route.params.onGoBack();
+                }
                 navigation.goBack();
             }
         } catch (error: any) {
@@ -934,7 +939,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
 
                         <SaveButton
                             onPress={handleSave}
-                            text={isEditMode ? "Salvar Alterações" : "Finalizar Relatório Diário"}  
+                            text={isEditMode ? "Salvar Alterações" : "Finalizar Relatório Diário"}
                             iconName="content-save"
                             disabled={formErrors.length > 0}
                         />

@@ -59,9 +59,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     const [showAvatarTooltip, setShowAvatarTooltip] = useState(false);
     const tooltipOpacity = useRef(new Animated.Value(0)).current;
 
-    // Estado para controlar se a notificação de atualização foi dispensada
-    const [updateDismissed, setUpdateDismissed] = useState(false);
-
     const {
         updateInfo,
         updateState,
@@ -122,33 +119,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         return unsubscribe;
     }, [navigation, backPressedOnce]);
 
-    // Verificar se o usuário dispensou a atualização anteriormente
     useEffect(() => {
-        const checkDismissedUpdates = async () => {
-            if (updateInfo) {
-                try {
-                    const dismissedVersion = await AsyncStorage.getItem('dismissedUpdate');
-                    if (dismissedVersion === updateInfo.versao) {
-                        setUpdateDismissed(true);
-                    } else {
-                        setUpdateDismissed(false);
-                    }
-                } catch (error) {
-                    console.error('Erro ao verificar atualizações dispensadas:', error);
-                }
-            }
-        };
-
-        checkDismissedUpdates();
-    }, [updateInfo]);
-
-    useEffect(() => {
-        // Start recurring notifications when the component mounts
-        // if (isOnline) {
-        //     NotificationService.scheduleRepeatingNotification();
-        // }
-
-        // Clean up by canceling all notifications when the component unmounts
         return () => {
             NotificationService.cancelAllNotifications();
         };
@@ -163,18 +134,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         }).start(() => {
             setShowAvatarTooltip(false);
         });
-    };
-
-    // Função para dispensar a atualização
-    const handleDismissUpdate = async () => {
-        if (updateInfo && !updateInfo.obrigatoria) {
-            try {
-                await AsyncStorage.setItem('dismissedUpdate', updateInfo.versao);
-                setUpdateDismissed(true);
-            } catch (error) {
-                console.error('Erro ao salvar atualização dispensada:', error);
-            }
-        }
     };
 
     const handleLogout = async () => {
@@ -505,13 +464,12 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                     </View>
                 </View>
 
-                {/* TODO descobrir o porque não está identificando a atualização */}
                 {/* Componente de Notificação de Atualização */}
-                {updateInfo && !updateDismissed && (
+                {updateInfo && (
                     <UpdateNotification
                         updateInfo={updateInfo}
                         onUpdate={downloadAndInstall}
-                        onDismiss={handleDismissUpdate}
+                        onDismiss={() => setUpdateModalVisible(false)}
                     />
                 )}
 

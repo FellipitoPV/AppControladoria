@@ -25,46 +25,20 @@ import DetalheLavagemModal from './Components/DetalheLavagemModal';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getTipoLavagemDetails, getTipoVeiculoColor, getTipoVeiculoIcon, getTipoVeiculoLabel } from './Components/utils/lavagemUtils';
+import { LavagemInterface } from './Components/lavagemTypes';
 
 interface HistoricoLavagemProps {
     navigation: any;
 }
 
-interface LavagemData {
-    id: string;
-    responsavel: string;
-    data: string;
-    hora: string;
-    veiculo: {
-        placa: string;
-        tipo: string;
-        numeroEquipamento?: string | null;
-    };
-    tipoLavagem: string;
-    produtos: Array<{
-        nome: string;
-        quantidade: number;
-    }>;
-    fotos: Array<{
-        url: string;
-        timestamp: number;
-        path: string;
-    }>;
-    observacoes?: string;
-    status: string;
-    createdAt: any;
-    createdBy: string | null;
-    agendamentoId?: string | null;
-}
-
 export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) {
     const { userInfo } = useUser();
-    const [lavagens, setLavagens] = useState<LavagemData[]>([]);
+    const [lavagens, setLavagens] = useState<LavagemInterface[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    const [todasLavagens, setTodasLavagens] = useState<LavagemData[]>([]);
-    const [lagensFiltradas, setLavagensFiltradas] = useState<LavagemData[]>([]);
+    const [todasLavagens, setTodasLavagens] = useState<LavagemInterface[]>([]);
+    const [lagensFiltradas, setLavagensFiltradas] = useState<LavagemInterface[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -74,7 +48,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
     const [filterVeiculo, setFilterVeiculo] = useState<string | null>(null);
     const [filterTipoLavagem, setFilterTipoLavagem] = useState<string | null>(null);
 
-    const [selectedLavagem, setSelectedLavagem] = useState<LavagemData | null>(null);
+    const [selectedLavagem, setSelectedLavagem] = useState<LavagemInterface | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
     const [detalheModalVisible, setDetalheModalVisible] = useState(false);
 
@@ -107,7 +81,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
             const dadosNovos = snapshotNovo.docs
                 .filter(doc => !doc.data().placaVeiculo) // Filtrar apenas os registros do novo formato
                 .map(doc => {
-                    const data = doc.data() as LavagemData;
+                    const data = doc.data() as LavagemInterface;
                     return {
                         id: doc.id,
                         responsavel: data.responsavel || '',
@@ -122,7 +96,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                         createdAt: data.createdAt || null,
                         createdBy: data.createdBy || null,
                         agendamentoId: data.agendamentoId || null
-                    } as LavagemData;
+                    } as LavagemInterface;
                 });
 
             // Processar dados do formato antigo
@@ -153,7 +127,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                         ) : null,
                     createdBy: null,
                     agendamentoId: null
-                } as LavagemData;
+                } as LavagemInterface;
             });
 
             // Processar fotos do formato antigo
@@ -344,7 +318,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
         }
     };
 
-    const renderLavagemCard = (lavagem: LavagemData, index: number) => {
+    const renderLavagemCard = (lavagem: LavagemInterface, index: number) => {
         const tipoLavagemInfo = getTipoLavagemDetails(lavagem.tipoLavagem);
         const dataFormatada = formatarData(lavagem.data);
         const animationDelay = index * 100; // Escalonar animação por índice
@@ -749,7 +723,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                         setDetalheModalVisible(false);
                         navigation.navigate('LavagemForm', {
                             mode: 'edit',
-                            lavagemData: selectedLavagem
+                            LavagemInterface: selectedLavagem
                         });
                     }}
                 />
@@ -1060,29 +1034,5 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurfaceVariant,
         textAlign: 'center',
         paddingHorizontal: 32,
-    },
-
-    // FAB
-    fab: {
-        position: 'absolute',
-        right: 16,
-        bottom: 16,
-        backgroundColor: customTheme.colors.primary,
-        borderRadius: 28,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-    },
-    fabText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
     },
 });

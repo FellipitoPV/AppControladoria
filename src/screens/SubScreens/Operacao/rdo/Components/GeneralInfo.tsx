@@ -48,6 +48,8 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
             ...prev,
             [field]: value
         }));
+
+        console.log("Atualizando o:", field, "para o valor:", value)
     };
 
     // Handle date change

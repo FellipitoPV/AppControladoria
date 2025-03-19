@@ -18,13 +18,6 @@ interface UpdateState {
     checking: boolean;
 }
 
-interface PendingData extends Compostagem {
-    timestamp: string;
-    attempts: number;
-    syncId?: string; // Identificador único para rastrear tentativas de sync
-}
-
-
 export const useAppUpdater = () => {
     const [updateInfo, setUpdateInfo] = useState<VersionInfo | null>(null);
     const [updateState, setUpdateState] = useState<UpdateState>({

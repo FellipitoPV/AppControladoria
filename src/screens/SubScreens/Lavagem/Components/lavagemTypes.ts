@@ -29,25 +29,31 @@ export interface Equipamento {
     tipo: 'equipamento';
 }
 
-export interface RegistroLavagem {
-    id?: string;
-    timestamp?: number;
+export interface LavagemInterface {
+    id: string;
+    responsavel: string;
     data: string;
     hora: string;
-    responsavel: string;
-    placaVeiculo: string;
-    tipoLavagem: 'simples' | 'completa';
+    veiculo: {
+        placa: string;
+        tipo: string;
+        numeroEquipamento?: string | null;
+    };
+    tipoLavagem: string;
     produtos: Array<{
-        produto: string;
-        quantidade: string;
+        nome: string;
+        quantidade: number;
     }>;
-    observacoes: string;
-    photoUris?: string[];
-    photoUrls?: string[];
-    createdAt?: string;
-    updatedAt?: string;
-    isSync?: boolean;
-    agendamentoId?: string;
+    fotos: Array<{
+        url: string;
+        timestamp: number;
+        path: string;
+    }>;
+    observacoes?: string;
+    status: string;
+    createdAt: any;
+    createdBy: string | null;
+    agendamentoId?: string | null;
 }
 
 export interface IAgendamentoLavagem {

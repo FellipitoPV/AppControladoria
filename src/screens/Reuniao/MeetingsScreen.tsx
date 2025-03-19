@@ -312,18 +312,21 @@ export default function MeetingsScreen({ navigation }: any) {
                         </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={handleAddMeeting}
-                    >
-                        <MaterialCommunityIcons
-                            name="plus"
-                            size={22}
-                            color={customTheme.colors.onPrimary || '#ffffff'}
-                        />
-                        <Text style={styles.addButtonText}>Nova Reunião</Text>
-                    </TouchableOpacity>
+                    {selectedDate >= new Date(new Date().setHours(0, 0, 0, 0)) && (
+                        <TouchableOpacity
+                            style={styles.addButton}
+                            onPress={handleAddMeeting}
+                        >
+                            <MaterialCommunityIcons
+                                name="plus"
+                                size={22}
+                                color={customTheme.colors.onPrimary || '#ffffff'}
+                            />
+                            <Text style={styles.addButtonText}>Nova Reunião</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
+
 
                 {/* Visualização de salas */}
                 {loading ? (

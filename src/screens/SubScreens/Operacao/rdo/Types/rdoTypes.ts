@@ -72,6 +72,16 @@ export interface FormDataInterface {
     photos: Photo[];
     updatedBy: string;
     updatedAt: any;
+
+    pdfUrl?: string;
+    lastPdfGenerated?: {
+        seconds: number;
+        nanoseconds: number;
+    };
+    lastUpdated?: {
+        seconds: number;
+        nanoseconds: number;
+    };
 }
 
 export type RootStackParamList = {

@@ -20,6 +20,7 @@ import { customTheme } from '../../../../theme/theme';
 import { hasAccess } from '../../../Adm/types/admTypes';
 import DetalheRdoModal from './Components/DetalheRdoModal';
 import { FormDataInterface } from './Types/rdoTypes';
+import storage from '@react-native-firebase/storage';
 
 interface HistoricoRdoProps {
     navigation: any;
@@ -86,6 +87,9 @@ export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
                             filename: photo.filename || ''
                         }))
                         : [],
+                    pdfUrl: data.pdfUrl,
+                    lastPdfGenerated: data.lastPdfGenerated,
+                    updatedAt: data.updatedAt,
                 } as FormDataInterface;
             });
 
@@ -132,6 +136,41 @@ export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
 
     const handleDelete = async (id: string) => {
         try {
+            // Primeiro, obtenha a referência do documento para checar a URL do PDF
+            const docSnapshot = await firestore()
+                .collection('relatoriosRDO')
+                .doc(id)
+                .get();
+
+            if (docSnapshot.exists) {
+                const data = docSnapshot.data();
+                const numeroRdo = data?.numeroRdo;
+
+                try {
+                    // 1. Excluir PDF se existir
+                    if (data?.pdfUrl) {
+                        const fileRef = storage().ref(`RelatoriosRDO/${numeroRdo}.pdf`);
+                        await fileRef.delete();
+                    }
+
+                    // 2. Listar todos os arquivos na pasta de fotos
+                    const photosRef = storage().ref(`relatoriosPhotos/${numeroRdo}/fotos`);
+                    const photosList = await photosRef.listAll();
+
+                    // 3. Excluir cada arquivo encontrado
+                    const deletePromises = photosList.items.map(itemRef => itemRef.delete());
+                    await Promise.all(deletePromises);
+
+                    console.log(`Todos os arquivos em relatorios/${numeroRdo}/fotos foram excluídos`);
+                } catch (storageError) {
+                    console.error('Erro ao excluir arquivos:', storageError);
+                }
+
+                // 4. Excluir o documento do Firestore
+                await firestore().collection('relatoriosRDO').doc(id).delete();
+            }
+
+            // Depois exclua o documento
             await firestore()
                 .collection('relatoriosRDO')
                 .doc(id)
@@ -446,6 +485,7 @@ export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
                         setDetalheModalVisible(false);
                         setSelectedRelatorio(null);
                     }}
+                    refresh={buscarRelatorios}
                     relatorio={{
                         ...selectedRelatorio,
                         profissionais: selectedRelatorio.profissionais?.map(prof => ({
