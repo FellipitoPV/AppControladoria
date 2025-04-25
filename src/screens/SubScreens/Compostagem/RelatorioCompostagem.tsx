@@ -1,33 +1,37 @@
-import React, { useState, useEffect } from 'react';
 import {
-    View,
-    StyleSheet,
+    Alert,
+    Modal,
     SafeAreaView,
     ScrollView,
+    StyleSheet,
     TouchableOpacity,
-    Alert,
-    Modal
+    View
 } from 'react-native';
 import {
-    Text,
     Button,
-    Surface,
     Card,
+    Chip,
     Divider,
-    Chip
+    Surface,
+    Text
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore from '@react-native-firebase/firestore';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import ModernHeader from '../../../assets/components/ModernHeader';
+import React, { useEffect, useState } from 'react';
+import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { showGlobalToast, verificarConectividadeAPI } from '../../../helpers/GlobalApi';
-import { customTheme } from '../../../theme/theme';
+
+import FilterCardCompost from './components/FilterCardCompost';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import ModernHeader from '../../../assets/components/ModernHeader';
 import RNFS from 'react-native-fs';
+import RelatorioCompostagemContent from './components/RelatorioCompostagemContent';
 import Share from 'react-native-share';
+import { customTheme } from '../../../theme/theme';
+import { db } from '../../../../firebase';
 
 // Componente para exibir o conteúdo do relatório
-import FilterCardCompost from './components/FilterCardCompost';
-import RelatorioCompostagemContent from './components/RelatorioCompostagemContent';
+
+
+
 
 interface Compostagem {
     id: string;
@@ -66,10 +70,8 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
 
     const carregarLeirasDisponiveis = async () => {
         try {
-            const querySnapshot = await firestore()
-                .collection('compostagens')
-                .get();
-
+            const querySnapshot = await getDocs(collection(db(), 'compostagens'));
+    
             // Obtenha todas as leiras únicas
             const leiras = querySnapshot.docs
                 .map(doc => doc.data().leira)
@@ -77,30 +79,21 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
                     leira && self.indexOf(leira) === index
                 )
                 .sort();
-
+    
             setLeirasDisponiveis(leiras);
         } catch (error) {
             console.error('Erro ao carregar leiras:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível carregar as leiras disponíveis', 4000);
         }
     };
-
-    // Converte as datas para o formato pt-BR
-    const formatarData = (data: Date) => {
-        const dia = String(data.getDate()).padStart(2, '0');
-        const mes = String(data.getMonth() + 1).padStart(2, '0');
-        const ano = data.getFullYear();
-        return `${dia}/${mes}/${ano}`;
-    };
-
-    // Função para buscar as compostagens no intervalo de datas
+    
     const buscarCompostagensPorIntervalo = async () => {
         try {
             setLoading(true);
-
+    
             const inicioFormatado = formatarData(dataInicio);
             const fimFormatado = formatarData(dataFim);
-
+    
             if (dataInicio > dataFim) {
                 Alert.alert(
                     'Erro',
@@ -108,15 +101,16 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
                 );
                 return;
             }
-
-            const query = firestore()
-                .collection('compostagens')
-                .where('data', '>=', inicioFormatado)
-                .where('data', '<=', fimFormatado)
-                .orderBy('data', 'desc');
-
-            const snapshot = await query.get();
-
+    
+            const compostagemQuery = query(
+                collection(db(), 'compostagens'),
+                where('data', '>=', inicioFormatado),
+                where('data', '<=', fimFormatado),
+                orderBy('data', 'desc')
+            );
+    
+            const snapshot = await getDocs(compostagemQuery);
+    
             let dados = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -129,29 +123,37 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
                     return !compostagem.isMedicaoRotina;
                 }
             });
-
+    
             // Aplicar filtro de leiras se houver leiras selecionadas
             if (leirasFiltradas.length > 0) {
                 dados = dados.filter(compostagem =>
                     leirasFiltradas.includes(compostagem.leira)
                 );
             }
-
+    
             // Ordenar por data e hora
             dados.sort((a, b) => {
                 const dataA = new Date(a.data.split('/').reverse().join('-') + ' ' + a.hora);
                 const dataB = new Date(b.data.split('/').reverse().join('-') + ' ' + b.hora);
                 return dataB.getTime() - dataA.getTime();
             });
-
+    
             setCompostagens(dados);
-
+    
         } catch (error) {
             console.error('Erro ao buscar compostagens:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível gerar o relatório', 4000);
         } finally {
             setLoading(false);
         }
+    };
+
+    // Converte as datas para o formato pt-BR
+    const formatarData = (data: Date) => {
+        const dia = String(data.getDate()).padStart(2, '0');
+        const mes = String(data.getMonth() + 1).padStart(2, '0');
+        const ano = data.getFullYear();
+        return `${dia}/${mes}/${ano}`;
     };
 
     // Alternar entre medições de rotina e completas

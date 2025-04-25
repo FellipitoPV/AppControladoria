@@ -1,10 +1,12 @@
-import React, { useState, useEffect, memo } from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import React, { memo, useEffect, useState } from 'react';
+import { collection, getDocs, limit, query, where } from 'firebase/firestore';
+
 import { Card } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore from '@react-native-firebase/firestore';
-import dayjs from 'dayjs';
 import { customTheme } from '../../../theme/theme';
+import dayjs from 'dayjs';
+import { db } from '../../../../firebase';
 
 interface Meeting {
     id: string;
@@ -56,18 +58,20 @@ const MeetingItemComponent = ({ meeting, onPress, isUserMeeting }: MeetingItemPr
         if (userPhotoURL !== undefined || photoURLCache[meeting.name] !== undefined) {
             return;
         }
-
+    
         let isMounted = true;
         const fetchUserPhoto = async () => {
             try {
-                const usersSnapshot = await firestore()
-                    .collection('users')
-                    .where('user', '==', meeting.name)
-                    .limit(1)
-                    .get();
-
+                const usersSnapshot = await getDocs(
+                    query(
+                        collection(db(), 'users'),
+                        where('user', '==', meeting.name),
+                        limit(1)
+                    )
+                );
+    
                 if (!isMounted) return;
-
+    
                 if (!usersSnapshot.empty) {
                     const userData = usersSnapshot.docs[0].data();
                     if (userData.photoURL) {
@@ -90,9 +94,9 @@ const MeetingItemComponent = ({ meeting, onPress, isUserMeeting }: MeetingItemPr
                 }
             }
         };
-
+    
         fetchUserPhoto();
-
+    
         // Cleanup para evitar memory leaks
         return () => {
             isMounted = false;

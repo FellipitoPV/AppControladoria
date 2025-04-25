@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Platform, Alert, Linking } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
+import { useEffect, useState } from 'react';
+
+import { Compostagem } from './Types';
+import { version as appVersion } from '../../package.json';
 import firestore from '@react-native-firebase/firestore';
 import semver from 'semver';
-import { version as appVersion } from '../../package.json';
-import { Compostagem } from './Types';
 
 export interface VersionInfo {
     versao: string;

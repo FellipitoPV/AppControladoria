@@ -1,31 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
 import {
-    View,
-    StyleSheet,
-    TouchableOpacity,
     ActivityIndicator,
     Alert,
+    Image,
     Platform,
     ScrollView,
-    Image
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import {
+    Card,
     Surface,
     Text,
-    Card,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import database from '@react-native-firebase/database';
-import dayjs from 'dayjs';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import ModernHeader from '../../assets/components/ModernHeader';
-import { useUser } from '../../contexts/userContext';
-import { showGlobalToast } from '../../helpers/GlobalApi';
-import { customTheme } from '../../theme/theme';
+import React, { useEffect, useRef, useState } from 'react';
+import { off, onValue, ref, remove, set } from 'firebase/database';
+
 import CreateMeetingModal from './components/CreateMeetingModal';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import MeetingDetailsModal from './components/MeetingDetailsModal';
-import firestore from '@react-native-firebase/firestore';
 import MeetingItem from './components/MeetingItem';
+import ModernHeader from '../../assets/components/ModernHeader';
+import { customTheme } from '../../theme/theme';
+import dayjs from 'dayjs';
+import { dbRealTime } from '../../../firebase';
+import { showGlobalToast } from '../../helpers/GlobalApi';
+import { useUser } from '../../contexts/userContext';
 
 interface Meeting {
     id: string;
@@ -75,69 +76,65 @@ export default function MeetingsScreen({ navigation }: any) {
     const fetchMeetings = (date: string): (() => void) => {
         try {
             setLoading(true);
-
+    
             // Create reference to meetings node
-            const onValueChange = database()
-                .ref('/meetings')
-                .on('value', snapshot => {
-                    const data = snapshot.val();
-                    const loadedMeetings: Meeting[] = [];
-
-                    if (data) {
-                        Object.keys(data).forEach((key) => {
-                            const meetingData = data[key];
-                            const meeting: Meeting = {
-                                ...meetingData,
-                                id: key,
-                            };
-                            loadedMeetings.push(meeting);
-                        });
-
-                        // Filter meetings for the specific date
-                        const filteredMeetings = loadedMeetings.filter((meeting) => meeting.date === date);
-
-                        // Sort meetings by entry time
-                        const sortedMeetings = filteredMeetings.sort((a, b) => {
-                            const timeA = a.entrada.split(':').map(Number);
-                            const timeB = b.entrada.split(':').map(Number);
-
-                            if (timeA[0] !== timeB[0]) {
-                                return timeA[0] - timeB[0]; // Compare hours
-                            } else {
-                                return timeA[1] - timeB[1]; // If hours are equal, compare minutes
-                            }
-                        });
-
-                        // Update the local state of meetings with the sorted list
-                        setMeetings(sortedMeetings);
-                    } else {
-                        console.log('No meetings found.');
-                        setMeetings([]);
-                    }
-                    setLoading(false);
-                });
-
+            const meetingsRef = ref(dbRealTime(), '/meetings');
+            const onValueChange = onValue(meetingsRef, snapshot => {
+                const data = snapshot.val();
+                const loadedMeetings: Meeting[] = [];
+    
+                if (data) {
+                    Object.keys(data).forEach((key) => {
+                        const meetingData = data[key];
+                        const meeting: Meeting = {
+                            ...meetingData,
+                            id: key,
+                        };
+                        loadedMeetings.push(meeting);
+                    });
+    
+                    // Filter meetings for the specific date
+                    const filteredMeetings = loadedMeetings.filter((meeting) => meeting.date === date);
+    
+                    // Sort meetings by entry time
+                    const sortedMeetings = filteredMeetings.sort((a, b) => {
+                        const timeA = a.entrada.split(':').map(Number);
+                        const timeB = b.entrada.split(':').map(Number);
+    
+                        if (timeA[0] !== timeB[0]) {
+                            return timeA[0] - timeB[0]; // Compare hours
+                        } else {
+                            return timeA[1] - timeB[1]; // If hours are equal, compare minutes
+                        }
+                    });
+    
+                    // Update the local state of meetings with the sorted list
+                    setMeetings(sortedMeetings);
+                } else {
+                    console.log('No meetings found.');
+                    setMeetings([]);
+                }
+                setLoading(false);
+            });
+    
             // Return cleanup function
-            return () => database().ref('/meetings').off('value', onValueChange);
+            return () => off(meetingsRef, 'value', onValueChange);
         } catch (error) {
             console.error('Error loading meetings from Realtime Database: ', error);
             showGlobalToast('error', 'Erro', 'Não foi possível carregar as reuniões', 3000);
             setLoading(false);
-
+    
             // Return empty cleanup function in case of error
             return () => { };
         }
     };
-
-    // Handle meeting deletion
+    
     const handleDeleteMeeting = async (meetingId: string) => {
         try {
-            await database()
-                .ref(`/meetings/${meetingId}`)
-                .remove();
-
+            await remove(ref(dbRealTime(), `/meetings/${meetingId}`));
+    
             showGlobalToast('success', 'Sucesso', 'Reunião excluída com sucesso', 3000);
-
+    
             // Refresh meetings after deletion
             const formattedDate = dayjs(selectedDate).format('YYYYMMDD');
             if (activeListenerRef.current) {
@@ -147,7 +144,7 @@ export default function MeetingsScreen({ navigation }: any) {
             if (typeof unsubscribe === 'function') {
                 activeListenerRef.current = unsubscribe;
             }
-
+    
             return Promise.resolve();
         } catch (error) {
             console.error('Erro ao excluir reunião:', error);
@@ -155,12 +152,12 @@ export default function MeetingsScreen({ navigation }: any) {
             return Promise.reject(error);
         }
     };
-
+    
     // Abrir modal para criar nova reunião
     const handleAddMeeting = () => {
         setCreatingMeeting(true);
     };
-
+    
     // Criar reunião a partir dos dados da modal
     const handleCreateMeetingFromModal = async (meetingData: {
         assunto: string;
@@ -170,26 +167,26 @@ export default function MeetingsScreen({ navigation }: any) {
         selectedRoom: string;
     }) => {
         setLoading(true);
-
+    
         try {
             // Formatar dados recebidos do modal
             const currentDate = dayjs(meetingData.selectedDate).format('YYYYMMDD');
             const horaEntrada = dayjs(meetingData.selectedTime).format('HH:mm');
             const horaSaida = dayjs(meetingData.selectedEndTime).format('HH:mm');
-
+    
             // Validações
             if (horaEntrada < '07:00' || horaEntrada > '17:00') {
                 showGlobalToast('error', 'Erro', 'Selecione um horário entre 7h e 17h', 3000);
                 setLoading(false);
                 return;
             }
-
+    
             if (horaSaida <= horaEntrada) {
                 showGlobalToast('error', 'Erro', 'O horário de término deve ser após o início', 3000);
                 setLoading(false);
                 return;
             }
-
+    
             // Verificar conflitos
             const conflictingMeeting = meetings.find((meeting) => {
                 return (
@@ -200,13 +197,13 @@ export default function MeetingsScreen({ navigation }: any) {
                         (horaEntrada <= meeting.entrada && horaSaida > meeting.entrada))
                 );
             });
-
+    
             if (conflictingMeeting) {
                 showGlobalToast('error', 'Erro', `${meetingData.selectedRoom} já está ocupada das ${conflictingMeeting.entrada} às ${conflictingMeeting.saida}.`, 3000);
                 setLoading(false);
                 return;
             }
-
+    
             // Criar a nova reunião
             const novaReuniao = {
                 id: generateUniqueId(),
@@ -217,13 +214,13 @@ export default function MeetingsScreen({ navigation }: any) {
                 assunto: meetingData.assunto,
                 sala: meetingData.selectedRoom
             };
-
+    
             // Salvar a nova reunião no Realtime Database
-            await database().ref(`/meetings/${novaReuniao.id}`).set(novaReuniao);
-
+            await set(ref(dbRealTime(), `/meetings/${novaReuniao.id}`), novaReuniao);
+    
             setCreatingMeeting(false);
             showGlobalToast('success', 'Sucesso', 'Reunião criada com sucesso!', 3000);
-
+    
             // Recarregar reuniões
             if (activeListenerRef.current) {
                 activeListenerRef.current();

@@ -1,27 +1,29 @@
-import { useEffect, useRef, useState } from 'react';
 import {
-    View,
-    StyleSheet,
-    Modal,
-    ScrollView,
-    Image,
-    TouchableOpacity,
-    SafeAreaView,
     ActivityIndicator,
     Animated,
+    Image,
+    Modal,
     Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { Text, TextInput, Button, Surface, Card } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import { useNetwork } from '../../../contexts/NetworkContext';
-import { showGlobalToast } from '../../../helpers/GlobalApi';
-import { customTheme } from '../../../theme/theme';
+import { Button, Card, Surface, Text, TextInput } from 'react-native-paper';
 import { ProdutoEstoque, UnidadeMedida } from './Components/lavagemTypes';
-import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
+import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
+import { db, dbStorage } from '../../../../firebase';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { useEffect, useRef, useState } from 'react';
+
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ModernHeader from '../../../assets/components/ModernHeader';
+import { customTheme } from '../../../theme/theme';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
+import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
+import { useNetwork } from '../../../contexts/NetworkContext';
 
 export default function ControleEstoque({ navigation }: any) {
     const { isOnline } = useNetwork();
@@ -153,81 +155,85 @@ export default function ControleEstoque({ navigation }: any) {
     const handleUpdateNome = async () => {
         if (!checkOnlineStatus()) return;
         if (!selectedProduto || !novoNome.trim()) return;
-
+    
         try {
-            await firestore()
-                .collection('produtos')
-                .doc(selectedProduto.id)
-                .update({
+            if (selectedProduto.id) {
+                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
                     nome: novoNome.trim(),
                     updatedAt: new Date().toISOString(),
                 });
-
-            await forceSync(); // Força sincronização após atualizar
-
+            } else {
+                console.error('Produto ID is undefined');
+                showGlobalToast('error', 'Erro ao atualizar nome', 'ID do produto não encontrado', 4000);
+            }
+    
+            await forceSync();
+    
             setSelectedProduto(prev => prev ? {
                 ...prev,
                 nome: novoNome.trim()
             } : null);
-
+    
             showGlobalToast(
                 'success',
                 'Nome atualizado com sucesso',
                 '',
                 4000
             );
-
+    
             setIsEditingNome(false);
         } catch (error) {
             console.error('Erro ao atualizar nome:', error);
             showGlobalToast('error', 'Erro ao atualizar nome', 'Tente novamente', 4000);
         }
     };
-
+    
     const handleUpdatePhoto = async () => {
         if (!checkOnlineStatus()) return;
         if (!selectedProduto || !photoUri || !isUpdatePhoto) return;
-
-        setIsSavingPhoto(true); // Inicia o loading
+    
+        setIsSavingPhoto(true);
         try {
             const now = new Date().toISOString();
             const filename = `produtos/${now}_${selectedProduto.nome.trim()}.jpg`;
-            const reference = storage().ref(filename);
-
-            await reference.putFile(photoUri);
-            const photoUrl = await reference.getDownloadURL();
-
-            // Atualizar no Firestore
-            await firestore()
-                .collection('produtos')
-                .doc(selectedProduto.id)
-                .update({
+            const reference = ref(dbStorage(), filename);
+    
+            const response = await fetch(photoUri);
+            const blob = await response.blob();
+            await uploadBytes(reference, blob);
+            const photoUrl = await getDownloadURL(reference);
+    
+            if (selectedProduto.id) {
+                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
                     photoUrl,
                     updatedAt: now,
                 });
-
-            // Atualizar o produto selecionado
+            } else {
+                console.error('Produto ID is undefined');
+                showGlobalToast('error', 'Erro ao atualizar foto', 'ID do produto não encontrado', 4000);
+            }
+    
             setSelectedProduto(prev => prev ? {
                 ...prev,
                 photoUrl
             } : null);
-
+    
             showGlobalToast(
                 'success',
                 'Foto atualizada com sucesso',
                 '',
                 4000
             );
-
+    
             setIsUpdatePhoto(false);
         } catch (error) {
             console.error('Erro ao atualizar foto:', error);
             showGlobalToast('error', 'Erro ao atualizar foto', 'Tente novamente', 4000);
         } finally {
-            setIsSavingPhoto(false); // Finaliza o loading independente do resultado
+            setIsSavingPhoto(false);
         }
     };
-
+    
     const handleUpdateQuantidade = async () => {
         if (!isOnline) {
             showGlobalToast(
@@ -239,10 +245,10 @@ export default function ControleEstoque({ navigation }: any) {
             return;
         }
         if (!selectedProduto || !novaQuantidade) return;
-
+    
         try {
             let novaQuantidadeTotal: string;
-
+    
             if (tipoAtualizacao === 'somar') {
                 const quantidadeAtual = parseInt(selectedProduto.quantidade) || 0;
                 const quantidadeAdicional = parseInt(novaQuantidade) || 0;
@@ -250,24 +256,26 @@ export default function ControleEstoque({ navigation }: any) {
             } else {
                 novaQuantidadeTotal = novaQuantidade;
             }
-
-            await firestore()
-                .collection('produtos')
-                .doc(selectedProduto.id)
-                .update({
+    
+            if (selectedProduto.id) {
+                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
                     quantidade: novaQuantidadeTotal,
                     updatedAt: new Date().toISOString(),
                 });
-
-            await forceSync(); // Força sincronização após atualizar
-
+            } else {
+                console.error('Produto ID is undefined');
+                showGlobalToast('error', 'Erro ao atualizar quantidade', 'ID do produto não encontrado', 4000);
+            }
+    
+            await forceSync();
+    
             showGlobalToast(
                 'success',
                 'Quantidade atualizada com sucesso',
                 tipoAtualizacao === 'somar' ? 'Quantidade somada ao estoque' : 'Estoque atualizado',
                 4000
             );
-
+    
             setNovaQuantidade('');
             setIsQuantidadeModalVisible(false);
             setTipoAtualizacao(null);
@@ -278,36 +286,38 @@ export default function ControleEstoque({ navigation }: any) {
             showGlobalToast('error', 'Erro ao atualizar quantidade', 'Tente novamente', 4000);
         }
     };
-
+    
     const handleUpdateUnidade = async (novaUnidade: UnidadeMedida) => {
         if (!checkOnlineStatus()) return;
         if (!selectedProduto) return;
-
+    
         try {
             setIsUpdatingUnidade(true);
-
-            await firestore()
-                .collection('produtos')
-                .doc(selectedProduto.id)
-                .update({
+    
+            if (selectedProduto.id) {
+                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
                     unidadeMedida: novaUnidade,
                     updatedAt: new Date().toISOString(),
                 });
-
-            await forceSync(); // Força sincronização após atualizar
-
+            } else {
+                console.error('Produto ID is undefined');
+                showGlobalToast('error', 'Erro ao atualizar unidade de medida', 'ID do produto não encontrado', 4000);
+            }
+    
+            await forceSync();
+    
             setSelectedProduto(prev => prev ? {
                 ...prev,
                 unidadeMedida: novaUnidade
             } : null);
-
+    
             showGlobalToast(
                 'success',
                 'Unidade de medida atualizada com sucesso',
                 '',
                 4000
             );
-
+    
             setIsEditingUnidade(false);
         } catch (error) {
             console.error('Erro ao atualizar unidade de medida:', error);
@@ -321,8 +331,7 @@ export default function ControleEstoque({ navigation }: any) {
             setIsUpdatingUnidade(false);
         }
     };
-
-    // Salvar novo produto
+    
     const handleSave = async () => {
         if (!isOnline) {
             showGlobalToast(
@@ -333,7 +342,7 @@ export default function ControleEstoque({ navigation }: any) {
             );
             return;
         }
-
+    
         if (!nome.trim() || !quantidade.trim() || !quantidadeMinima.trim() || !unidadeMedida) {
             showGlobalToast(
                 'info',
@@ -343,44 +352,43 @@ export default function ControleEstoque({ navigation }: any) {
             );
             return;
         }
-
+    
         setIsSaving(true);
         try {
             const now = new Date().toISOString();
             let photoUrl: string | null = null;
-
+    
             if (photoUri) {
                 const filename = `produtos/${now}_${nome.trim()}.jpg`;
-                const reference = storage().ref(filename);
-                await reference.putFile(photoUri);
-                photoUrl = await reference.getDownloadURL();
+                const reference = ref(dbStorage(), filename);
+                const response = await fetch(photoUri);
+                const blob = await response.blob();
+                await uploadBytes(reference, blob);
+                photoUrl = await getDownloadURL(reference);
             }
-
+    
             const novoProduto: ProdutoEstoque = {
                 nome: nome.trim(),
                 quantidade: quantidade.trim(),
                 quantidadeMinima: quantidadeMinima.trim(),
                 unidadeMedida,
-                //descricao: descricao.trim() || '',
                 photoUrl,
                 createdAt: now,
                 updatedAt: now,
             };
-
-            await firestore().collection('produtos').add(novoProduto);
-            await forceSync(); // Força sincronização após adicionar
-
+    
+            await addDoc(collection(db(), 'produtos'), novoProduto);
+            await forceSync();
+    
             showGlobalToast('success', 'Produto adicionado com sucesso', '', 4000);
-
-            // Limpar formulário
+    
             setNome('');
             setQuantidade('');
             setQuantidadeMinima('');
-            //setDescricao('');
             setPhotoUri(null);
             setUnidadeMedida('unidade');
             setIsDetalhesVisible(false);
-
+    
         } catch (error) {
             console.error('Erro ao salvar produto:', error);
             showGlobalToast('error', 'Erro ao salvar produto', 'Tente novamente mais tarde', 4000);
@@ -388,28 +396,29 @@ export default function ControleEstoque({ navigation }: any) {
             setIsSaving(false);
         }
     };
-
+    
     const handleUpdateQuantidadeMinima = async () => {
         if (!checkOnlineStatus()) return;
         if (!selectedProduto || !novaQuantidadeMinima) return;
-
+    
         try {
-            // Atualizar no Firestore
-            await firestore()
-                .collection('produtos')
-                .doc(selectedProduto.id)
-                .update({
+            if (selectedProduto.id) {
+                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
                     quantidadeMinima: novaQuantidadeMinima,
                     updatedAt: new Date().toISOString(),
                 });
-
+            } else {
+                console.error('Produto ID is undefined');
+                showGlobalToast('error', 'Erro ao atualizar', 'ID do produto não encontrado', 4000);
+            }
+    
             showGlobalToast(
                 'success',
                 'Quantidade mínima atualizada',
                 'Alerta de estoque atualizado com sucesso',
                 4000
             );
-
+    
             setNovaQuantidadeMinima('');
             setIsEditMinimoVisible(false);
             setSelectedProduto(prev => prev ? {

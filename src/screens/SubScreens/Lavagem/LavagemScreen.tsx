@@ -1,24 +1,26 @@
-import React, { useEffect, useState } from 'react';
 import {
-    View,
-    ScrollView,
-    StyleSheet,
-    Dimensions,
-    TouchableOpacity,
-} from 'react-native';
-import {
+    Button,
+    Card,
+    ProgressBar,
     Surface,
     Text,
-    Card,
-    Button,
-    ProgressBar,
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { customTheme } from '../../../theme/theme';
-import ModernHeader from '../../../assets/components/ModernHeader';
-import firestore from '@react-native-firebase/firestore';
+import {
+    Dimensions,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { Firestore, collection, getDocs, query, where } from 'firebase/firestore'
+import React, { useEffect, useState } from 'react';
+
 import ActionButton from '../../../assets/components/ActionButton';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { LowStockAlert } from './Components/LowStockAlert';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { customTheme } from '../../../theme/theme';
+import { db } from '../../../../firebase';
 import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
 
 const { width } = Dimensions.get('window');
@@ -72,11 +74,6 @@ export default function LavagemScreen({ navigation }: any) {
         return date;
     };
 
-    // Função para formatar a data no formato do Firestore
-    const formatFirestoreDate = (date: Date) => {
-        return date.toLocaleDateString('pt-BR');
-    };
-
     const fetchLavagemStats = async () => {
         try {
             // Datas de referência como timestamps
@@ -87,9 +84,7 @@ export default function LavagemScreen({ navigation }: any) {
             const inicioMes = getStartOfMonth();
 
             // Buscar todos os registros da coleção registroLavagens
-            const snapshot = await firestore()
-                .collection('registroLavagens')
-                .get();
+            const snapshot = await getDocs(collection(db(), 'registroLavagens'))
 
             let statsHoje = 0;
             let statsSemana = 0;
@@ -186,10 +181,7 @@ export default function LavagemScreen({ navigation }: any) {
 
     const fetchAgendamentosPendentes = async () => {
         try {
-            const snapshot = await firestore()
-                .collection('agendamentos')
-                .where('concluido', '==', false)
-                .get();
+            const snapshot = await getDocs(query(collection(db(), 'registroLavagens'), where('concluido', '==', false)));
 
             setAgendamentosPendentes(snapshot.size);
         } catch (error) {

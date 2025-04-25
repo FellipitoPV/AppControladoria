@@ -1,31 +1,33 @@
-import React, { useEffect, useState, useRef } from 'react';
 import {
-    View,
-    ScrollView,
-    StyleSheet,
-    SafeAreaView,
-    TouchableOpacity,
     ActivityIndicator,
-    RefreshControl,
     Alert,
     Animated,
     Dimensions,
-    Image
+    Image,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { Surface, Text, Card, Chip, Badge } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore from '@react-native-firebase/firestore';
-import ModernHeader from '../../../assets/components/ModernHeader';
-import { useUser } from '../../../contexts/userContext';
-import { showGlobalToast } from '../../../helpers/GlobalApi';
-import { customTheme } from '../../../theme/theme';
-import { hasAccess } from '../../Adm/types/admTypes';
+import { Badge, Card, Chip, Surface, Text } from 'react-native-paper';
+import React, { useEffect, useRef, useState } from 'react';
+import { Timestamp, collection, deleteDoc, doc, getDocs, orderBy, query, where } from 'firebase/firestore';
+import { getTipoLavagemDetails, getTipoVeiculoColor, getTipoVeiculoIcon, getTipoVeiculoLabel } from './Components/utils/lavagemUtils';
+
 import ConfirmationModal from '../../../assets/components/ConfirmationModal';
 import DetalheLavagemModal from './Components/DetalheLavagemModal';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { getTipoLavagemDetails, getTipoVeiculoColor, getTipoVeiculoIcon, getTipoVeiculoLabel } from './Components/utils/lavagemUtils';
 import { LavagemInterface } from './Components/lavagemTypes';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { customTheme } from '../../../theme/theme';
+import { db } from '../../../../firebase';
+import { format } from 'date-fns';
+import { hasAccess } from '../../Adm/types/admTypes';
+import { ptBR } from 'date-fns/locale';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
+import { useUser } from '../../../contexts/userContext';
 
 interface HistoricoLavagemProps {
     navigation: any;
@@ -61,25 +63,29 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
     const buscarLavagens = async () => {
         try {
             setLoading(true);
-
+    
             // Buscar lavagens no novo formato
-            const snapshotNovo = await firestore()
-                .collection('registroLavagens')
-                .orderBy('createdAt', 'desc')
-                .get();
-
+            const snapshotNovo = await getDocs(
+                query(
+                    collection(db(), 'registroLavagens'),
+                    orderBy('createdAt', 'desc')
+                )
+            );
+    
             // Buscar lavagens no formato antigo
-            const snapshotAntigo = await firestore()
-                .collection('registroLavagens')
-                .where('placaVeiculo', '!=', null)
-                .get();
-
+            const snapshotAntigo = await getDocs(
+                query(
+                    collection(db(), 'registroLavagens'),
+                    where('placaVeiculo', '!=', null)
+                )
+            );
+    
             console.log(`Quantidade de lavagens novas: ${snapshotNovo.size}`);
             console.log(`Quantidade de lavagens antigas: ${snapshotAntigo.size}`);
-
+    
             // Processar dados do novo formato
             const dadosNovos = snapshotNovo.docs
-                .filter(doc => !doc.data().placaVeiculo) // Filtrar apenas os registros do novo formato
+                .filter(doc => !doc.data().placaVeiculo)
                 .map(doc => {
                     const data = doc.data() as LavagemInterface;
                     return {
@@ -98,7 +104,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                         agendamentoId: data.agendamentoId || null
                     } as LavagemInterface;
                 });
-
+    
             // Processar dados do formato antigo
             const dadosAntigos = snapshotAntigo.docs.map(doc => {
                 const data = doc.data();
@@ -109,7 +115,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                     hora: data.hora || '',
                     veiculo: {
                         placa: data.placaVeiculo || '',
-                        tipo: 'veiculo', // Assumir que todos são veículos no formato antigo
+                        tipo: 'veiculo',
                         numeroEquipamento: null
                     },
                     tipoLavagem: data.tipoLavagem || '',
@@ -117,25 +123,24 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                         nome: p.produto || '',
                         quantidade: parseInt(p.quantidade) || 0
                     })),
-                    fotos: [], // Iniciar vazio
+                    fotos: [],
                     observacoes: data.observacoes || '',
-                    status: 'concluido', // Assumir que todos são concluídos no formato antigo
+                    status: 'concluido',
                     createdAt: data.createdAt ?
                         (typeof data.createdAt === 'string' ?
-                            firestore.Timestamp.fromDate(new Date(data.createdAt)) :
+                            Timestamp.fromDate(new Date(data.createdAt)) :
                             data.createdAt
                         ) : null,
                     createdBy: null,
                     agendamentoId: null
                 } as LavagemInterface;
             });
-
+    
             // Processar fotos do formato antigo
             for (const lavagem of dadosAntigos) {
                 const docData = snapshotAntigo.docs.find(doc => doc.id === lavagem.id)?.data();
-
+    
                 if (docData) {
-                    // Tratar photoUrls como array de strings
                     if (docData.photoUrls && Array.isArray(docData.photoUrls)) {
                         lavagem.fotos = docData.photoUrls.map((url: string, index: number) => ({
                             url,
@@ -143,7 +148,6 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                             path: `legado/${lavagem.id}/${index}`
                         }));
                     }
-                    // Tratar photoUris como array de objetos
                     else if (docData.photoUris && Array.isArray(docData.photoUris)) {
                         lavagem.fotos = docData.photoUris.map((uri: any, index: number) => ({
                             url: uri.url || uri.uri || uri,
@@ -153,41 +157,39 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                     }
                 }
             }
-
+    
             // Combinar dados dos dois formatos
             const todosDados = [...dadosNovos, ...dadosAntigos];
-
-            // Ordenar por data de criação (mais recente primeiro)
+    
+            // Ordenar por data de criação
             const dadosOrdenados = todosDados.sort((a, b) => {
                 let dataA = 0;
                 let dataB = 0;
-
-                // Para objetos com createdAt como Timestamp
+    
                 if (a.createdAt && typeof a.createdAt.toDate === 'function') {
                     dataA = a.createdAt.toDate().getTime();
                 }
-                // Para strings de data ISO
                 else if (a.createdAt && typeof a.createdAt === 'string') {
                     dataA = new Date(a.createdAt).getTime();
                 }
-
+    
                 if (b.createdAt && typeof b.createdAt.toDate === 'function') {
                     dataB = b.createdAt.toDate().getTime();
                 }
                 else if (b.createdAt && typeof b.createdAt === 'string') {
                     dataB = new Date(b.createdAt).getTime();
                 }
-
+    
                 return dataB - dataA;
             });
-
+    
             setTodasLavagens(dadosOrdenados);
-
+    
             // Aplicar paginação inicial
             const primeiraPagina = dadosOrdenados.slice(0, ITEMS_PER_PAGE);
             setLavagens(primeiraPagina);
             setHasMore(dadosOrdenados.length > ITEMS_PER_PAGE);
-
+    
             // Animar entrada dos cards
             Animated.parallel([
                 Animated.timing(fadeAnim, {
@@ -201,13 +203,24 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                     useNativeDriver: true
                 })
             ]).start();
-
+    
         } catch (error) {
             console.error('Erro ao buscar lavagens:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível carregar o histórico de lavagens', 3000);
         } finally {
             setLoading(false);
             setRefreshing(false);
+        }
+    };
+    
+    const handleDelete = async (id: string) => {
+        try {
+            await deleteDoc(doc(db(), 'registroLavagens', id));
+            showGlobalToast('success', 'Sucesso', 'Registro excluído com sucesso', 3000);
+            onRefresh();
+        } catch (error) {
+            console.error('Erro ao excluir registro:', error);
+            Alert.alert("Erro", "Não foi possível excluir o registro.");
         }
     };
 
@@ -280,21 +293,6 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
             aplicarFiltros();
         }
     }, [filterStatus, filterVeiculo, filterTipoLavagem]);
-
-    const handleDelete = async (id: string) => {
-        try {
-            await firestore()
-                .collection('registroLavagens')
-                .doc(id)
-                .delete();
-
-            showGlobalToast('success', 'Sucesso', 'Registro excluído com sucesso', 3000);
-            onRefresh();
-        } catch (error) {
-            console.error('Erro ao excluir registro:', error);
-            Alert.alert("Erro", "Não foi possível excluir o registro.");
-        }
-    };
 
     const formatarData = (data: string) => {
         if (!data) return '';

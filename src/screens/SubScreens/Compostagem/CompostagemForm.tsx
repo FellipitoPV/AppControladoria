@@ -1,30 +1,34 @@
-import React, { useEffect, useState } from 'react';
 import {
-    View,
-    ScrollView,
-    TouchableOpacity,
-    StyleSheet,
+    ActivityIndicator,
     Alert,
     Linking,
     Platform,
     SafeAreaView,
-    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { Text, Surface, TextInput, Button } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { Button, Surface, Text, TextInput } from 'react-native-paper';
 import { CameraOptions, launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { PERMISSIONS, check, RESULTS, request } from 'react-native-permissions';
-import { useUser } from '../../../contexts/userContext';
-import { customTheme } from '../../../theme/theme';
-import { showGlobalToast, saveCompostagemData } from '../../../helpers/GlobalApi';
-import { allResponsaveis, Compostagem } from '../../../helpers/Types';
+import { Compostagem, allResponsaveis } from '../../../helpers/Types';
+import { PERMISSIONS, RESULTS, check, request } from 'react-native-permissions';
+import React, { useEffect, useState } from 'react';
+import { doc, setDoc } from 'firebase/firestore'; // For the commented-out Firestore operation
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { saveCompostagemData, showGlobalToast } from '../../../helpers/GlobalApi';
+
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Dropdown } from 'react-native-element-dropdown';
-import PhotoGallery from '../Lavagem/Components/PhotoGallery';
 import FullScreenImage from '../../../assets/components/FullScreenImage';
-import storage from '@react-native-firebase/storage';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ModernHeader from '../../../assets/components/ModernHeader';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import PhotoGallery from '../Lavagem/Components/PhotoGallery';
+import { customTheme } from '../../../theme/theme';
+import { dbStorage } from '../../../../firebase';
+import { useUser } from '../../../contexts/userContext';
+import dayjs, { Dayjs } from 'dayjs';
 
 type RootStackParamList = {
     Home: undefined;
@@ -38,9 +42,8 @@ interface Props {
 const CompostagemForm: React.FC<Props> = ({ navigation }) => {
     const { userInfo } = useUser();
 
-    const [data, setData] = useState<Date>(new Date());
+    const [dataEHora, setDataEHora] = useState<Dayjs>(dayjs());
     const [mostrarSeletorData, setMostrarSeletorData] = useState<boolean>(false);
-    const [hora, setHora] = useState<Date>(new Date());
     const [mostrarSeletorHora, setMostrarSeletorHora] = useState<boolean>(false);
     const [tempAmb, setTempAmb] = useState<string>('');
     const [tempBase, setTempBase] = useState<string>('');
@@ -261,17 +264,10 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
     };
 
     // Data e hora
-    const onChangeDate = (event: any, selectedDate?: Date) => {
+    const onChangeDate = (event: any, selectedDate?: Dayjs) => {
         setMostrarSeletorData(false);
         if (selectedDate) {
-            setData(selectedDate);
-        }
-    };
-
-    const onChangeTime = (event: any, selectedTime?: Date) => {
-        setMostrarSeletorHora(false);
-        if (selectedTime) {
-            setHora(selectedTime);
+            setDataEHora(selectedDate);
         }
     };
 
@@ -331,13 +327,15 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                     const fileName = `compostagem_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
 
                     // Referência para o local de armazenamento no Firebase
-                    const reference = storage().ref(`compostagem_photos/${fileName}`);
+                    const reference = ref(dbStorage(), `compostagem_photos/${fileName}`);
 
                     // Faz o upload do arquivo
-                    await reference.putFile(photo.uri);
+                    const response = await fetch(photo.uri);
+                    const blob = await response.blob();
+                    await uploadBytes(reference, blob);
 
                     // Obtém a URL de download
-                    const url = await reference.getDownloadURL();
+                    const url = await getDownloadURL(reference);
 
                     photoUrls.push(url);
 
@@ -359,12 +357,9 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                 }
             }
 
-            const dataFormatted = data.toISOString().split('T')[0];
-            const horaFormatted = hora.toTimeString().split(' ')[0].slice(0, 5);
-
             const compostagemData: Compostagem = {
-                data: dataFormatted,
-                hora: horaFormatted,
+                data: dayjs(dataEHora).format("DD/MM/YYYY"),
+                hora: dayjs(dataEHora).format("hh:mm"),
                 responsavel: userInfo?.user ?? '',
                 leira,
                 isMedicaoRotina,
@@ -388,13 +383,12 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
             // Atribuir o ID customizado ao campo 'id' na compostagem
             compostagemData.id = compostagemId;
 
-            // Salvar no Firestore com o ID customizado
-            // await firestore().collection('compostagens').doc(compostagemId).set(compostagemData);
+            // Salvar no Firestore com o ID customizado (modular API, commented out as in original)
+            // await setDoc(doc(db(), 'compostagens', compostagemId), compostagemData);
 
             const result = await saveCompostagemData(compostagemData, userInfo?.cargo);
 
             if (result.success) {
-
                 showGlobalToast(
                     result.isOffline ? 'info' : 'success',
                     result.isOffline ? 'Salvamento Offline' : 'Salvamento Concluído',
@@ -608,7 +602,7 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                                     <TextInput
                                         mode="outlined"
                                         label="Data"
-                                        value={data.toLocaleDateString()}
+                                        value={dayjs(dataEHora).toISOString()}
                                         editable={false}
                                         style={[styles.input, styles.rowInput]}
                                         left={<TextInput.Icon icon={() => (
@@ -620,27 +614,8 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                                         )} />}
                                     />
                                 </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.dateTimeContainer}
-                                    onPress={() => setMostrarSeletorHora(true)}
-                                >
-                                    <TextInput
-                                        mode="outlined"
-                                        label="Hora"
-                                        value={hora.toLocaleTimeString().slice(0, 5)}
-                                        editable={false}
-                                        style={[styles.input, styles.rowInput]}
-                                        left={<TextInput.Icon icon={() => (
-                                            <Icon
-                                                name="clock"
-                                                size={24}
-                                                color={customTheme.colors.primary}
-                                            />
-                                        )} />}
-                                    />
-                                </TouchableOpacity>
                             </View>
+
                         </View>
                     </View>
 
@@ -1074,22 +1049,11 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                 {mostrarSeletorData && (
                     <DateTimePicker
                         testID="dateTimePicker"
-                        value={data}
+                        value={dataEHora.toDate()} // Convert Dayjs to Date
                         mode="date"
                         is24Hour={true}
                         display="default"
-                        onChange={onChangeDate}
-                    />
-                )}
-
-                {mostrarSeletorHora && (
-                    <DateTimePicker
-                        testID="timeTimePicker"
-                        value={hora}
-                        mode="time"
-                        is24Hour={true}
-                        display="default"
-                        onChange={onChangeTime}
+                        onChange={(event, selectedDate) => onChangeDate(event, selectedDate ? dayjs(selectedDate) : undefined)} // Convert Date to Dayjs
                     />
                 )}
 

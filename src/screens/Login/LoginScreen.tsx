@@ -1,26 +1,28 @@
-import React, { useState, useEffect } from 'react';
 import {
-    View,
-    StyleSheet,
-    TouchableOpacity,
+    ActivityIndicator,
+    BackHandler,
+    Dimensions,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
-    ActivityIndicator,
-    Dimensions,
-    BackHandler,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { TextInput, Text } from 'react-native-paper';
-import auth from '@react-native-firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { showGlobalToast } from '../../helpers/GlobalApi';
-import { useUser } from '../../contexts/userContext';
-import { customTheme } from '../../theme/theme';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import WelcomeScreen from './WelcomeScreen';
+import React, { useEffect, useState } from 'react';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
+import { Text, TextInput } from 'react-native-paper';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import SaveButton from '../../assets/components/SaveButton';
 import { StackNavigationProp } from '@react-navigation/stack';
+import WelcomeScreen from './WelcomeScreen';
+import { auth } from '../../../firebase';
+import { customTheme } from '../../theme/theme';
+import { showGlobalToast } from '../../helpers/GlobalApi';
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { useUser } from '../../contexts/userContext';
 
 const inputTheme = {
     colors: {
@@ -99,7 +101,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
         try {
             // Autenticação no Firebase
-            await auth().signInWithEmailAndPassword(
+            await signInWithEmailAndPassword(auth(),
                 loginEmail.toLowerCase(),
                 loginPassword
             );
@@ -196,7 +198,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             setIsCheckingAuth(false);
         }
     };
-
 
     if (isCheckingAuth) {
         return (

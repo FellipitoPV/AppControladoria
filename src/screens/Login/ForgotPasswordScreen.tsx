@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
 import {
-    View,
-    StyleSheet,
-    TouchableOpacity,
+    Dimensions,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
-    Dimensions,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { TextInput, Text } from 'react-native-paper';
-import auth from '@react-native-firebase/auth';
+import React, { useState } from 'react';
+import { Text, TextInput } from 'react-native-paper';
+
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import { auth } from '../../../firebase';
 import { customTheme } from '../../theme/theme';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 
 const inputTheme = {
@@ -37,13 +39,13 @@ export default function ForgotPasswordScreen({ navigation }: any) {
             );
             return;
         }
-
+    
         setIsLoading(true);
-
+    
         try {
             // Send password reset email using Firebase
-            await auth().sendPasswordResetEmail(email.toLowerCase());
-
+            await sendPasswordResetEmail(auth(), email.toLowerCase());
+    
             // Show success message
             showGlobalToast(
                 'success',
@@ -51,19 +53,19 @@ export default function ForgotPasswordScreen({ navigation }: any) {
                 'Verifique sua caixa de entrada para redefinir sua senha',
                 5000
             );
-
+    
             // Navigate back to login screen
             navigation.goBack();
         } catch (error: any) {
             // Handle specific Firebase Auth errors
             let errorMessage = 'Erro ao enviar email de redefinição';
-
+    
             if (error.code === 'auth/invalid-email') {
                 errorMessage = 'Endereço de email inválido';
             } else if (error.code === 'auth/user-not-found') {
                 errorMessage = 'Nenhum usuário encontrado com este email';
             }
-
+    
             showGlobalToast(
                 'error',
                 'Erro',

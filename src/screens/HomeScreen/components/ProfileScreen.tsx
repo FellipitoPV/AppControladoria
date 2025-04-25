@@ -1,22 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import * as ImagePicker from 'react-native-image-picker';
+
 import {
-    View,
+    ActivityIndicator,
+    FlatList,
+    Image,
+    Platform,
+    ScrollView,
     StyleSheet,
     TouchableOpacity,
-    ScrollView,
-    Platform,
-    ActivityIndicator,
-    Image,
+    View,
 } from 'react-native';
-import { Text, Dialog, Portal, TextInput } from 'react-native-paper';
+import { Button, Dialog, Portal, Text, TextInput } from 'react-native-paper';
+import { PERMISSIONS, request } from 'react-native-permissions';
+import React, { useEffect, useState } from 'react';
+
+import Contacts from 'react-native-contacts';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import storage from '@react-native-firebase/storage';
-import firestore from '@react-native-firebase/firestore';
-import * as ImagePicker from 'react-native-image-picker';
-import { useUser } from '../../../contexts/userContext';
-import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { customTheme } from '../../../theme/theme';
+import firestore from '@react-native-firebase/firestore';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
+import storage from '@react-native-firebase/storage';
+import { useUser } from '../../../contexts/userContext';
+import { v4 as uuidv4 } from 'uuid';
 
 // Componente para itens de informação
 interface InfoItemProps {
@@ -59,13 +65,44 @@ const InfoItem: React.FC<InfoItemProps> = ({ icon, label, value, onEdit }) => {
     );
 };
 
+// Componente para item de contato de emergência
+interface EmergencyContactItemProps {
+    contact: {
+        id: string;
+        nome: string;
+        parentesco: string;
+        telefone: string;
+    };
+}
+
+const EmergencyContactItem: React.FC<EmergencyContactItemProps> = ({ contact }) => {
+    return (
+        <View style={styles.emergencyContactItem}>
+            <View style={styles.emergencyContactInfo}>
+                <Text style={styles.emergencyContactName}>{contact.nome}</Text>
+                <Text style={styles.emergencyContactDetail}>
+                    Parentesco: {contact.parentesco || 'Não informado'}
+                </Text>
+                <Text style={styles.emergencyContactDetail}>
+                    Telefone: {contact.telefone}
+                </Text>
+            </View>
+        </View>
+    );
+};
+
 export default function ProfileScreen() {
     const { userInfo, updateUserInfo, updateUserPhoto } = useUser();
     const [loading, setLoading] = useState(false);
     const [dialogVisible, setDialogVisible] = useState(false);
     const [phoneDialogVisible, setPhoneDialogVisible] = useState(false);
+    const [emergencyDialogVisible, setEmergencyDialogVisible] = useState(false);
+    const [emergencyMode, setEmergencyMode] = useState<'manual' | 'import' | null>(null);
     const [newRamal, setNewRamal] = useState('');
     const [newPhone, setNewPhone] = useState('');
+    const [emergencyName, setEmergencyName] = useState('');
+    const [emergencyPhone, setEmergencyPhone] = useState('');
+    const [emergencyParentesco, setEmergencyParentesco] = useState('');
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
     useEffect(() => {
@@ -103,11 +140,8 @@ export default function ProfileScreen() {
                     const storageRef = storage().ref(`profile-photos/${userInfo?.id}/${filename}`);
 
                     try {
-                        // Upload da imagem
                         await storageRef.putFile(imageUri);
                         const downloadUrl = await storageRef.getDownloadURL();
-
-                        // Atualizar foto no perfil
                         await updateUserPhoto(downloadUrl);
 
                         showGlobalToast(
@@ -143,12 +177,7 @@ export default function ProfileScreen() {
 
     const updateRamal = async () => {
         if (!newRamal.trim()) {
-            showGlobalToast(
-                'info',
-                'Atenção',
-                'Digite um ramal válido',
-                3000
-            );
+            showGlobalToast('info', 'Atenção', 'Digite um ramal válido', 3000);
             return;
         }
 
@@ -158,26 +187,15 @@ export default function ProfileScreen() {
                 .collection('users')
                 .doc(userInfo?.id)
                 .update({
-                    ramal: newRamal.trim()
+                    ramal: newRamal.trim(),
                 });
 
             await updateUserInfo();
             setDialogVisible(false);
             setNewRamal('');
-
-            showGlobalToast(
-                'success',
-                'Sucesso',
-                'Ramal atualizado!',
-                3000
-            );
+            showGlobalToast('success', 'Sucesso', 'Ramal atualizado!', 3000);
         } catch (error) {
-            showGlobalToast(
-                'error',
-                'Erro',
-                'Não foi possível atualizar o ramal',
-                3000
-            );
+            showGlobalToast('error', 'Erro', 'Não foi possível atualizar o ramal', 3000);
         } finally {
             setLoading(false);
         }
@@ -185,12 +203,7 @@ export default function ProfileScreen() {
 
     const updatePhone = async () => {
         if (!newPhone.trim()) {
-            showGlobalToast(
-                'info',
-                'Atenção',
-                'Digite um telefone válido',
-                3000
-            );
+            showGlobalToast('info', 'Atenção', 'Digite um telefone válido', 3000);
             return;
         }
 
@@ -200,24 +213,111 @@ export default function ProfileScreen() {
                 .collection('users')
                 .doc(userInfo?.id)
                 .update({
-                    telefone: formatPhoneNumber(newPhone.trim())
+                    telefone: formatPhoneNumber(newPhone.trim()),
                 });
 
             await updateUserInfo();
             setPhoneDialogVisible(false);
             setNewPhone('');
-
-            showGlobalToast(
-                'success',
-                'Sucesso',
-                'Telefone atualizado!',
-                3000
-            );
+            showGlobalToast('success', 'Sucesso', 'Telefone atualizado!', 3000);
         } catch (error) {
+            showGlobalToast('error', 'Erro', 'Não foi possível atualizar o telefone', 3000);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const requestContactsPermission = async () => {
+        try {
+            const permission =
+                Platform.OS === 'ios'
+                    ? PERMISSIONS.IOS.CONTACTS
+                    : PERMISSIONS.ANDROID.READ_CONTACTS;
+
+            const result = await request(permission);
+            if (result === 'granted') {
+                selectContact();
+            } else {
+                showGlobalToast(
+                    'error',
+                    'Permissão negada',
+                    'Você precisa permitir o acesso aos contatos.',
+                    3000
+                );
+            }
+        } catch (error) {
+            console.error('Erro ao solicitar permissão:', error);
             showGlobalToast(
                 'error',
                 'Erro',
-                'Não foi possível atualizar o telefone',
+                'Não foi possível solicitar permissão.',
+                3000
+            );
+        }
+    };
+
+    const selectContact = async () => {
+        try {
+            const contact = await Contacts.openContactForm({
+                givenName: '',
+                familyName: '',
+                phoneNumbers: [{ label: 'mobile', number: '' }],
+            });
+            if (contact) {
+                const name = contact.givenName || contact.displayName || '';
+                const phoneNumber = contact.phoneNumbers[0]?.number || '';
+                setEmergencyName(name);
+                setEmergencyPhone(phoneNumber.replace(/\D/g, '')); // Limpa formatação
+                setEmergencyMode('manual'); // Após importar, permite edição manual
+            } else {
+                showGlobalToast('info', 'Atenção', 'Nenhum contato selecionado.', 3000);
+            }
+        } catch (error) {
+            console.error('Erro ao selecionar contato:', error);
+            showGlobalToast(
+                'error',
+                'Erro',
+                'Não foi possível selecionar o contato.',
+                3000
+            );
+        }
+    };
+
+    const updateEmergencyContact = async () => {
+        if (!emergencyName.trim() || !emergencyPhone.trim()) {
+            showGlobalToast('info', 'Atenção', 'Preencha nome e telefone do contato.', 3000);
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const newContact = {
+                id: uuidv4(),
+                nome: emergencyName.trim(),
+                parentesco: emergencyParentesco.trim() || 'Não informado',
+                telefone: formatPhoneNumber(emergencyPhone.trim()),
+            };
+
+            await firestore()
+                .collection('users')
+                .doc(userInfo?.id)
+                .update({
+                    emergency_contacts: firestore.FieldValue.arrayUnion(newContact),
+                });
+
+            await updateUserInfo();
+            setEmergencyDialogVisible(false);
+            setEmergencyName('');
+            setEmergencyPhone('');
+            setEmergencyParentesco('');
+            setEmergencyMode(null);
+            showGlobalToast('success', 'Sucesso', 'Contato de emergência adicionado!', 3000);
+        } catch (error) {
+            console.error('Erro ao adicionar contato de emergência:', error);
+            showGlobalToast(
+                'error',
+                'Erro',
+                'Não foi possível adicionar o contato de emergência.',
                 3000
             );
         } finally {
@@ -244,7 +344,7 @@ export default function ProfileScreen() {
 
     return (
         <ScrollView style={styles.container}>
-            {/* Header */}
+            {/* Header de Meu Perfil */}
             <View style={styles.header}>
                 <MaterialIcons
                     name="person"
@@ -253,9 +353,7 @@ export default function ProfileScreen() {
                 />
                 <Text style={styles.headerTitle}>Meu Perfil</Text>
             </View>
-
-            {/* Foto do Perfil */}
-            <View style={styles.photoContainer}>
+            <View style={styles.profileHeader}>
                 <TouchableOpacity
                     onPress={handlePhotoSelect}
                     disabled={uploadingPhoto}
@@ -290,36 +388,61 @@ export default function ProfileScreen() {
                         </>
                     )}
                 </TouchableOpacity>
-                <Text style={styles.userName}>{userInfo.user}</Text>
-                <View style={styles.cargoChip}>
-                    <Text style={styles.cargoText}>{userInfo.cargo}</Text>
+                <View style={styles.profileInfo}>
+                    <Text style={styles.userName}>{userInfo.user}</Text>
+                    <Text style={styles.userEmail}>{userInfo.email}</Text>
+                    <View style={styles.cargoChip}>
+                        <Text style={styles.cargoText}>{userInfo.cargo}</Text>
+                    </View>
                 </View>
             </View>
 
-            {/* Informações do Usuário */}
-            <View style={styles.infoContainer}>
-                <InfoItem
-                    icon="email"
-                    label="Email"
-                    value={userInfo.email}
-                />
-                <InfoItem
-                    icon="work"
-                    label="Cargo"
-                    value={userInfo.cargo}
-                />
-                <InfoItem
-                    icon="phone"
-                    label="Telefone"
-                    value={userInfo.telefone ?? 'Não informado'}
-                    onEdit={() => setPhoneDialogVisible(true)}
-                />
-                <InfoItem
-                    icon="dialpad"
-                    label="Ramal"
-                    value={userInfo.ramal ?? 'Não informado'}
-                    onEdit={() => setDialogVisible(true)}
-                />
+            {/* Informações de Contato */}
+            <View style={styles.sectionContainer}>
+                <Text style={styles.sectionTitle}>Informações de Contato</Text>
+                <View style={styles.infoContainer}>
+                    <InfoItem
+                        icon="phone"
+                        label="Telefone"
+                        value={userInfo.telefone ?? 'Não informado'}
+                        onEdit={() => setPhoneDialogVisible(true)}
+                    />
+                    <InfoItem
+                        icon="dialpad"
+                        label="Ramal"
+                        value={userInfo.ramal ?? 'Não informado'}
+                        onEdit={() => setDialogVisible(true)}
+                    />
+                </View>
+            </View>
+
+            {/* Contatos de Emergência */}
+            <View style={styles.sectionContainer}>
+                <View style={styles.emergencyHeader}>
+                    <Text style={styles.sectionTitle}>Contatos de Emergência</Text>
+                    <TouchableOpacity
+                        onPress={() => setEmergencyDialogVisible(true)}
+                        style={styles.addButton}
+                    >
+                        <MaterialIcons
+                            name="add"
+                            size={24}
+                            color={customTheme.colors.primary}
+                        />
+                    </TouchableOpacity>
+                </View>
+                {(userInfo.emergency_contacts ?? []).length > 0 ? (
+                    <FlatList
+                        data={userInfo.emergency_contacts}
+                        keyExtractor={(item) => item.id}
+                        renderItem={({ item }) => <EmergencyContactItem contact={item} />}
+                        scrollEnabled={false}
+                    />
+                ) : (
+                    <Text style={styles.noContactsText}>
+                        Nenhum contato de emergência cadastrado.
+                    </Text>
+                )}
             </View>
 
             {/* Dialog de Ramal */}
@@ -401,6 +524,95 @@ export default function ProfileScreen() {
                     </Dialog.Actions>
                 </Dialog>
             </Portal>
+
+            {/* Dialog de Contato de Emergência */}
+            <Portal>
+                <Dialog
+                    visible={emergencyDialogVisible}
+                    onDismiss={() => {
+                        setEmergencyDialogVisible(false);
+                        setEmergencyMode(null);
+                        setEmergencyName('');
+                        setEmergencyPhone('');
+                        setEmergencyParentesco('');
+                    }}
+                    style={styles.dialog}
+                >
+                    <Dialog.Title>Adicionar Contato de Emergência</Dialog.Title>
+                    <Dialog.Content>
+                        {emergencyMode === null ? (
+                            <View style={styles.emergencyModeContainer}>
+                                <Button
+                                    mode="contained"
+                                    onPress={() => setEmergencyMode('manual')}
+                                    style={styles.emergencyModeButton}
+                                    labelStyle={styles.emergencyModeButtonText}
+                                >
+                                    Inserir Manualmente
+                                </Button>
+                                <Button
+                                    mode="contained"
+                                    onPress={requestContactsPermission}
+                                    style={styles.emergencyModeButton}
+                                    labelStyle={styles.emergencyModeButtonText}
+                                >
+                                    Importar da Agenda
+                                </Button>
+                            </View>
+                        ) : (
+                            <>
+                                <TextInput
+                                    label="Nome do Contato"
+                                    value={emergencyName}
+                                    onChangeText={setEmergencyName}
+                                    style={styles.dialogInput}
+                                />
+                                <TextInput
+                                    label="Parentesco"
+                                    value={emergencyParentesco}
+                                    onChangeText={setEmergencyParentesco}
+                                    style={styles.dialogInput}
+                                />
+                                <TextInput
+                                    label="Telefone do Contato"
+                                    value={emergencyPhone}
+                                    onChangeText={setEmergencyPhone}
+                                    keyboardType="number-pad"
+                                    maxLength={11}
+                                    style={styles.dialogInput}
+                                />
+                            </>
+                        )}
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <TouchableOpacity
+                            onPress={() => {
+                                setEmergencyDialogVisible(false);
+                                setEmergencyMode(null);
+                                setEmergencyName('');
+                                setEmergencyPhone('');
+                                setEmergencyParentesco('');
+                            }}
+                            style={styles.dialogCancelButton}
+                        >
+                            <Text style={styles.dialogCancelText}>Cancelar</Text>
+                        </TouchableOpacity>
+                        {emergencyMode !== null && (
+                            <TouchableOpacity
+                                onPress={updateEmergencyContact}
+                                style={styles.dialogConfirmButton}
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator color="white" size="small" />
+                                ) : (
+                                    <Text style={styles.dialogConfirmText}>Salvar</Text>
+                                )}
+                            </TouchableOpacity>
+                        )}
+                    </Dialog.Actions>
+                </Dialog>
+            </Portal>
         </ScrollView>
     );
 }
@@ -429,14 +641,16 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: customTheme.colors.primary,
     },
-    photoContainer: {
+    profileHeader: {
+        flexDirection: 'row',
+        padding: 20,
         alignItems: 'center',
-        padding: 24,
+        gap: 16,
     },
     photoWrapper: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
+        width: 100,
+        height: 100,
+        borderRadius: 50,
         overflow: 'hidden',
         justifyContent: 'center',
         alignItems: 'center',
@@ -467,25 +681,40 @@ const styles = StyleSheet.create({
         padding: 8,
         alignItems: 'center',
     },
+    profileInfo: {
+        flex: 1,
+        gap: 4,
+    },
     userName: {
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: '600',
-        marginTop: 16,
         color: '#333',
     },
+    userEmail: {
+        fontSize: 16,
+        color: '#666',
+    },
     cargoChip: {
-        marginTop: 8,
         paddingHorizontal: 12,
         paddingVertical: 4,
         backgroundColor: `${customTheme.colors.primary}20`,
         borderRadius: 16,
+        alignSelf: 'flex-start',
     },
     cargoText: {
         color: customTheme.colors.primary,
         fontWeight: '500',
     },
-    infoContainer: {
+    sectionContainer: {
         padding: 20,
+        gap: 16,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: customTheme.colors.primary,
+    },
+    infoContainer: {
         gap: 16,
     },
     infoItem: {
@@ -522,6 +751,42 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         backgroundColor: customTheme.colors.primary,
     },
+    emergencyHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    addButton: {
+        padding: 8,
+        backgroundColor: `${customTheme.colors.primary}20`,
+        borderRadius: 20,
+    },
+    emergencyContactItem: {
+        backgroundColor: 'rgba(0, 0, 0, 0.02)',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 0, 0, 0.05)',
+        marginBottom: 8,
+    },
+    emergencyContactInfo: {
+        gap: 4,
+    },
+    emergencyContactName: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#333',
+    },
+    emergencyContactDetail: {
+        fontSize: 14,
+        color: '#666',
+    },
+    noContactsText: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginTop: 16,
+    },
     dialog: {
         backgroundColor: 'white',
         borderRadius: 12,
@@ -549,6 +814,18 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     dialogConfirmText: {
+        color: 'white',
+        fontWeight: '500',
+    },
+    emergencyModeContainer: {
+        flexDirection: 'column',
+        gap: 12,
+        marginTop: 12,
+    },
+    emergencyModeButton: {
+        backgroundColor: customTheme.colors.primary,
+    },
+    emergencyModeButtonText: {
         color: 'white',
         fontWeight: '500',
     },

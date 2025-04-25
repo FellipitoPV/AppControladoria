@@ -1,21 +1,22 @@
-import { useState, useMemo, useRef } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity, Modal, SafeAreaView } from 'react-native';
-import { Text, Surface, TextInput, Button, Avatar, Chip, Divider, Dialog, Portal } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import firestore from '@react-native-firebase/firestore';
+import { Avatar, Button, Chip, Dialog, Divider, Portal, Surface, Text, TextInput } from 'react-native-paper';
+import { EQUIPAMENTOS, IAgendamentoLavagem, PLACAS_VEICULOS, TIPOS_LAVAGEM } from './Components/lavagemTypes';
+import { Modal, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { useMemo, useRef, useState } from 'react';
 
-import ModernHeader from '../../../assets/components/ModernHeader';
-import { useNetwork } from '../../../contexts/NetworkContext';
-import { useUser } from '../../../contexts/userContext';
-import { customTheme } from '../../../theme/theme';
-import { PLACAS_VEICULOS, EQUIPAMENTOS, TIPOS_LAVAGEM, IAgendamentoLavagem } from './Components/lavagemTypes';
-import { showGlobalToast } from '../../../helpers/GlobalApi';
-import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
+import ConfirmationModal from '../../../assets/components/ConfirmationModal';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Dropdown } from 'react-native-element-dropdown';
 import { DropdownRef } from '../../../helpers/Types';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import ModernHeader from '../../../assets/components/ModernHeader';
 import NovoAgendamentoModal from './Components/NovoAgendamentoModal';
-import ConfirmationModal from '../../../assets/components/ConfirmationModal';
+import { customTheme } from '../../../theme/theme';
+import { db } from '../../../../firebase';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
+import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
+import { useNetwork } from '../../../contexts/NetworkContext';
+import { useUser } from '../../../contexts/userContext';
 
 export default function AgendamentoLavagem({ navigation }: any) {
     const { isOnline } = useNetwork();
@@ -75,14 +76,14 @@ export default function AgendamentoLavagem({ navigation }: any) {
                 );
                 return;
             }
-
+    
             // Cria um prefixo especial para administradores no ID
             const adminPrefix = userInfo?.cargo === 'Administrador' ? '0_ADM_' : '';
-
+    
             // Gera um ID personalizado
             const idPersonalizado = `${adminPrefix}${new Date().getTime()}`;
-
-            await firestore().collection('agendamentos').doc(idPersonalizado).set({
+    
+            await setDoc(doc(db(), 'agendamentos', idPersonalizado), {
                 placa: data.isEquipamento
                     ? `${adminPrefix}${data.placaSelecionada}-${data.numeroEquipamento}`
                     : `${adminPrefix}${data.placaSelecionada}`,
@@ -93,45 +94,22 @@ export default function AgendamentoLavagem({ navigation }: any) {
                 func: userInfo?.cargo,
                 createBy: userInfo?.user,
             });
-
+    
             await forceSync('agendamentos');
-
+    
             showGlobalToast('success', 'Sucesso', 'Agendamento criado com sucesso', 4000);
         } catch (error) {
             console.error('Erro ao agendar lavagem:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível criar o agendamento', 4000);
         }
     };
-
-    const admLevel = useMemo(() => {
-        if (!userInfo) return false;
-
-        // Verifica se é admin geral do sistema
-        if (userInfo.cargo?.toLowerCase() === 'administrador') return true;
-
-        // Verifica se tem nível 3 no módulo de lavagem
-        const washAccess = userInfo?.acesso?.find(access => access.moduleId === 'lavagem');
-        if (washAccess)
-            return washAccess?.level >= 3 || false;
-        else
-            return false;
-
-    }, [userInfo]);
-
-    const resetForm = () => {
-        setPlacaSelecionada('');
-        setTipoLavagemSelecionado('');
-        setDataSelecionada(new Date());
-        setNumeroEquipamento('');
-        setIsEquipamento(false);
-    };
-
+    
     const AgendamentoCard = ({ item, onPress }: { item: IAgendamentoLavagem; onPress: () => void }) => {
         const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
+    
         const handleDelete = async () => {
             try {
-                await firestore().collection('agendamentos').doc(item.id).delete();
+                await deleteDoc(doc(db(), 'agendamentos', item.id));
                 await forceSync('agendamentos');
                 showGlobalToast('success', 'Sucesso', 'Agendamento excluído com sucesso', 4000);
             } catch (error) {
@@ -139,7 +117,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                 showGlobalToast('error', 'Erro', 'Não foi possível excluir o agendamento', 4000);
             }
         };
-
+    
         return (
             <>
                 <Surface style={[styles.card, item.concluido && styles.cardConcluido]}>
@@ -153,7 +131,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                             styles.cardGradient,
                             { backgroundColor: item.concluido ? customTheme.colors.surfaceVariant : customTheme.colors.primary }
                         ]} />
-
+    
                         <View style={styles.cardContent}>
                             {/* Cabeçalho do Card */}
                             <View style={styles.cardHeader}>
@@ -189,7 +167,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                         </View>
                                     </View>
                                 </View>
-
+    
                                 {/* Botão de exclusão para administradores */}
                                 {admLevel && !item.concluido && (
                                     <TouchableOpacity
@@ -204,9 +182,9 @@ export default function AgendamentoLavagem({ navigation }: any) {
                                     </TouchableOpacity>
                                 )}
                             </View>
-
+    
                             <Divider style={styles.divider} />
-
+    
                             {/* Informações da Lavagem */}
                             <View style={styles.cardFooter}>
                                 <View style={styles.footerInfo}>
@@ -245,7 +223,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
                         </View>
                     </TouchableOpacity>
                 </Surface>
-
+    
                 {/* Modal de confirmação de exclusão */}
                 <ConfirmationModal
                     visible={showDeleteConfirm}
@@ -263,6 +241,21 @@ export default function AgendamentoLavagem({ navigation }: any) {
             </>
         );
     };
+
+    const admLevel = useMemo(() => {
+        if (!userInfo) return false;
+
+        // Verifica se é admin geral do sistema
+        if (userInfo.cargo?.toLowerCase() === 'administrador') return true;
+
+        // Verifica se tem nível 3 no módulo de lavagem
+        const washAccess = userInfo?.acesso?.find(access => access.moduleId === 'lavagem');
+        if (washAccess)
+            return washAccess?.level >= 3 || false;
+        else
+            return false;
+
+    }, [userInfo]);
 
     const handleCardPress = (item: IAgendamentoLavagem) => {
         if (item.concluido) return;

@@ -1,27 +1,28 @@
+import { Button, Chip, Surface, Text, TextInput } from 'react-native-paper';
+import { Dimensions, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { EQUIPAMENTOS, PLACAS_VEICULOS, ProdutoEstoque, TIPOS_LAVAGEM } from './Components/lavagemTypes';
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, SafeAreaView, Dimensions, TouchableOpacity } from 'react-native';
-import { Surface, Text, TextInput, Button, Chip } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import { customTheme } from '../../../theme/theme';
-import { useUser } from '../../../contexts/userContext';
+import { Timestamp, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { db, dbStorage } from '../../../../firebase';
+import { getDownloadURL, uploadBytes } from 'firebase/storage';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Dropdown } from 'react-native-element-dropdown';
-import ModernHeader from '../../../assets/components/ModernHeader';
-import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import Toast from 'react-native-toast-message';
-import { showGlobalToast } from '../../../helpers/GlobalApi';
-import PhotoGallery from './Components/PhotoGallery';
 import FullScreenImage from '../../../assets/components/FullScreenImage';
-import { EQUIPAMENTOS, PLACAS_VEICULOS, ProdutoEstoque, TIPOS_LAVAGEM } from './Components/lavagemTypes';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
-import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import SaveButton from '../../../assets/components/SaveButton';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { Photo } from '../Operacao/rdo/Types/rdoTypes';
 import PhotoGalleryEnhanced from './Components/PhotoGallery';
 import { ProductsContainer } from './Components/ProductSelection';
-import { Photo } from '../Operacao/rdo/Types/rdoTypes';
+import { RouteProp } from '@react-navigation/native';
+import SaveButton from '../../../assets/components/SaveButton';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { customTheme } from '../../../theme/theme';
+import { ref } from 'firebase/storage';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
+import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
+import { useUser } from '../../../contexts/userContext';
 
 const { width } = Dimensions.get('window');
 
@@ -435,10 +436,10 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
     const handleSave = async () => {
         if (!validateForm()) return;
         setIsLoading(true);
-
+    
         try {
             let fotosUpload = [...existingPhotos];
-
+    
             if (photos.length > 0) {
                 showGlobalToast('info', 'Aguarde', 'Fazendo upload das fotos...', 15000);
                 const uploadPromises = photos.map(async (photo) => {
@@ -446,70 +447,71 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                         const timestamp = Date.now();
                         const random = Math.random().toString(36).substring(7);
                         const filename = `lavagens/${timestamp}_${random}.jpg`;
-                        const reference = storage().ref(filename);
+                        const reference = ref(dbStorage(), filename);
                         const response = await fetch(photo.uri || '');
                         const blob = await response.blob();
-                        await reference.put(blob);
-                        const url = await reference.getDownloadURL();
+                        await uploadBytes(reference, blob);
+                        const url = await getDownloadURL(reference);
                         return { url, timestamp, path: filename };
                     } catch (error) {
                         console.error('Erro no upload da foto:', error);
                         throw new Error('Falha no upload da foto');
                     }
                 });
-
+    
                 const novasFotos = await Promise.all(uploadPromises);
                 fotosUpload = [...fotosUpload, ...novasFotos.map(foto => ({ ...foto, id: foto.timestamp.toString() }))];
             }
-
+    
             showGlobalToast('info', 'Aguarde', 'Atualizando estoque de produtos...', 2000);
-
+    
             // Se for uma edição, buscar os produtos usados anteriormente
             let produtosAnteriores = [];
             if (mode === 'edit' && lavagemData?.produtos) {
                 produtosAnteriores = lavagemData.produtos;
             }
-
+    
             // Criar um mapa dos produtos anteriores
             const produtosAnterioresMap: { [key: string]: number } = {};
             produtosAnteriores.forEach((prod: { nome: string; quantidade: number }) => {
                 (produtosAnterioresMap as any)[prod.nome] = prod.quantidade;
             });
-
+    
             // Atualizar estoque dos produtos
             for (const produtoSelecionado of selectedProducts) {
                 const produtoEstoque = produtos.find(p => p.nome === produtoSelecionado.nome);
-
+    
                 if (produtoEstoque) {
                     const quantidadeAtual = parseInt(produtoEstoque.quantidade);
                     const quantidadeUsada = parseInt(produtoSelecionado.quantidade);
-
+    
                     // Se for administrador, não altera o estoque
                     if (userInfo?.cargo?.toLowerCase() === 'administrador') {
                         continue;
                     }
-
+    
                     const novaQuantidade = quantidadeAtual - quantidadeUsada;
-
+    
                     if (novaQuantidade < 0) {
                         throw new Error(`Quantidade insuficiente do produto ${produtoEstoque.nome}`);
                     }
-
+    
                     // Atualizar no Firestore
-                    await firestore()
-                        .collection('produtos')
-                        .doc(produtoEstoque.id)
-                        .update({
+                    if (produtoEstoque.id) {
+                        await updateDoc(doc(db(), 'produtos', produtoEstoque.id), {
                             quantidade: novaQuantidade.toString(),
                             updatedAt: new Date().toISOString()
                         });
+                    } else {
+                        console.error('ProdutoEstoque ID is undefined');
+                    }
                 }
             }
-
+    
             await forceSync('produtos');
-
+    
             showGlobalToast('info', 'Aguarde', mode === 'edit' ? 'Atualizando informações da lavagem...' : 'Salvando informações da lavagem...', 2000);
-
+    
             const registroLavagem = {
                 responsavel: formData.responsavel,
                 data: formatDate(selectedDate),
@@ -527,57 +529,50 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
                 fotos: fotosUpload,
                 observacoes: formData.observacoes,
                 status: "concluido",
-                updatedAt: firestore.Timestamp.now(),
-                createdAt: firestore.Timestamp.now(),
+                updatedAt: Timestamp.now(),
+                createdAt: Timestamp.now(),
                 createdBy: userInfo?.id || null,
                 agendamentoId: agendamentoId || null
             };
-
+    
             console.log("Salvo como um:", registroLavagem.veiculo.tipo)
-
+    
             if (mode === 'create') {
-                registroLavagem.createdAt = firestore.Timestamp.now();
+                registroLavagem.createdAt = Timestamp.now();
                 registroLavagem.createdBy = userInfo?.id || null;
                 registroLavagem.agendamentoId = agendamentoId || null;
             }
-
+    
             if (mode === 'edit' && lavagemData?.id) {
-                await firestore()
-                    .collection('registroLavagens')
-                    .doc(lavagemData.id)
-                    .update(registroLavagem);
+                await updateDoc(doc(db(), 'registroLavagens', lavagemData.id), registroLavagem);
                 showGlobalToast('success', 'Sucesso', 'Lavagem atualizada com sucesso', 4000);
             } else {
                 const timestamp = Date.now();
                 const customId = userInfo?.cargo.toLowerCase() === 'administrador'
                     ? `0_ADM_${timestamp}`
                     : timestamp.toString();
-
-                await firestore()
-                    .collection('registroLavagens')
-                    .doc(customId)
-                    .set(registroLavagem);
-
+    
+                await setDoc(doc(db(), 'registroLavagens', customId), registroLavagem);
+    
                 if (agendamentoId && marcarAgendamentoComoConcluido) {
                     await marcarAgendamentoComoConcluido(agendamentoId);
                 }
-
+    
                 showGlobalToast('success', 'Sucesso', 'Lavagem registrada com sucesso', 4000);
             }
-
+    
             navigation?.goBack();
         } catch (error: any) {
             console.error('Erro ao processar lavagem:', error);
             const errorMessage = error.message === 'Falha no upload da foto'
                 ? 'Erro no upload das fotos. Verifique sua conexão.'
                 : error.message || 'Não foi possível finalizar a lavagem';
-
+    
             showGlobalToast('error', 'Erro', errorMessage, 4000);
         } finally {
             setIsLoading(false);
         }
     };
-
 
     const handleDateChange = (event: any, date?: Date) => {
         setShowDatePicker(false);

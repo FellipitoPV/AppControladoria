@@ -238,6 +238,14 @@ export interface User {
     area?: string | null;      // Agora aceita null
     acesso?: UserAccess[];
     photoURL?: string;
+    emergency_contacts?: emergencyContact[]; // Adicionando a propriedade emergencyContact
+}
+
+interface emergencyContact {
+    id: string;
+    nome: string;
+    parentesco: string;
+    telefone: string;
 }
 
 // Funções úteis para verificação de acesso

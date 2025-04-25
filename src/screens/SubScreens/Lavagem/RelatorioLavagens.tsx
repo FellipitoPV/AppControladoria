@@ -1,31 +1,33 @@
-import React, { useState, useEffect } from 'react';
 import {
-    View,
-    StyleSheet,
+    Alert,
+    Modal,
     SafeAreaView,
     ScrollView,
+    StyleSheet,
     TouchableOpacity,
-    Alert,
-    Modal
+    View
 } from 'react-native';
 import {
-    Text,
     Button,
-    Surface,
     Card,
-    Divider
+    Divider,
+    Surface,
+    Text
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore from '@react-native-firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
+
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { PLACAS_VEICULOS, RegistroLavagem } from './Components/lavagemTypes';
-import ModernHeader from '../../../assets/components/ModernHeader';
-import { showGlobalToast } from '../../../helpers/GlobalApi';
-import { customTheme } from '../../../theme/theme';
 import FilterCard from './Components/Filtros/FilterCard';
-import RelatorioContent from './Components/RelatorioContent';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { PLACAS_VEICULOS } from './Components/lavagemTypes';
 import RNFS from 'react-native-fs';
+import RelatorioContent from './Components/RelatorioContent';
 import Share from 'react-native-share';
+import { customTheme } from '../../../theme/theme';
+import { db } from '../../../../firebase';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
 
 interface Lavagem {
     id: string;
@@ -68,10 +70,8 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
 
     const carregarPlacasDisponiveis = async () => {
         try {
-            const querySnapshot = await firestore()
-                .collection('veiculos')
-                .get();
-
+            const querySnapshot = await getDocs(collection(db(), 'veiculos'));
+    
             const placas = querySnapshot.docs.map(doc => {
                 const data = doc.data();
                 return {
@@ -80,18 +80,80 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                     numeroEquipamento: data.numeroEquipamento
                 };
             });
-
+    
             setPlacasDisponiveis(placas);
         } catch (error) {
             console.error('Erro ao carregar placas:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível carregar as placas disponíveis', 4000);
         }
     };
-
-    const isValidPlate = (placa: string) => {
-        return PLACAS_VEICULOS.some(item => item.value === placa);
+    
+    const buscarLavagensPorIntervalo = async () => {
+        try {
+            setLoading(true);
+    
+            const inicioFormatado = formatarData(dataInicio);
+            const fimFormatado = formatarData(dataFim);
+    
+            if (dataInicio > dataFim) {
+                Alert.alert(
+                    'Erro',
+                    'A data de início deve ser anterior ou igual à data final.'
+                );
+                return;
+            }
+    
+            const queryNovos = query(
+                collection(db(), 'lavagens'),
+                where('data', '>=', inicioFormatado),
+                where('data', '<=', fimFormatado),
+                orderBy('data', 'desc')
+            );
+    
+            const queryAntigos = query(
+                collection(db(), 'registroLavagens'),
+                where('data', '>=', inicioFormatado),
+                where('data', '<=', fimFormatado),
+                orderBy('data', 'desc')
+            );
+    
+            const [snapshotNovos, snapshotAntigos] = await Promise.all([
+                getDocs(queryNovos),
+                getDocs(queryAntigos)
+            ]);
+    
+            const dadosNovos = snapshotNovos.docs.map(doc => normalizarLavagem({
+                id: doc.id,
+                ...doc.data()
+            }));
+    
+            const dadosAntigos = snapshotAntigos.docs.map(doc => normalizarLavagem({
+                id: doc.id,
+                ...doc.data()
+            }));
+    
+            let todosDados = [...dadosNovos, ...dadosAntigos].sort((a, b) => {
+                const dataA = new Date(a.data.split('/').reverse().join('-') + ' ' + a.hora);
+                const dataB = new Date(b.data.split('/').reverse().join('-') + ' ' + b.hora);
+                return dataB.getTime() - dataA.getTime();
+            });
+    
+            // Aplicar filtro de placas se houver placas selecionadas
+            if (placasFiltradas.length > 0) {
+                todosDados = todosDados.filter(lavagem =>
+                    placasFiltradas.includes(lavagem.veiculo.placa.toUpperCase())
+                );
+            }
+    
+            setLavagens(todosDados);
+    
+        } catch (error) {
+            console.error('Erro ao buscar lavagens:', error);
+            showGlobalToast('error', 'Erro', 'Não foi possível gerar o relatório', 4000);
+        } finally {
+            setLoading(false);
+        }
     };
-
 
     // Converte as datas para o formato pt-BR
     const formatarData = (data: Date) => {
@@ -142,70 +204,7 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
         };
     };
 
-    const buscarLavagensPorIntervalo = async () => {
-        try {
-            setLoading(true);
-
-            const inicioFormatado = formatarData(dataInicio);
-            const fimFormatado = formatarData(dataFim);
-
-            if (dataInicio > dataFim) {
-                Alert.alert(
-                    'Erro',
-                    'A data de início deve ser anterior ou igual à data final.'
-                );
-                return;
-            }
-
-            const queryNovos = firestore()
-                .collection('lavagens')
-                .where('data', '>=', inicioFormatado)
-                .where('data', '<=', fimFormatado)
-                .orderBy('data', 'desc');
-
-            const queryAntigos = firestore()
-                .collection('registroLavagens')
-                .where('data', '>=', inicioFormatado)
-                .where('data', '<=', fimFormatado)
-                .orderBy('data', 'desc');
-
-            const [snapshotNovos, snapshotAntigos] = await Promise.all([
-                queryNovos.get(),
-                queryAntigos.get()
-            ]);
-
-            const dadosNovos = snapshotNovos.docs.map(doc => normalizarLavagem({
-                id: doc.id,
-                ...doc.data()
-            }));
-
-            const dadosAntigos = snapshotAntigos.docs.map(doc => normalizarLavagem({
-                id: doc.id,
-                ...doc.data()
-            }));
-
-            let todosDados = [...dadosNovos, ...dadosAntigos].sort((a, b) => {
-                const dataA = new Date(a.data.split('/').reverse().join('-') + ' ' + a.hora);
-                const dataB = new Date(b.data.split('/').reverse().join('-') + ' ' + b.hora);
-                return dataB.getTime() - dataA.getTime();
-            });
-
-            // Aplicar filtro de placas se houver placas selecionadas
-            if (placasFiltradas.length > 0) {
-                todosDados = todosDados.filter(lavagem =>
-                    placasFiltradas.includes(lavagem.veiculo.placa.toUpperCase())
-                );
-            }
-
-            setLavagens(todosDados);
-
-        } catch (error) {
-            console.error('Erro ao buscar lavagens:', error);
-            showGlobalToast('error', 'Erro', 'Não foi possível gerar o relatório', 4000);
-        } finally {
-            setLoading(false);
-        }
-    };
+    
 
     const verificarConectividade = async () => {
         try {

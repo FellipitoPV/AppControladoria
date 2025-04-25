@@ -1,37 +1,37 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    View,
-    StyleSheet,
-    Image,
-    ScrollView,
-    TouchableOpacity,
-    Dimensions,
-    SafeAreaView,
     ActivityIndicator,
+    Animated,
     BackHandler,
-    Animated
+    Dimensions,
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import {
+    Card,
     Surface,
     Text,
-    Card,
 } from 'react-native-paper';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-import { version } from '../../../package.json';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import NotificationService from '../../service/NotificationService';
+import QuickActionsGrid from './components/QuickActionsGrid';
+import UpdateNotification from './components/UpdateNotification';
+import UserInfoModal from './components/UserInfoModal';
+import UserProfileModal from './components/UserInfoModal';
 import checkPermissions from '../../helpers/checkPermissions';
 import { customTheme } from '../../theme/theme';
-import { useUser } from '../../contexts/userContext';
+import { firebase } from '@react-native-firebase/firestore';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 import { useAppUpdater } from '../../helpers/AppUpdater';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNetwork } from '../../contexts/NetworkContext';
-import QuickActionsGrid from './components/QuickActionsGrid';
-import UserInfoModal from './components/UserInfoModal';
-import UpdateNotification from './components/UpdateNotification';
-import storage from '@react-native-firebase/storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import UserProfileModal from './components/UserInfoModal';
-import NotificationService from '../../service/NotificationService';
+import { useUser } from '../../contexts/userContext';
+import { version } from '../../../package.json';
 
 interface CarouselItem {
     id: string;
@@ -193,7 +193,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     const fetchCarouselImages = async () => {
         try {
             // Referência para a pasta no Storage
-            const storageRef = storage().ref('carrosel_Mobile');
+            const storageRef = firebase.storage().ref('carrosel_Mobile');
 
             // Lista todos os itens na pasta
             const result = await storageRef.list();

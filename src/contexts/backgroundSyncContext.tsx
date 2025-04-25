@@ -1,9 +1,11 @@
 // backgroundSyncContext.tsx
-import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
-import firestore from '@react-native-firebase/firestore';
+
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
 import { IAgendamentoLavagem } from '../screens/SubScreens/Lavagem/Components/lavagemTypes';
+import NetInfo from '@react-native-community/netinfo';
+import { firebase } from '@react-native-firebase/firestore';
 
 export type UnidadeMedida = 'unidade' | 'kilo' | 'litro';
 
@@ -123,7 +125,7 @@ export function BackgroundSyncProvider({ children }: { children: React.ReactNode
         }
 
         logSync('Firestore', `Configurando listener para ${collectionName}`);
-        const subscriber = firestore()
+        const subscriber = firebase.firestore()
             .collection(collectionName)
             .onSnapshot(
                 querySnapshot => {
@@ -275,7 +277,7 @@ export function BackgroundSyncProvider({ children }: { children: React.ReactNode
             // Verificar configuração do Firebase
             try {
                 logSync('Firestore', 'Verificando conexão com Firebase');
-                const testRef = await firestore().collection('produtos').limit(1).get();
+                const testRef = await firebase.firestore().collection('produtos').limit(1).get();
                 logSync('Firestore', `Conexão de teste com Firebase: ${testRef.empty ? 'Vazia' : 'OK'}`);
                 if (testRef.empty) {
                     logSync('Warning', 'A coleção de produtos parece estar vazia no Firebase');
@@ -317,7 +319,7 @@ export function BackgroundSyncProvider({ children }: { children: React.ReactNode
             // Se estiver online, atualiza no Firestore
             if (netInfo.isConnected) {
                 logSync('Agendamento', `Atualizando agendamento ${agendamentoId} no Firestore`);
-                await firestore()
+                await firebase.firestore()
                     .collection('agendamentos')
                     .doc(agendamentoId)
                     .update({ concluido: true });

@@ -1,17 +1,19 @@
-import { useEffect, useState } from 'react';
+import { Card, Surface, Text } from 'react-native-paper';
 import {
-    View,
+    Dimensions,
     ScrollView,
     StyleSheet,
-    Dimensions,
     TouchableOpacity,
+    View,
 } from 'react-native';
-import { Surface, Text, Card } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { customTheme } from '../../../theme/theme';
-import ModernHeader from '../../../assets/components/ModernHeader';
-import firestore from '@react-native-firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+
 import { Compostagem } from '../../../helpers/Types';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { customTheme } from '../../../theme/theme';
+import { db } from '../../../../firebase';
 
 const { width } = Dimensions.get('window');
 
@@ -47,33 +49,30 @@ export default function CompostagemScreen({ navigation }: any) {
         return date;
     };
 
-    // Função para formatar a data no formato do Firestore
-    const formatFirestoreDate = (date: Date) => {
-        return date.toLocaleDateString('pt-BR');
-    };
-
     const fetchCompostagemStats = async () => {
         try {
             // Datas de referência
             const hoje = new Date();
             hoje.setHours(0, 0, 0, 0);
-
+    
             const inicioSemana = getStartOfWeek();
             const inicioMes = getStartOfMonth();
-
+    
             // Buscar todas as compostagens
-            const querySnapshot = await firestore()
-                .collection('compostagens')
-                .where('isMedicaoRotina', '==', false)
-                .get();
-
+            const querySnapshot = await getDocs(
+                query(
+                    collection(db(), 'compostagens'),
+                    where('isMedicaoRotina', '==', false)
+                )
+            );
+    
             let statsHoje = 0;
             let statsSemana = 0;
             let statsMes = 0;
-
+    
             querySnapshot.docs.forEach(doc => {
                 const compostagem = doc.data() as Compostagem;
-
+    
                 // Log para compostagens sem responsável ou com responsável vazio
                 if (!compostagem.responsavel || compostagem.responsavel.trim() === '') {
                     console.warn('Compostagem sem responsável:', {
@@ -82,16 +81,16 @@ export default function CompostagemScreen({ navigation }: any) {
                         leira: compostagem.leira
                     });
                 }
-
+    
                 if (!compostagem.data) {
                     console.warn('Documento sem data encontrado:', doc.id);
                     return;
                 }
-
+    
                 try {
                     // Pegar a data original no formato YYYY-MM-DD
                     const [ano, mes, dia] = compostagem.data.split('-');
-
+    
                     // Criar a data usando o timezone local
                     const dataCompostagem = new Date(
                         parseInt(ano),
@@ -99,7 +98,7 @@ export default function CompostagemScreen({ navigation }: any) {
                         parseInt(dia)
                     );
                     dataCompostagem.setHours(0, 0, 0, 0);
-
+    
                     // Debug
                     // console.log('Processando compostagem:', {
                     //     id: doc.id,
@@ -110,7 +109,7 @@ export default function CompostagemScreen({ navigation }: any) {
                     //     timestampCompostagem: dataCompostagem.getTime(),
                     //     timestampHoje: hoje.getTime()
                     // });
-
+    
                     // Comparação por timestamp para maior precisão
                     if (dataCompostagem.getTime() === hoje.getTime()) {
                         statsHoje++;
@@ -125,7 +124,7 @@ export default function CompostagemScreen({ navigation }: any) {
                     console.error('Erro ao processar data:', compostagem.data, error);
                 }
             });
-
+    
             // Debug final
             // console.log('Estatísticas finais:', {
             //     hoje: statsHoje,
@@ -138,7 +137,7 @@ export default function CompostagemScreen({ navigation }: any) {
             //         inicioMes: inicioMes.toLocaleDateString('pt-BR')
             //     }
             // });
-
+    
             return {
                 hoje: statsHoje,
                 semana: statsSemana,

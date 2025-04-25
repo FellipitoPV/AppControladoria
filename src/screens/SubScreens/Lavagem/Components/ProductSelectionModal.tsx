@@ -1,24 +1,25 @@
-import React, { useEffect, useRef, useState } from 'react';
 import {
-    View,
+    Animated,
+    Dimensions,
+    Modal,
     StyleSheet,
     TouchableOpacity,
-    Modal,
-    Dimensions,
-    Animated
+    View
 } from 'react-native';
 import {
+    Button,
     Surface,
     Text,
-    TextInput,
-    Button
+    TextInput
 } from 'react-native-paper';
+import React, { useEffect, useRef, useState } from 'react';
+
 import { Dropdown } from 'react-native-element-dropdown';
-import { showGlobalToast } from '../../../../helpers/GlobalApi';
-import { customTheme } from '../../../../theme/theme';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { DropdownRef } from '../../../../helpers/Types';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { ProdutoEstoque } from './lavagemTypes';
+import { customTheme } from '../../../../theme/theme';
+import { showGlobalToast } from '../../../../helpers/GlobalApi';
 
 interface ProductSelectionModalProps {
     visible: boolean;
@@ -130,19 +131,20 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     };
 
     const handleQuantityChange = (text: string) => {
-        // Remove qualquer caractere não numérico
+        // Remove qualquer caractere não numérico, mas permite string vazia
         const numericText = text.replace(/[^0-9]/g, '');
+
+        // Se estiver vazio, define como string vazia
+        if (numericText === '') {
+            setQuantity('');
+            return;
+        }
 
         // Get the current ProdutoEstoque's available stock
         const produtoSelecionado = availableProducts.find(p => p.nome === selectedProduct);
         const quantidadeEstoque = parseInt(produtoSelecionado?.quantidade || '0');
 
-        let quantidadeDigitada = parseInt(numericText || '0');
-
-        // Se não digitou nada, define como 1
-        if (isNaN(quantidadeDigitada) || quantidadeDigitada < 1) {
-            quantidadeDigitada = 1;
-        }
+        let quantidadeDigitada = parseInt(numericText);
 
         // Se excedeu o estoque, limita na quantidade máxima
         if (quantidadeDigitada > quantidadeEstoque) {
@@ -278,7 +280,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                                 mode="contained"
                                 onPress={handleConfirm}
                                 style={styles.confirmButton}
-                                disabled={!selectedProduct}
+                                disabled={!selectedProduct || !quantity} // Adicione || !quantity aqui
                             >
                                 {initialProduct ? 'Atualizar' : 'Adicionar'}
                             </Button>

@@ -1,21 +1,23 @@
-import React, { useState } from 'react';
 import {
-    View,
-    StyleSheet,
-    TouchableOpacity,
+    ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
     ScrollView,
-    ActivityIndicator,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { TextInput, Text } from 'react-native-paper';
+import React, { useState } from 'react';
+import { Text, TextInput } from 'react-native-paper';
+import { auth, db } from '../../../firebase';
+import { collection, doc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import { customTheme } from '../../theme/theme';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import { showGlobalToast } from '../../helpers/GlobalApi';
 import SaveButton from '../../assets/components/SaveButton';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { customTheme } from '../../theme/theme';
+import { showGlobalToast } from '../../helpers/GlobalApi';
 
 const inputTheme = {
     colors: {
@@ -54,7 +56,7 @@ export default function RegisterScreen({ navigation }: any) {
             );
             return;
         }
-
+    
         if (senha !== confirmarSenha) {
             showGlobalToast(
                 'error',
@@ -64,7 +66,7 @@ export default function RegisterScreen({ navigation }: any) {
             );
             return;
         }
-
+    
         if (senha.length < 6) {
             showGlobalToast(
                 'info',
@@ -74,16 +76,18 @@ export default function RegisterScreen({ navigation }: any) {
             );
             return;
         }
-
+    
         setLoading(true);
-
+    
         try {
             // Verificar se já existe um usuário com este email
-            const userSnapshot = await firestore()
-                .collection('users')
-                .where('email', '==', email.toLowerCase())
-                .get();
-
+            const userSnapshot = await getDocs(
+                query(
+                    collection(db(), 'users'),
+                    where('email', '==', email.toLowerCase())
+                )
+            );
+    
             if (!userSnapshot.empty) {
                 showGlobalToast(
                     'info',
@@ -93,13 +97,14 @@ export default function RegisterScreen({ navigation }: any) {
                 );
                 return;
             }
-
+    
             // Criar usuário no Authentication
-            const userCredential = await auth().createUserWithEmailAndPassword(
+            const userCredential = await createUserWithEmailAndPassword(
+                auth(),
                 email.toLowerCase(),
                 senha
             );
-
+    
             // Normalizar nome para ID
             const normalizeNameForId = (name: string) => {
                 return name
@@ -110,44 +115,41 @@ export default function RegisterScreen({ navigation }: any) {
                     .replace(/_+/g, '_')
                     .replace(/^_|_$/g, '');
             };
-
+    
             // Formatar o nome com primeiras letras maiúsculas
             const formattedName = formatName(nome);
             const customUserId = normalizeNameForId(formattedName);
-
+    
             // Criar documento do usuário
-            await firestore()
-                .collection('users')
-                .doc(customUserId)
-                .set({
-                    user: formattedName,
-                    email: email.toLowerCase(),
-                    cargo: area === 'Administrativo' ? 'Administrativo' : 'Operacional',
-                    area: area,
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                    authUid: userCredential.user.uid,
-                    acesso: area === 'Operacional' ? [
-                        {
-                            moduleId: 'operacao',
-                            level: 1
-                        }
-                    ] : []
-                });
-
+            await setDoc(doc(db(), 'users', customUserId), {
+                user: formattedName,
+                email: email.toLowerCase(),
+                cargo: area === 'Administrativo' ? 'Administrativo' : 'Operacional',
+                area: area,
+                createdAt: serverTimestamp(),
+                authUid: userCredential.user.uid,
+                acesso: area === 'Operacional' ? [
+                    {
+                        moduleId: 'operacao',
+                        level: 1
+                    }
+                ] : []
+            });
+    
             showGlobalToast(
                 'success',
                 'Sucesso',
                 'Conta criada com sucesso!',
                 3000
             );
-
+    
             // Voltar para a tela de login
             navigation.goBack();
-
+    
         } catch (error: any) {
             console.error('Erro ao registrar:', error);
             let errorMessage = 'Erro ao criar conta';
-
+    
             if (error.code === 'auth/email-already-in-use') {
                 errorMessage = 'Este email já está em uso';
             } else if (error.code === 'auth/invalid-email') {
@@ -157,7 +159,7 @@ export default function RegisterScreen({ navigation }: any) {
             } else if (error.code === 'auth/weak-password') {
                 errorMessage = 'Senha muito fraca';
             }
-
+    
             showGlobalToast(
                 'error',
                 'Erro',

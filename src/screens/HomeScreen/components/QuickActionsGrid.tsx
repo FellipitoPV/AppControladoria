@@ -1,16 +1,18 @@
 // QuickActionsGrid.js
-import React, { useCallback, useState } from 'react';
+
 import {
-    View,
-    ScrollView,
-    TouchableOpacity,
-    StyleSheet,
     Dimensions,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { Text } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { customTheme } from '../../../theme/theme';
 import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { Text } from 'react-native-paper';
+import { customTheme } from '../../../theme/theme';
 import { useUser } from '../../../contexts/userContext';
 
 interface QuickAction {
@@ -50,17 +52,17 @@ const QuickActionsGrid = () => {
                 minLevel: 1 // Nível básico para acesso
             }
         },
-        // {
-        //     id: '2',
-        //     title: 'Compostagem',
-        //     icon: 'sprout',
-        //     color: customTheme.colors.primary,
-        //     route: 'CompostagemScreen',
-        //     access: {
-        //         moduleId: 'compostagem',
-        //         minLevel: 1 // Nível básico para acesso
-        //     }
-        // },
+        {
+            id: '2',
+            title: 'Compostagem',
+            icon: 'sprout',
+            color: customTheme.colors.primary,
+            route: 'CompostagemScreen',
+            access: {
+                moduleId: 'compostagem',
+                minLevel: 1 // Nível básico para acesso
+            }
+        },
         {
             id: '3',
             title: 'Controladoria',
@@ -95,7 +97,7 @@ const QuickActionsGrid = () => {
             }
         },
         {
-            id: '97', 
+            id: '97',
             title: 'Reuniao',
             icon: 'presentation',
             color: customTheme.colors.primary,

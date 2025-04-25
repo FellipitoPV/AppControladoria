@@ -1,10 +1,11 @@
 import { AppRegistry, Platform } from 'react-native';
+
 import App from './App';
-import { name as appName } from './app.json';
 import { PaperProvider } from 'react-native-paper';
-import { customTheme } from './src/theme/theme';
 import PushNotification from 'react-native-push-notification';
 import PushNotificationIOS from '@react-native-community/push-notification-ios';
+import { name as appName } from './app.json';
+import { customTheme } from './src/theme/theme';
 
 // Inicializar a variável global para armazenar a navegação pendente quando o app é aberto via notificação
 global.pendingNotificationNavigation = null;

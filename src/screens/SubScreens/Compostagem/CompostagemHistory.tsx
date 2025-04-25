@@ -1,24 +1,26 @@
-import React, { useState, useEffect, useCallback } from 'react';
 import {
-    View,
-    StyleSheet,
-    ScrollView,
-    RefreshControl,
-    Modal,
-    TouchableOpacity,
-    Image,
     ActivityIndicator,
-    SafeAreaView,
     Alert,
+    Image,
+    Modal,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { Text, Card } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import { Card, Text } from 'react-native-paper';
+import React, { useCallback, useEffect, useState } from 'react';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { db, dbStorage } from '../../../../firebase';
+import { deleteObject, ref } from 'firebase/storage';
+
 import { Compostagem } from '../../../helpers/Types';
-import { customTheme } from '../../../theme/theme';
-import ModernHeader from '../../../assets/components/ModernHeader';
 import FullScreenImage from '../../../assets/components/FullScreenImage';
-import storage from '@react-native-firebase/storage';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { customTheme } from '../../../theme/theme';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 
 interface DateFilterValue {
@@ -58,16 +60,17 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
     // Modificar a função fetchCompostagens para suportar paginação
     const fetchCompostagens = async () => {
         try {
-            let query: FirebaseFirestoreTypes.Query = firestore()
-                .collection('compostagens');
+            let compostagemQuery = query(collection(db(), 'compostagens'));
 
             if (dateFilter) {
-                query = query
-                    .where('data', '>=', dateFilter.startDate)
-                    .where('data', '<=', dateFilter.endDate);
+                compostagemQuery = query(
+                    compostagemQuery,
+                    where('data', '>=', dateFilter.startDate),
+                    where('data', '<=', dateFilter.endDate)
+                );
             }
 
-            const snapshot = await query.get();
+            const snapshot = await getDocs(compostagemQuery);
 
             if (snapshot.empty) {
                 setCompostagens([]);
@@ -106,6 +109,91 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
         } catch (error) {
             console.error('Erro ao buscar compostagens:', error);
             setLoading(false);
+        }
+    };
+
+    const handleDelete = async (compostagem: Compostagem) => {
+        try {
+            Alert.alert(
+                "Confirmar exclusão",
+                "Tem certeza que deseja excluir este registro de compostagem?",
+                [
+                    {
+                        text: "Cancelar",
+                        style: "cancel"
+                    },
+                    {
+                        text: "Sim, excluir",
+                        style: "destructive",
+                        onPress: async () => {
+                            try {
+                                // Primeiro, vamos excluir as fotos do Storage se existirem
+                                if (compostagem.photoUrls && compostagem.photoUrls.length > 0) {
+                                    for (const photoUrl of compostagem.photoUrls) {
+                                        try {
+                                            // Criar uma referência do Storage a partir da URL
+                                            const photoRef = ref(dbStorage(), photoUrl.replace(/^https?:\/\/[^\/]+\/[^\/]+\/[^\/]+\//, ''));
+
+                                            // Deletar o arquivo
+                                            await deleteObject(photoRef);
+
+                                            console.log('Foto deletada com sucesso:', photoUrl);
+                                        } catch (photoError) {
+                                            console.error('Erro ao deletar foto:', photoError);
+                                            // Continuamos mesmo se houver erro ao deletar uma foto
+                                        }
+                                    }
+                                }
+
+                                // Agora excluímos o documento do Firestore
+                                if (!compostagem.id) {
+                                    throw new Error('Compostagem ID is undefined');
+                                }
+                                const compostagemDoc = await getDoc(doc(db(), 'compostagens', compostagem.id));
+
+                                if (compostagemDoc.exists()) {
+                                    if (compostagem.id) {
+                                        await deleteDoc(doc(db(), 'compostagens', compostagem.id));
+                                    } else {
+                                        throw new Error('Compostagem ID is undefined');
+                                    }
+
+                                    // Atualiza a lista local removendo o item
+                                    setCompostagens(prevCompostagens =>
+                                        prevCompostagens.filter(item => item.id !== compostagem.id)
+                                    );
+
+                                    // Atualiza a lista de compostagens exibidas
+                                    setDisplayedCompostagens(prevDisplayed =>
+                                        prevDisplayed.filter(item => item.id !== compostagem.id)
+                                    );
+
+                                    // Recarrega os dados
+                                    handleRefresh();
+
+                                    showGlobalToast(
+                                        'success',
+                                        'Exclusão Concluída',
+                                        'Registro de compostagem e suas imagens foram excluídos com sucesso',
+                                        3000
+                                    );
+                                } else {
+                                    throw new Error('Compostagem não encontrada');
+                                }
+                            } catch (deleteError) {
+                                console.error('Erro ao excluir compostagem:', deleteError);
+                                Alert.alert(
+                                    "Erro",
+                                    "Não foi possível excluir o registro de compostagem completamente. Algumas imagens podem não ter sido removidas."
+                                );
+                            }
+                        }
+                    }
+                ]
+            );
+        } catch (error) {
+            console.error('Erro no processo de exclusão:', error);
+            Alert.alert("Erro", "Ocorreu um problema inesperado.");
         }
     };
 
@@ -187,90 +275,6 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
 
         // Retorna a data no formato dd/mm/aaaa
         return `${day}/${month}/${year}`;
-    };
-
-    const handleDelete = async (compostagem: Compostagem) => {
-        try {
-            Alert.alert(
-                "Confirmar exclusão",
-                "Tem certeza que deseja excluir este registro de compostagem?",
-                [
-                    {
-                        text: "Cancelar",
-                        style: "cancel"
-                    },
-                    {
-                        text: "Sim, excluir",
-                        style: "destructive",
-                        onPress: async () => {
-                            try {
-                                // Primeiro, vamos excluir as fotos do Storage se existirem
-                                if (compostagem.photoUrls && compostagem.photoUrls.length > 0) {
-                                    for (const photoUrl of compostagem.photoUrls) {
-                                        try {
-                                            // Criar uma referência do Storage a partir da URL
-                                            const photoRef = storage().refFromURL(photoUrl);
-
-                                            // Deletar o arquivo
-                                            await photoRef.delete();
-
-                                            console.log('Foto deletada com sucesso:', photoUrl);
-                                        } catch (photoError) {
-                                            console.error('Erro ao deletar foto:', photoError);
-                                            // Continuamos mesmo se houver erro ao deletar uma foto
-                                        }
-                                    }
-                                }
-
-                                // Agora excluímos o documento do Firestore
-                                const compostagemDoc = await firestore()
-                                    .collection('compostagens')
-                                    .doc(compostagem.id)
-                                    .get();
-
-                                if (compostagemDoc.exists) {
-                                    await firestore()
-                                        .collection('compostagens')
-                                        .doc(compostagem.id)
-                                        .delete();
-
-                                    // Atualiza a lista local removendo o item
-                                    setCompostagens(prevCompostagens =>
-                                        prevCompostagens.filter(item => item.id !== compostagem.id)
-                                    );
-
-                                    // Atualiza a lista de compostagens exibidas
-                                    setDisplayedCompostagens(prevDisplayed =>
-                                        prevDisplayed.filter(item => item.id !== compostagem.id)
-                                    );
-
-                                    // Recarrega os dados
-                                    handleRefresh();
-
-                                    showGlobalToast(
-                                        'success',
-                                        'Exclusão Concluída',
-                                        'Registro de compostagem e suas imagens foram excluídos com sucesso',
-                                        3000
-                                    );
-                                } else {
-                                    throw new Error('Compostagem não encontrada');
-                                }
-                            } catch (deleteError) {
-                                console.error('Erro ao excluir compostagem:', deleteError);
-                                Alert.alert(
-                                    "Erro",
-                                    "Não foi possível excluir o registro de compostagem completamente. Algumas imagens podem não ter sido removidas."
-                                );
-                            }
-                        }
-                    }
-                ]
-            );
-        } catch (error) {
-            console.error('Erro no processo de exclusão:', error);
-            Alert.alert("Erro", "Ocorreu um problema inesperado.");
-        }
     };
 
     if (loading) {
