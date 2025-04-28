@@ -1,28 +1,28 @@
-import React, { useEffect, useState } from 'react';
 import {
-    View,
-    ScrollView,
-    StyleSheet,
-    SafeAreaView,
-    TouchableOpacity,
-    Dimensions,
-    Linking,
-} from 'react-native';
-import {
+    Avatar,
+    Chip,
     Surface,
     Text,
     TextInput,
     useTheme,
-    Avatar,
-    Chip,
 } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import {
+    Dimensions,
+    Linking,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import React, { useEffect, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
+
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import ModernHeader from '../../assets/components/ModernHeader';
+import { User } from '../Adm/types/admTypes';
 import { customTheme } from '../../theme/theme';
-import { getDatabase } from '@react-native-firebase/database';
-import firestore from '@react-native-firebase/firestore';
-import { User } from '../../helpers/Types';
+import { db } from '../../../firebase';
 
 const { width } = Dimensions.get('window');
 
@@ -34,11 +34,10 @@ export default function ContatosScreen({ navigation }: any) {
     const [users, setUsers] = useState<User[]>([]);
     const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
 
+    // Atualizar acessarUsuarios
     const acessarUsuarios = async () => {
         try {
-            const snapshot = await firestore()
-                .collection('users')
-                .get();
+            const snapshot = await getDocs(collection(db(), 'users'));
 
             const listaUsuarios: User[] = snapshot.docs.map((doc) => ({
                 id: doc.id,

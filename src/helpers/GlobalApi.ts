@@ -1,11 +1,28 @@
+import {
+    DocumentReference,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    query,
+    setDoc,
+    updateDoc,
+    where
+} from 'firebase/firestore';
+import { MessageOptions, hideMessage, showMessage } from "react-native-flash-message";
+import { db, dbStorage } from "../../firebase";
+import {
+    getDownloadURL,
+    ref,
+    uploadBytes
+} from 'firebase/storage';
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import storage from '@react-native-firebase/storage';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { Compostagem } from "./Types";
-import { hideMessage, MessageOptions, showMessage } from "react-native-flash-message";
 import NetInfo from "@react-native-community/netinfo";
-import Toast from "react-native-toast-message";
 import { PendingData } from "../contexts/NetworkContext";
+import Toast from "react-native-toast-message";
 
 // Constantes
 const TIMEOUT_VALUES = {
@@ -118,7 +135,7 @@ export const saveCompostagemData = async (
 
 export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<boolean> => {
     const abortController = new AbortController();
-    let docRef: FirebaseFirestoreTypes.DocumentReference | null = null;
+    let docRef: DocumentReference | null = null;
 
     try {
         // Verifica conexão inicial
@@ -133,10 +150,10 @@ export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<
         }
 
         // Usa o ID customizado ao criar o documento
-        docRef = firestore().collection('compostagens').doc(compostagemData.id);
+        docRef = doc(db(), 'compostagens', compostagemData.id);
 
         // Cria o documento com o ID específico
-        await docRef.set({
+        await setDoc(docRef, {
             ...compostagemData,
             photoUrls: [],
             createdAt: new Date().toISOString()
@@ -149,7 +166,7 @@ export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<
             try {
                 const imageUrls = await uploadImages(compostagemData.id, compostagemData.photoUris);
                 if (imageUrls.length > 0) {
-                    await docRef.update({ photoUrls: imageUrls });
+                    await updateDoc(docRef, { photoUrls: imageUrls });
                 }
             } catch (imageError) {
                 console.error('Erro no upload de imagens:', imageError);
@@ -158,8 +175,8 @@ export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<
         }
 
         // Confirma se o documento existe
-        const confirmDoc = await docRef.get();
-        if (!confirmDoc.exists) {
+        const confirmDoc = await getDoc(docRef);
+        if (!confirmDoc.exists()) {
             throw new Error('Documento não encontrado após criação');
         }
 
@@ -171,7 +188,7 @@ export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<
 
         if (docRef) {
             try {
-                await docRef.delete();
+                await deleteDoc(docRef);
                 console.log('Documento excluído após erro');
             } catch (deleteError) {
                 console.error('Erro ao excluir documento após falha:', deleteError);
@@ -189,10 +206,12 @@ const uploadImages = async (docId: string, photoUris: string[]): Promise<string[
     for (const [index, uri] of photoUris.entries()) {
         try {
             const fileName = `compostagens/${docId}_${index}.jpg`;
-            const reference = storage().ref(fileName);
+            const reference = ref(dbStorage(), fileName);
 
-            await reference.putFile(uri);
-            const url = await reference.getDownloadURL();
+            const response = await fetch(uri);
+            const blob = await response.blob();
+            await uploadBytes(reference, blob);
+            const url = await getDownloadURL(reference);
             imageUrls.push(url);
 
             console.log(`Imagem ${index + 1} enviada com sucesso`);
@@ -205,60 +224,17 @@ const uploadImages = async (docId: string, photoUris: string[]): Promise<string[
     return imageUrls;
 };
 
-const addToPendingData = async (dados: Compostagem): Promise<void> => {
-    let retryCount = 0;
-    const maxRetries = 3;
-
-    while (retryCount < maxRetries) {
-        try {
-            const lockKey = `${STORAGE_KEYS.PENDING_COMPOSTAGENS}_lock`;
-            const hasLock = await AsyncStorage.getItem(lockKey);
-
-            if (hasLock) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                continue;
-            }
-
-            await AsyncStorage.setItem(lockKey, 'true');
-
-            const storedData = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_COMPOSTAGENS);
-            const pendingData = storedData ? JSON.parse(storedData) : [];
-
-            const isDuplicate = pendingData.some((item: Compostagem) =>
-                item.data === dados.data &&
-                item.hora === dados.hora
-            );
-
-            if (!isDuplicate) {
-                pendingData.push({
-                    ...dados,
-                    timestamp: new Date().toISOString(),
-                    attempts: 0
-                });
-
-                await AsyncStorage.setItem(STORAGE_KEYS.PENDING_COMPOSTAGENS, JSON.stringify(pendingData));
-            }
-
-            await AsyncStorage.removeItem(lockKey);
-            return;
-        } catch (error) {
-            retryCount++;
-            if (retryCount === maxRetries) throw error;
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-        }
-    }
-};
-
 export const checkForDuplicate = async (compostagemData: Compostagem): Promise<boolean> => {
     try {
         // Verifica no Firestore
-        const query = await firestore()
-            .collection('compostagens')
-            .where('data', '==', compostagemData.data)
-            .where('hora', '==', compostagemData.hora)
-            .get();
+        const q = query(
+            collection(db(), 'compostagens'),
+            where('data', '==', compostagemData.data)
+        );
 
-        if (!query.empty) {
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
             console.log('Registro duplicado encontrado no Firestore');
             // Importante: Remover das pendências de forma síncrona
             await removeDuplicateFromPending(compostagemData);
@@ -281,10 +257,9 @@ export const checkForDuplicate = async (compostagemData: Compostagem): Promise<b
 
                 const isDuplicateInPending = pendingItems.some((pending: Compostagem) => {
                     // Validação mais rigorosa dos dados
-                    if (!pending || !pending.data || !pending.hora) return false;
+                    if (!pending || !pending.data) return false;
 
-                    return pending.data === compostagemData.data &&
-                        pending.hora === compostagemData.hora;
+                    return pending.data === compostagemData.data;
                 });
 
                 if (isDuplicateInPending) {
@@ -302,6 +277,49 @@ export const checkForDuplicate = async (compostagemData: Compostagem): Promise<b
     } catch (error) {
         console.error('Erro ao verificar duplicatas:', error);
         return false;
+    }
+};
+
+const addToPendingData = async (dados: Compostagem): Promise<void> => {
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+        try {
+            const lockKey = `${STORAGE_KEYS.PENDING_COMPOSTAGENS}_lock`;
+            const hasLock = await AsyncStorage.getItem(lockKey);
+
+            if (hasLock) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                continue;
+            }
+
+            await AsyncStorage.setItem(lockKey, 'true');
+
+            const storedData = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_COMPOSTAGENS);
+            const pendingData = storedData ? JSON.parse(storedData) : [];
+
+            const isDuplicate = pendingData.some((item: Compostagem) =>
+                item.data === dados.data
+            );
+
+            if (!isDuplicate) {
+                pendingData.push({
+                    ...dados,
+                    timestamp: new Date().toISOString(),
+                    attempts: 0
+                });
+
+                await AsyncStorage.setItem(STORAGE_KEYS.PENDING_COMPOSTAGENS, JSON.stringify(pendingData));
+            }
+
+            await AsyncStorage.removeItem(lockKey);
+            return;
+        } catch (error) {
+            retryCount++;
+            if (retryCount === maxRetries) throw error;
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        }
     }
 };
 
@@ -325,8 +343,7 @@ const removeDuplicateFromPending = async (compostagemData: Compostagem): Promise
         const filteredItems = pendingItems.filter(pending =>
             pending &&
             pending.data &&
-            pending.hora &&
-            !(pending.data === compostagemData.data && pending.hora === compostagemData.hora)
+            !(pending.data === compostagemData.data)
         );
 
         if (filteredItems.length !== pendingItems.length) {

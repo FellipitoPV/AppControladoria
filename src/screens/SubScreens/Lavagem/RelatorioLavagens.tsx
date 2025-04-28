@@ -1,4 +1,5 @@
 import {
+    ActivityIndicator,
     Alert,
     Modal,
     SafeAreaView,
@@ -17,52 +18,33 @@ import {
 import React, { useEffect, useState } from 'react';
 import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 
-import DateTimePicker from '@react-native-community/datetimepicker';
 import FilterCard from './Components/Filtros/FilterCard';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { LavagemInterface } from './Components/lavagemTypes';
 import ModernHeader from '../../../assets/components/ModernHeader';
-import { PLACAS_VEICULOS } from './Components/lavagemTypes';
 import RNFS from 'react-native-fs';
 import RelatorioContent from './Components/RelatorioContent';
 import Share from 'react-native-share';
+import { Timestamp } from 'firebase/firestore';
+import XLSX from 'xlsx';
 import { customTheme } from '../../../theme/theme';
 import { db } from '../../../../firebase';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 
-interface Lavagem {
-    id: string;
-    responsavel: string;
-    data: string;
-    hora: string;
-    veiculo: {
-        placa: string;
-        tipo: string;
-        numeroEquipamento?: string;
-    };
-    tipoLavagem: string;
-    produtos: Array<{
-        nome: string;
-        quantidade: number;
-    }>;
-    createdAt: number;
-}
-
-export default function RelatorioLavagens({ navigation }: { navigation: any }) {
+const RelatorioLavagens = ({ navigation }: { navigation: any }) => {
     const [dataInicio, setDataInicio] = useState<Date>(new Date());
     const [dataFim, setDataFim] = useState<Date>(new Date());
-    const [showDatePickerInicio, setShowDatePickerInicio] = useState(false);
-    const [showDatePickerFim, setShowDatePickerFim] = useState(false);
-    const [lavagens, setLavagens] = useState<Lavagem[]>([]);
+    const [lavagens, setLavagens] = useState<LavagemInterface[]>([]);
     const [loading, setLoading] = useState(false);
     const [placasFiltradas, setPlacasFiltradas] = useState<string[]>([]);
-
-    const [isConnectionModalVisible, setIsConnectionModalVisible] = useState(false);
-
     const [placasDisponiveis, setPlacasDisponiveis] = useState<Array<{
         placa: string;
         tipo: 'veiculo' | 'equipamento';
         numeroEquipamento?: string;
     }>>([]);
+    const [firstTimeSearch, setFirstTimeSearch] = useState(true);
 
     useEffect(() => {
         carregarPlacasDisponiveis();
@@ -71,7 +53,6 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
     const carregarPlacasDisponiveis = async () => {
         try {
             const querySnapshot = await getDocs(collection(db(), 'veiculos'));
-    
             const placas = querySnapshot.docs.map(doc => {
                 const data = doc.data();
                 return {
@@ -80,82 +61,13 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                     numeroEquipamento: data.numeroEquipamento
                 };
             });
-    
             setPlacasDisponiveis(placas);
         } catch (error) {
             console.error('Erro ao carregar placas:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível carregar as placas disponíveis', 4000);
         }
     };
-    
-    const buscarLavagensPorIntervalo = async () => {
-        try {
-            setLoading(true);
-    
-            const inicioFormatado = formatarData(dataInicio);
-            const fimFormatado = formatarData(dataFim);
-    
-            if (dataInicio > dataFim) {
-                Alert.alert(
-                    'Erro',
-                    'A data de início deve ser anterior ou igual à data final.'
-                );
-                return;
-            }
-    
-            const queryNovos = query(
-                collection(db(), 'lavagens'),
-                where('data', '>=', inicioFormatado),
-                where('data', '<=', fimFormatado),
-                orderBy('data', 'desc')
-            );
-    
-            const queryAntigos = query(
-                collection(db(), 'registroLavagens'),
-                where('data', '>=', inicioFormatado),
-                where('data', '<=', fimFormatado),
-                orderBy('data', 'desc')
-            );
-    
-            const [snapshotNovos, snapshotAntigos] = await Promise.all([
-                getDocs(queryNovos),
-                getDocs(queryAntigos)
-            ]);
-    
-            const dadosNovos = snapshotNovos.docs.map(doc => normalizarLavagem({
-                id: doc.id,
-                ...doc.data()
-            }));
-    
-            const dadosAntigos = snapshotAntigos.docs.map(doc => normalizarLavagem({
-                id: doc.id,
-                ...doc.data()
-            }));
-    
-            let todosDados = [...dadosNovos, ...dadosAntigos].sort((a, b) => {
-                const dataA = new Date(a.data.split('/').reverse().join('-') + ' ' + a.hora);
-                const dataB = new Date(b.data.split('/').reverse().join('-') + ' ' + b.hora);
-                return dataB.getTime() - dataA.getTime();
-            });
-    
-            // Aplicar filtro de placas se houver placas selecionadas
-            if (placasFiltradas.length > 0) {
-                todosDados = todosDados.filter(lavagem =>
-                    placasFiltradas.includes(lavagem.veiculo.placa.toUpperCase())
-                );
-            }
-    
-            setLavagens(todosDados);
-    
-        } catch (error) {
-            console.error('Erro ao buscar lavagens:', error);
-            showGlobalToast('error', 'Erro', 'Não foi possível gerar o relatório', 4000);
-        } finally {
-            setLoading(false);
-        }
-    };
 
-    // Converte as datas para o formato pt-BR
     const formatarData = (data: Date) => {
         const dia = String(data.getDate()).padStart(2, '0');
         const mes = String(data.getMonth() + 1).padStart(2, '0');
@@ -163,17 +75,33 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
         return `${dia}/${mes}/${ano}`;
     };
 
-    const normalizarLavagem = (doc: any): Lavagem => {
-        // Função de normalização similar à do histórico de lavagens
+    const formatarHorario = (hora: string) => {
+        if (!hora) return '';
+        const parts = hora.split(':');
+        if (parts.length >= 2) {
+            return `${parts[0]}:${parts[1]}`;
+        }
+        return hora;
+    };
+
+    const normalizarLavagem = (doc: any): LavagemInterface => {
         const isFormatoAntigo = 'placaVeiculo' in doc;
+
+        console.log(`Normalizando documento ${doc.id}:`, {
+            data: doc.data,
+            hora: doc.hora,
+            createdAt: doc.createdAt,
+            placaVeiculo: doc.placaVeiculo,
+            veiculo: doc.veiculo
+        });
 
         const veiculo = isFormatoAntigo
             ? {
-                placa: doc.placaVeiculo,
-                tipo: doc.placaVeiculo.includes('COMPACTADORA') || doc.placaVeiculo.includes('EQUIPAMENTO')
+                placa: doc.placaVeiculo || '',
+                tipo: doc.placaVeiculo?.includes('COMPACTADORA') || doc.placaVeiculo?.includes('EQUIPAMENTO')
                     ? 'equipamento'
                     : 'veiculo',
-                numeroEquipamento: doc.placaVeiculo.includes('COMPACTADORA') || doc.placaVeiculo.includes('EQUIPAMENTO')
+                numeroEquipamento: doc.placaVeiculo?.includes('COMPACTADORA') || doc.placaVeiculo?.includes('EQUIPAMENTO')
                     ? doc.placaVeiculo.split('-')[1]
                     : null
             }
@@ -183,72 +111,225 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                 numeroEquipamento: null
             };
 
-        const createdAtTime = isFormatoAntigo
-            ? new Date(doc.createdAt).getTime()
-            : doc.createdAt?.toDate?.()?.getTime() || Date.now();
+        const dataField = doc.data instanceof Timestamp
+            ? doc.data
+            : typeof doc.data === 'string' && doc.data.match(/^\d{2}\/\d{2}\/\d{4}$/)
+                ? doc.data
+                : '';
+
+        const createdAtField = doc.createdAt instanceof Timestamp
+            ? doc.createdAt
+            : typeof doc.createdAt === 'string' && doc.createdAt.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*Z$/)
+                ? doc.createdAt
+                : null;
 
         const produtos = doc.produtos?.map((prod: any) => ({
             nome: prod.produto || prod.nome || 'Produto não especificado',
             quantidade: parseInt(prod.quantidade) || 1
         })) || [];
 
-        return {
+        const fotos = doc.fotos?.map((foto: any) => ({
+            url: foto.url || '',
+            timestamp: foto.timestamp || 0,
+            path: foto.path || ''
+        })) || [];
+
+        const normalized = {
             id: doc.id,
             responsavel: doc.responsavel || '',
-            data: doc.data || '',
+            data: dataField,
             hora: doc.hora || '',
-            veiculo: veiculo,
+            veiculo,
             tipoLavagem: doc.tipoLavagem || '',
-            produtos: produtos,
-            createdAt: createdAtTime
+            produtos,
+            fotos,
+            observacoes: doc.observacoes || '',
+            status: doc.status || 'concluido',
+            createdAt: createdAtField,
+            createdBy: doc.createdBy || null,
+            agendamentoId: doc.agendamentoId || null
         };
+
+        console.log(`Documento ${doc.id} normalizado:`, {
+            data: normalized.data,
+            hora: normalized.hora,
+            createdAt: normalized.createdAt
+        });
+
+        return normalized;
     };
 
-    
-
-    const verificarConectividade = async () => {
+    const buscarLavagensPorIntervalo = async () => {
         try {
-            showGlobalToast('info', 'Aguarde', 'Verificando conexão com o servidor...', 10000);
+            setFirstTimeSearch(false);
+            setLoading(true);
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // timeout de 5 segundos
-
-            const response = await fetch('http://192.168.1.222:3000/ping', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                signal: controller.signal
+            console.log('Buscando lavagens com intervalo:', {
+                dataInicio: formatarData(dataInicio),
+                dataFim: formatarData(dataFim),
+                dataInicioRaw: dataInicio,
+                dataFimRaw: dataFim
             });
 
-            clearTimeout(timeoutId);
+            // Converter dataInicio e dataFim para Timestamp
+            const inicioTimestamp = Timestamp.fromDate(new Date(dataInicio.setHours(0, 0, 0, 0)));
+            const fimTimestamp = Timestamp.fromDate(new Date(dataFim.setHours(23, 59, 59, 999)));
 
-            if (response.ok) {
-                return true;
-            } else {
-                throw new Error('Servidor respondeu com erro');
+            if (dataInicio > dataFim) {
+                Alert.alert(
+                    'Erro',
+                    'A data de início deve ser anterior ou igual à data final.'
+                );
+                console.log('Erro: dataInicio > dataFim');
+                return;
             }
 
+            // Buscar lavagens no formato novo (data como Timestamp)
+            const queryNovos = query(
+                collection(db(), 'registroLavagens'),
+                where('data', '>=', inicioTimestamp),
+                where('data', '<=', fimTimestamp),
+                orderBy('data', 'desc')
+            );
+
+            // Buscar lavagens no formato antigo (data como string DD/MM/YYYY)
+            const queryAntigos = query(
+                collection(db(), 'registroLavagens'),
+                where('data', '>=', formatarData(dataInicio)),
+                where('data', '<=', formatarData(dataFim)),
+                orderBy('data', 'desc')
+            );
+
+            console.log('Executando consultas:', {
+                queryNovos: 'registroLavagens com data >= inicioTimestamp e <= fimTimestamp',
+                queryAntigos: `registroLavagens com data >= ${formatarData(dataInicio)} e <= ${formatarData(dataFim)}`
+            });
+
+            const [snapshotNovos, snapshotAntigos] = await Promise.all([
+                getDocs(queryNovos),
+                getDocs(queryAntigos)
+            ]);
+
+            const dadosNovos = snapshotNovos.docs.map(doc => {
+                const data = normalizarLavagem({ id: doc.id, ...doc.data() });
+                console.log(`Documento novo ${doc.id}:`, {
+                    data: data.data,
+                    hora: data.hora,
+                    createdAt: data.createdAt
+                });
+                return data;
+            });
+
+            const dadosAntigos = snapshotAntigos.docs.map(doc => {
+                const data = normalizarLavagem({ id: doc.id, ...doc.data() });
+                console.log(`Documento antigo ${doc.id}:`, {
+                    data: data.data,
+                    hora: data.hora,
+                    createdAt: data.createdAt
+                });
+                return data;
+            });
+
+            let todosDados = [...dadosNovos, ...dadosAntigos];
+
+            console.log('Dados combinados antes da ordenação:', todosDados.map(d => ({
+                id: d.id,
+                data: d.data instanceof Timestamp ? d.data.toDate().toISOString() : d.data,
+                hora: d.hora,
+                createdAt: d.createdAt instanceof Timestamp ? d.createdAt.toDate().toISOString() : d.createdAt
+            })));
+
+            // Filtrar novamente para garantir que apenas datas dentro do intervalo sejam incluídas
+            todosDados = todosDados.filter(lavagem => {
+                let lavagemDate: Date;
+                if (typeof lavagem.data === 'string' && lavagem.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                    const [dia, mes, ano] = lavagem.data.split('/').map(Number);
+                    lavagemDate = new Date(ano, mes - 1, dia);
+                    if (lavagem.hora && lavagem.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
+                        const [hours, minutes, seconds = 0] = lavagem.hora.split(':').map(Number);
+                        lavagemDate.setHours(hours, minutes, seconds);
+                    }
+                } else if (lavagem.data instanceof Timestamp) {
+                    lavagemDate = lavagem.data.toDate();
+                } else {
+                    console.warn(`Data inválida no documento ${lavagem.id}:`, lavagem.data);
+                    return false;
+                }
+
+                const isWithinInterval = lavagemDate >= new Date(dataInicio.setHours(0, 0, 0, 0)) &&
+                    lavagemDate <= new Date(dataFim.setHours(23, 59, 59, 999));
+                if (!isWithinInterval) {
+                    console.log(`Documento ${lavagem.id} fora do intervalo:`, {
+                        lavagemDate: lavagemDate.toISOString(),
+                        dataInicio: dataInicio.toISOString(),
+                        dataFim: dataFim.toISOString()
+                    });
+                }
+                return isWithinInterval;
+            });
+
+            // Ordenar do mais recente para o mais antigo
+            todosDados = todosDados.sort((a, b) => {
+                let dataA: Date = new Date(0);
+                let dataB: Date = new Date(0);
+
+                if (typeof a.data === 'string' && a.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                    const [dia, mes, ano] = a.data.split('/').map(Number);
+                    dataA = new Date(ano, mes - 1, dia);
+                    if (a.hora && a.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
+                        const [hours, minutes, seconds = 0] = a.hora.split(':').map(Number);
+                        dataA.setHours(hours, minutes, seconds);
+                    }
+                } else if (a.data instanceof Timestamp) {
+                    dataA = a.data.toDate();
+                }
+
+                if (typeof b.data === 'string' && b.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                    const [dia, mes, ano] = b.data.split('/').map(Number);
+                    dataB = new Date(ano, mes - 1, dia);
+                    if (b.hora && b.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
+                        const [hours, minutes, seconds = 0] = b.hora.split(':').map(Number);
+                        dataB.setHours(hours, minutes, seconds);
+                    }
+                } else if (b.data instanceof Timestamp) {
+                    dataB = b.data.toDate();
+                }
+
+                return dataB.getTime() - dataA.getTime();
+            });
+
+            // console.log('Dados após ordenação:', todosDados.map(d => ({
+            //     id: d.id,
+            //     data: d.data instanceof Timestamp ? d.data.toDate().toISOString() : d.data,
+            //     hora: d.hora,
+            //     createdAt: d.createdAt instanceof Timestamp ? d.createdAt.toDate().toISOString() : d.createdAt
+            // })));
+
+            // Aplicar filtro de placas se houver placas selecionadas
+            if (placasFiltradas.length > 0) {
+                todosDados = todosDados.filter(lavagem =>
+                    placasFiltradas.includes(lavagem.veiculo.placa.toUpperCase())
+                );
+                console.log('Dados após filtro de placas:', todosDados.map(d => ({
+                    id: d.id,
+                    placa: d.veiculo.placa,
+                    data: d.data instanceof Timestamp ? d.data.toDate().toISOString() : d.data
+                })));
+            }
+
+            setLavagens(todosDados);
+
         } catch (error) {
-            console.error('Erro ao verificar conectividade:', error);
-            // Não mostrar toast aqui, pois vamos mostrar o modal
-            return false;
+            console.error('Erro ao buscar lavagens:', error);
+            showGlobalToast('error', 'Erro', 'Não foi possível gerar o relatório', 4000);
+        } finally {
+            setLoading(false);
         }
     };
 
     const formatarDataParaNomeArquivo = (data: string) => {
-        // Assumindo que formatarData retorna no formato dd/mm/yyyy
         const partes = data.split('/');
         return `${partes[0]}-${partes[1]}-${partes[2]}`;
-    };
-
-    // Função para formatar o horário (remove os segundos)
-    const formatarHorario = (hora: string) => {
-        // Se o horário incluir segundos (HH:mm:ss), remove os segundos
-        if (hora.split(':').length === 3) {
-            return hora.split(':').slice(0, 2).join(':');
-        }
-        return hora; // Retorna o horário original se já estiver no formato HH:mm
     };
 
     const gerarRelatorioExcel = async () => {
@@ -260,160 +341,62 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
         try {
             setLoading(true);
 
-            // Verificar conectividade primeiro
-            const conectado = await verificarConectividade();
-            if (!conectado) {
-                setLoading(false);
-                setIsConnectionModalVisible(true);
-                return;
-            }
-
-            showGlobalToast('info',
-                'Gerando Relatório',
-                'O servidor está processando seu relatório...',
-                10000);
-
-            // Formata os horários antes de enviar
-            const lavagensFormatadas = lavagens.map(lavagem => ({
-                ...lavagem,
-                hora: formatarHorario(lavagem.hora)
-            }));
-
-            const response = await fetch('http://192.168.1.222:3000/gerar-relatorio-lavagem', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    dataInicio: formatarData(dataInicio),
-                    dataFim: formatarData(dataFim),
-                    lavagens: lavagensFormatadas
-                })
+            // Criar dados para a planilha
+            const data = lavagens.map(lavagem => {
+                const dataFormatada = typeof lavagem.data === 'string'
+                    ? lavagem.data
+                    : format(lavagem.data.toDate(), 'dd/MM/yyyy', { locale: ptBR });
+                const horaFormatada = formatarHorario(lavagem.hora);
+                const produtos = lavagem.produtos.map(p => `${p.nome} (${p.quantidade})`).join(', ');
+                return {
+                    'Data': dataFormatada,
+                    'Hora': horaFormatada,
+                    'Placa': lavagem.veiculo.placa,
+                    'Tipo Veículo': lavagem.veiculo.tipo,
+                    'Número Equipamento': lavagem.veiculo.numeroEquipamento || '',
+                    'Tipo Lavagem': lavagem.tipoLavagem,
+                    'Responsável': lavagem.responsavel,
+                    'Produtos': produtos,
+                    'Observações': lavagem.observacoes || ''
+                };
             });
 
-            console.log(formatarData(dataInicio))
-            console.log(formatarData(dataFim))
+            // Criar planilha
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Relatório Lavagens');
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Erro do servidor:', errorText);
-                throw new Error(`Erro na resposta do servidor: ${errorText}`);
-            }
+            // Gerar buffer do arquivo Excel
+            const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
 
-            showGlobalToast('success',
-                'Relatório Gerado com Sucesso!',
-                '',
-                5000);
-
+            // Criar nome do arquivo
             const dataInicioFormatada = formatarDataParaNomeArquivo(formatarData(dataInicio));
             const dataFimFormatada = formatarDataParaNomeArquivo(formatarData(dataFim));
-
-            // Criar nome do arquivo com timestamp
             const fileName = `relatorio_lavagens_${dataInicioFormatada}_ate_${dataFimFormatada}.xlsx`;
             const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
 
-            // Converter resposta para base64
-            const data = await response.blob();
-            const reader = new FileReader();
-            reader.readAsDataURL(data);
+            // Salvar arquivo
+            await RNFS.writeFile(filePath, wbout, 'base64');
 
-            reader.onload = async () => {
-                try {
-                    // Remover cabeçalho do base64 data URL
-                    const base64Data = reader.result?.toString().split(',')[1];
+            // Compartilhar arquivo
+            await Share.open({
+                url: `file://${filePath}`,
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                filename: fileName
+            });
 
-                    if (!base64Data) {
-                        throw new Error('Erro ao processar arquivo');
-                    }
+            showGlobalToast('success', 'Sucesso', 'Relatório gerado com sucesso!', 4000);
 
-                    // Salvar arquivo
-                    await RNFS.writeFile(filePath, base64Data, 'base64');
-
-                    // Compartilhar arquivo
-                    await Share.open({
-                        url: `file://${filePath}`,
-                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        filename: fileName
-                    });
-
-                    showGlobalToast('success', 'Sucesso', 'Relatório gerado com sucesso!', 4000);
-
-                    // Limpar arquivo após compartilhar
-                    await RNFS.unlink(filePath);
-
-                } catch (error) {
-                    console.warn(error);
-                }
-            };
-
-            reader.onerror = () => {
-                showGlobalToast('error', 'Erro', 'Erro ao processar o arquivo', 4000);
-            };
+            // Limpar arquivo após compartilhar
+            await RNFS.unlink(filePath);
 
         } catch (error) {
-            console.error('Erro ao gerar relatório:', error);
+            //console.error('Erro ao gerar relatório:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível gerar o relatório', 4000);
         } finally {
             setLoading(false);
         }
     };
-
-    const ConnectionErrorModal = () => (
-        <Modal
-            visible={isConnectionModalVisible}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setIsConnectionModalVisible(false)}
-        >
-            <View style={styles.modalOverlay}>
-                <Surface style={styles.modalContent}>
-                    <View style={styles.modalIconContainer}>
-                        <Icon
-                            name="server-network-off"
-                            size={60}
-                            color={customTheme.colors.error}
-                        />
-                    </View>
-
-                    <Text style={styles.modalTitle}>
-                        Conexão com o servidor não estabelecida
-                    </Text>
-
-                    <View style={styles.modalTextContainer}>
-                        <Text style={styles.modalText}>
-                            O recurso de geração de relatórios requer duas condições:
-                        </Text>
-
-                        <View style={styles.bulletPointContainer}>
-                            <Text style={styles.bulletPoint}>•</Text>
-                            <Text style={styles.bulletPointText}>
-                                Estar conectado à rede local da Ecologika
-                            </Text>
-                        </View>
-
-                        <View style={styles.bulletPointContainer}>
-                            <Text style={styles.bulletPoint}>•</Text>
-                            <Text style={styles.bulletPointText}>
-                                O servidor de relatórios estar em funcionamento
-                            </Text>
-                        </View>
-
-                        <Text style={[styles.modalText, { marginTop: 10 }]}>
-                            Caso você já esteja conectado à rede local da Ecologika, então isso significa que o servidor está fora do ar ou desligado.
-                        </Text>
-                    </View>
-
-                    <Button
-                        mode="contained"
-                        onPress={() => setIsConnectionModalVisible(false)}
-                        style={styles.modalButton}
-                    >
-                        Entendi
-                    </Button>
-                </Surface>
-            </View>
-        </Modal>
-    );
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -434,43 +417,61 @@ export default function RelatorioLavagens({ navigation }: { navigation: any }) {
                 setPlacasFiltradas={setPlacasFiltradas}
             />
 
-            <ScrollView
-                style={styles.scrollViewContainer}
-                contentContainerStyle={styles.scrollViewContent}
-            >
-                {lavagens.length > 0 ? (
-                    <RelatorioContent
-                        lavagens={lavagens}
-                        onGerarExcel={gerarRelatorioExcel}
-                        loading={loading}
-                    />
-                ) : (
-                    <View style={styles.emptyStateContainer}>
-                        <Icon
-                            name="filter-variant"
-                            size={64}
-                            color={customTheme.colors.onSurfaceVariant}
-                        />
-                        <Text style={styles.emptyStateTitle}>
-                            Nenhum registro encontrado
-                        </Text>
-                        <Text style={styles.emptyStateSubtitle}>
-                            Utilize os filtros acima para gerar um relatório
-                        </Text>
-                        <Text style={styles.emptyStateDescription}>
-                            Selecione um intervalo de datas e, se desejar, filtre por placas específicas
+            {
+                loading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={customTheme.colors.primary} />
+                        <Text style={{ marginTop: 16, fontSize: 18, fontWeight: '500', color: customTheme.colors.onSurface }}>
+                            Carregando lavagens...
                         </Text>
                     </View>
-                )}
-            </ScrollView>
+                ) : (
+                    <ScrollView
+                        style={styles.scrollViewContainer}
+                        contentContainerStyle={styles.scrollViewContent}
+                    >
+                        {lavagens.length > 0 ? (
+                            <RelatorioContent
+                                lavagens={lavagens}
+                                onGerarExcel={gerarRelatorioExcel}
+                                loading={loading}
+                            />
+                        ) : (
+                            <View style={styles.emptyStateContainer}>
+                                <Icon
+                                    name="filter-variant"
+                                    size={64}
+                                    color={customTheme.colors.onSurfaceVariant}
+                                />
 
-            <ConnectionErrorModal />
+                                {!firstTimeSearch && (
+                                    <Text style={styles.emptyStateTitle}>
+                                        Nenhum registro encontrado
+                                    </Text>
+                                )}
+
+                                <Text style={styles.emptyStateSubtitle}>
+                                    Utilize os filtros acima para gerar um relatório
+                                </Text>
+                                <Text style={styles.emptyStateDescription}>
+                                    Selecione um intervalo de datas e, se desejar, filtre por placas específicas
+                                </Text>
+                            </View>
+                        )}
+                    </ScrollView>
+                )
+            }
 
         </SafeAreaView>
     );
-}
+};
 
 const styles = StyleSheet.create({
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     emptyStateContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -498,64 +499,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         paddingHorizontal: 40,
     },
-    modalTextContainer: {
-        marginBottom: 5,
-    },
-    bulletPointContainer: {
-        flexDirection: 'row',
-        marginLeft: 10,
-        marginTop: 8,
-        alignItems: 'flex-start',
-    },
-    bulletPoint: {
-        fontSize: 16,
-        marginRight: 8,
-        color: customTheme.colors.error,
-        lineHeight: 22,
-    },
-    bulletPointText: {
-        fontSize: 15,
-        lineHeight: 22,
-        flex: 1,
-        color: customTheme.colors.onSurface,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    modalContent: {
-        backgroundColor: 'white',
-        borderRadius: 10,
-        padding: 20,
-        width: '90%',
-        maxWidth: 400,
-        elevation: 5,
-    },
-    modalIconContainer: {
-        alignItems: 'center',
-        marginBottom: 20,
-        marginTop: 10,
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        marginBottom: 15,
-        color: customTheme.colors.error,
-    },
-    modalText: {
-        fontSize: 15,
-        textAlign: 'justify',
-        marginBottom: 20,
-        lineHeight: 22,
-        color: customTheme.colors.onSurface,
-    },
-    modalButton: {
-        marginTop: 10,
-    },
     safeArea: {
         flex: 1,
         backgroundColor: customTheme.colors.background,
@@ -567,3 +510,5 @@ const styles = StyleSheet.create({
         flexGrow: 1,
     },
 });
+
+export default RelatorioLavagens;

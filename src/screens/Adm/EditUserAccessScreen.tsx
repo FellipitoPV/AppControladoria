@@ -1,23 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import { AcessoInterface, AcessosType, User, UserAccess } from './types/admTypes';
 import {
-    View,
+    ActivityIndicator,
+    BackHandler,
+    Image,
+    ScrollView,
     StyleSheet,
     TouchableOpacity,
-    ScrollView,
-    ActivityIndicator,
-    Image,
-    BackHandler,
+    View,
 } from 'react-native';
-import { NavigationProp, ParamListBase, useFocusEffect, useNavigation } from '@react-navigation/native';
-import { Text, Portal, Dialog, TextInput } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore from '@react-native-firebase/firestore';
-import { showGlobalToast } from '../../helpers/GlobalApi';
-import { customTheme } from '../../theme/theme';
-import { AcessoInterface, AcessosType, User, UserAccess } from './types/admTypes';
-import ModernHeader from '../../assets/components/ModernHeader';
+import { Dialog, Portal, Text, TextInput } from 'react-native-paper';
 import { EnhancedSearchContainer, ModernSearchBar } from './components/ModernSearchBar';
+import { NavigationProp, ParamListBase, useFocusEffect, useNavigation } from '@react-navigation/native';
+import React, { useEffect, useState } from 'react';
+import { collection, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
+
 import ConfirmationModal from '../../assets/components/ConfirmationModal';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import ModernHeader from '../../assets/components/ModernHeader';
+import { customTheme } from '../../theme/theme';
+import { db } from '../../../firebase';
+import { showGlobalToast } from '../../helpers/GlobalApi';
 
 interface AccessItemProps {
     item: AcessoInterface;
@@ -131,10 +133,11 @@ export default function EditUserAccessScreen() {
     // Atualizar loadUsers
     const loadUsers = async () => {
         try {
-            const snapshot = await firestore()
-                .collection('users')
-                .orderBy('user', 'asc') // 'asc' para ordem crescente (A-Z)
-                .get();
+            const usersQuery = query(
+                collection(db(), 'users'),
+                orderBy('user', 'asc')
+            );
+            const snapshot = await getDocs(usersQuery);
 
             const listaUsuarios: User[] = snapshot.docs.map((doc) => ({
                 id: doc.id,
@@ -202,18 +205,15 @@ export default function EditUserAccessScreen() {
         setConfirmDialogVisible(true); // Abrir modal antes de salvar
     };
 
-    // Atualizar handleSaveAccess
+    // Atualizar saveAccess
     const saveAccess = async () => {
         if (!selectedUser?.id) return;
 
         setLoading(true);
         try {
-            await firestore()
-                .collection('users')
-                .doc(selectedUser.id)
-                .update({
-                    acesso: selectedAccess // Salva diretamente o array de UserAccess
-                });
+            await updateDoc(doc(db(), 'users', selectedUser.id), {
+                acesso: selectedAccess // Salva diretamente o array de UserAccess
+            });
 
             showGlobalToast(
                 'success',

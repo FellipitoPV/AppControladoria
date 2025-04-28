@@ -16,6 +16,8 @@ import {
     Text,
 } from 'react-native-paper';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { getDownloadURL, getMetadata, list, ref } from 'firebase/storage';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -26,7 +28,8 @@ import UserInfoModal from './components/UserInfoModal';
 import UserProfileModal from './components/UserInfoModal';
 import checkPermissions from '../../helpers/checkPermissions';
 import { customTheme } from '../../theme/theme';
-import { firebase } from '@react-native-firebase/firestore';
+import { dbStorage } from '../../../firebase';
+import { firebaseApp } from '../../../firebase'; // Ajuste o caminho conforme sua estrutura
 import { showGlobalToast } from '../../helpers/GlobalApi';
 import { useAppUpdater } from '../../helpers/AppUpdater';
 import { useNetwork } from '../../contexts/NetworkContext';
@@ -74,9 +77,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
         // Verificar atualizações explicitamente ao abrir o app
         checkForUpdates();
-
-        console.log(userInfo?.acesso)
-        console.log(userInfo?.cargo)
 
         const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
             // Verifica se é uma ação de reset (logout) ou uma navegação normal
@@ -190,18 +190,19 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         return () => clearInterval(interval);
     }, [scrollToNextItem]);
 
+    // Atualizar fetchCarouselImages
     const fetchCarouselImages = async () => {
         try {
             // Referência para a pasta no Storage
-            const storageRef = firebase.storage().ref('carrosel_Mobile');
+            const storageRef = ref(dbStorage(), 'carrosel_Mobile');
 
             // Lista todos os itens na pasta
-            const result = await storageRef.list();
+            const result = await list(storageRef);
 
             // Obtém as URLs de download para cada imagem
             const imagePromises = result.items.map(async (item) => {
-                const url = await item.getDownloadURL();
-                const metadata = await item.getMetadata();
+                const url = await getDownloadURL(item);
+                const metadata = await getMetadata(item);
 
                 return {
                     id: item.name, // Usa o nome do arquivo como ID
@@ -337,81 +338,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         </Card>
     );
 
-    // Add this near the beginning of your HomeScreen function after declaring state variables
-    useEffect(() => {
-        const checkAuthentication = async (): Promise<void> => {
-            try {
-                // Check if user is loading
-                if (isLoading) {
-                    return;
-                }
-
-                // If userInfo is null, user is not logged in
-                if (!userInfo) {
-                    // Try to update user info from AsyncStorage
-                    try {
-                        await updateUserInfo();
-                    } catch (error) {
-                        console.error('Failed to update user info:', error);
-
-                        // Neither Firebase nor AsyncStorage have user data, redirect to Login
-                        navigation.reset({
-                            index: 0,
-                            routes: [{ name: 'Login' }],
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error('Error checking authentication:', error);
-                // Redirect to login on any error
-                navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Login' }],
-                });
-            }
-        };
-
-        checkAuthentication();
-    }, [isLoading, userInfo, navigation]); // Depend on isLoading and userInfo states
-
-    const TestNotificationButtons = () => {
-        if (__DEV__) { // Only show in development mode
-            return (
-                <View style={styles.testButtonsContainer}>
-                    <TouchableOpacity
-                        style={styles.testButton}
-                        onPress={() => NotificationService.localNotification(
-                            'Test Notification',
-                            'This is a test notification'
-                        )}
-                    >
-                        <Text style={styles.testButtonText}>Send Test Notification</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={styles.testButton}
-                        onPress={() =>
-                            NotificationService.scheduleRepeatingNotification(
-                                "Está é uma mensagem repetitiva de teste",
-                                "Caso esteja vendo isso o tempo todo, então está correto!"
-                            )
-                        }
-                    >
-                        <Text style={styles.testButtonText}>Start 5s Recurring Notifications</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={styles.testButton}
-                        onPress={() => NotificationService.cancelAllNotifications()}
-                    >
-                        <Text style={styles.testButtonText}>Cancel All Notifications</Text>
-                    </TouchableOpacity>
-                </View>
-            );
-        }
-        return null;
-    };
-
     return (
         <SafeAreaView style={styles.safeArea}>
             <Surface style={styles.container}>
@@ -476,7 +402,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 <ScrollView style={styles.content}>
                     {renderCarouselContent()}
                     <QuickActionsGrid />
-                    {/* <TestNotificationButtons /> */}
                     <DevelopmentAlert />
                     {/* Resto do conteúdo ... */}
                 </ScrollView>

@@ -21,14 +21,13 @@ import FullScreenImage from '../../../assets/components/FullScreenImage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import { customTheme } from '../../../theme/theme';
+import dayjs from 'dayjs';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 
 interface DateFilterValue {
     startDate: string;
     endDate: string;
 }
-
-let isLoading = false;
 
 const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
@@ -94,8 +93,8 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
                         !compostagem.isMedicaoRotina;
                 })
                 .sort((a, b) => {
-                    const timestampA = `${a.data}T${a.hora}`;
-                    const timestampB = `${b.data}T${b.hora}`;
+                    const timestampA = `${a.data}`;
+                    const timestampB = `${b.data}`;
                     return isDescending ?
                         timestampB.localeCompare(timestampA) :
                         timestampA.localeCompare(timestampB);
@@ -339,7 +338,7 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
                                             </Text>
                                             <View style={styles.headerRight}>
                                                 <Text style={styles.dataHora}>
-                                                    {`${formatDate(item.data)} às ${item.hora.split(':').slice(0, 2).join(':')}`}
+                                                    {`${dayjs(item.data).format('DD/MM/YYYY')} às ${dayjs(item.data).format('HH:mm')}`}
                                                 </Text>
                                             </View>
                                         </View>
@@ -484,7 +483,7 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
                                             <View style={styles.infoContent}>
                                                 <Text style={styles.infoLabel}>Data e Hora</Text>
                                                 <Text style={styles.infoValue}>
-                                                    {`${formatDate(selectedCompostagem.data)} às ${selectedCompostagem.hora}`}
+                                                    {`${dayjs(selectedCompostagem.data).format('DD/MM/YYYY')} às ${dayjs(selectedCompostagem.data).format('HH:mm')}`}
                                                 </Text>
                                             </View>
                                         </View>

@@ -1,21 +1,23 @@
-import React, { useEffect, useRef, useState } from 'react';
 import {
-    View,
-    TouchableOpacity,
-    Modal,
+    ActivityIndicator,
     Animated,
     Dimensions,
-    StyleSheet,
-    ScrollView,
+    FlatList,
     Image,
-    ActivityIndicator,
-    FlatList
+    Modal,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { Surface, Text, Divider, Chip } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import FullScreenImage from '../../../../assets/components/FullScreenImage';
-import { customTheme } from '../../../../theme/theme';
+import { Chip, Divider, Surface, Text } from 'react-native-paper';
+import React, { useEffect, useRef, useState } from 'react';
 import { getTipoLavagemDetails, getTipoVeiculoColor, getTipoVeiculoIcon, getTipoVeiculoLabel } from './utils/lavagemUtils';
+
+import FullScreenImage from '../../../../assets/components/FullScreenImage';
+import { LavagemInterface } from './lavagemTypes';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { customTheme } from '../../../../theme/theme';
 
 interface Photo {
     uri: string;
@@ -25,37 +27,10 @@ interface Photo {
     timestamp?: number;
 }
 
-interface LavagemData {
-    id: string;
-    responsavel: string;
-    data: string;
-    hora: string;
-    veiculo: {
-        placa: string;
-        tipo: string;
-        numeroEquipamento?: string | null;
-    };
-    tipoLavagem: string;
-    produtos: Array<{
-        nome: string;
-        quantidade: number;
-    }>;
-    fotos: Array<{
-        url: string;
-        timestamp: number;
-        path: string;
-    }>;
-    observacoes?: string;
-    status: string;
-    createdAt: any;
-    createdBy: string | null;
-    agendamentoId?: string | null;
-}
-
 interface DetalheLavagemModalProps {
     visible: boolean;
     onClose: () => void;
-    lavagem: LavagemData;
+    lavagem: LavagemInterface;
     onEdit?: () => void;
 }
 
@@ -99,7 +74,6 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
 
         setTimeout(() => {
             onClose()
-            console.log("Fehca agora")
         }, 0);
     };
 
@@ -405,11 +379,13 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
                                             <Text style={styles.sysInfoValue}>{lavagem.id}</Text>
                                         </View>
 
-                                        {lavagem.createdAt && typeof lavagem.createdAt.toDate === 'function' && (
+                                        {lavagem.createdAt && (
                                             <View style={styles.sysInfoItem}>
                                                 <Text style={styles.sysInfoLabel}>Criado em:</Text>
                                                 <Text style={styles.sysInfoValue}>
-                                                    {lavagem.createdAt.toDate().toLocaleString('pt-BR')}
+                                                    {typeof lavagem.createdAt === 'object' && 'toDate' in lavagem.createdAt
+                                                        ? lavagem.createdAt.toDate().toLocaleString('pt-BR')
+                                                        : new Date(lavagem.createdAt).toLocaleString('pt-BR')}
                                                 </Text>
                                             </View>
                                         )}

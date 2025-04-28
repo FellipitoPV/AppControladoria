@@ -1,9 +1,8 @@
 import { Alert, Linking, Platform } from 'react-native';
+import { collection, getDocs, getFirestore, limit, orderBy, query } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
-import { Compostagem } from './Types';
 import { version as appVersion } from '../../package.json';
-import firestore from '@react-native-firebase/firestore';
 import semver from 'semver';
 
 export interface VersionInfo {
@@ -43,12 +42,14 @@ export const useAppUpdater = () => {
         try {
             setUpdateState({ checking: true });
 
-            const versionsRef = firestore()
-                .collection('versoes_app_controladoria')
-                .orderBy('data_lancamento', 'desc')
-                .limit(1);
+            const db = getFirestore();
+            const versionsRef = query(
+                collection(db, 'versoes_app_controladoria'),
+                orderBy('data_lancamento', 'desc'),
+                limit(1)
+            );
 
-            const snapshot = await versionsRef.get();
+            const snapshot = await getDocs(versionsRef);
 
             if (snapshot.empty) {
                 setUpdateInfo(null);

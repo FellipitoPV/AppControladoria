@@ -1,14 +1,16 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import NetInfo from "@react-native-community/netinfo";
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+    checkForDuplicate,
     checkInternetConnection,
-    showGlobalToast,
     sendDataToFirebase,
-    checkForDuplicate
+    showGlobalToast
 } from '../helpers/GlobalApi';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Compostagem } from '../helpers/Types';
-import firestore from '@react-native-firebase/firestore';
+import NetInfo from "@react-native-community/netinfo";
+import { db } from '../../firebase';
 
 // Tipos
 interface NetworkContextData {
@@ -60,11 +62,9 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 const validItems = pendingData.filter((item, index, self) =>
                     item &&
                     item.data &&
-                    item.hora &&
                     typeof item.data === 'string' &&
-                    typeof item.hora === 'string' &&
                     // Remover duplicatas baseado em data e hora
-                    index === self.findIndex(t => t.data === item.data && t.hora === item.hora)
+                    index === self.findIndex(t => t.data === item.data)
                 );
 
                 // Se houver diferença, atualiza o storage
@@ -108,7 +108,7 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 setHasPendingData(false);
                 return { success: true, processed: 0, total: 0 };
             }
-
+    
             let pendingData: PendingData[];
             try {
                 pendingData = JSON.parse(pendingDataStr);
@@ -123,40 +123,36 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 setHasPendingData(false);
                 return { success: true, processed: 0, total: 0 };
             }
-
+    
             let successCount = 0;
             const remainingItems: PendingData[] = [];
             const total = pendingData.length;
-
+    
             for (const item of pendingData) {
-                if (!item || !item.data || !item.hora) continue;
-
+                if (!item || !item.data) continue;
+    
                 try {
                     // Primeiro, verifica se já existe no Firebase
-                    const existingDoc = await firestore()
-                        .collection('compostagens')
-                        .where('data', '==', item.data)
-                        .where('hora', '==', item.hora)
-                        .get();
-
+                    const q = query(
+                        collection(db(), 'compostagens'),
+                        where('data', '==', item.data),
+                    );
+                    const existingDoc = await getDocs(q);
+    
                     if (!existingDoc.empty) {
                         // Se já existe no Firebase, considera como sucesso
                         console.log('Documento já existe no Firebase - removendo dos pendentes');
                         successCount++;
                         continue; // Não adiciona aos remainingItems
                     }
-
+    
                     // Se não existe, tenta enviar
                     const success = await sendDataToFirebase(item);
-
+    
                     if (success) {
                         // Confirma se foi salvo
-                        const confirmQuery = await firestore()
-                            .collection('compostagens')
-                            .where('data', '==', item.data)
-                            .where('hora', '==', item.hora)
-                            .get();
-
+                        const confirmQuery = await getDocs(q);
+    
                         if (!confirmQuery.empty) {
                             console.log('Documento enviado e confirmado no Firebase');
                             successCount++;
@@ -166,7 +162,7 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
                             throw new Error('Falha na confirmação do envio');
                         }
                     }
-
+    
                     // Se chegou aqui, não foi sucesso
                     item.attempts = (item.attempts || 0) + 1;
                     if (item.attempts < 3) {
@@ -182,7 +178,7 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     }
                 }
             }
-
+    
             // Atualiza storage com items restantes
             if (remainingItems.length > 0) {
                 await AsyncStorage.setItem(
@@ -194,7 +190,7 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_COMPOSTAGENS);
                 setHasPendingData(false);
             }
-
+    
             return {
                 success: remainingItems.length === 0,
                 processed: successCount,
@@ -205,7 +201,6 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
             throw error;
         }
     };
-
 
     // Sincroniza dados pendentes
     const checkAndSendPendingData = async () => {

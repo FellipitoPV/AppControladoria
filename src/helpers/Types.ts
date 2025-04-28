@@ -1,5 +1,3 @@
-import { UserAccess } from "../screens/Adm/types/admTypes";
-
 export type Meeting = {
     id?: string;
     name: string;
@@ -72,7 +70,6 @@ export type Compostagem = {
     isMedicaoRotina?: boolean;
     leira: string;
     data: string;
-    hora: string;
     responsavel: string;
     tempAmb: string;
     tempBase: string;

@@ -1,7 +1,19 @@
-import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
-import firestore from '@react-native-firebase/firestore';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import {
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    onSnapshot,
+    query,
+    serverTimestamp,
+    updateDoc,
+    where
+} from 'firebase/firestore';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../screens/Adm/types/admTypes';
+import { db } from '../../firebase';
 
 interface UserContextData {
     userInfo: User | null;
@@ -42,38 +54,38 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         console.log(`Configurando listener para o usuário: ${userId}`);
         currentUserIdRef.current = userId;
 
-        const unsubscribe = firestore()
-            .collection('users')
-            .doc(userId)
-            .onSnapshot(
-                async (doc) => {
-                    if (doc.exists) {
-                        const userData = doc.data();
-                        if (userData) {
-                            console.log('Dados do usuário atualizados via listener');
-                            const userWithId: User = {
-                                id: doc.id,
-                                user: userData.user || '',
-                                email: userData.email || '',
-                                cargo: userData.cargo || '',
-                                photoURL: userData.photoURL || null,
-                                telefone: userData.telefone || null,
-                                ramal: userData.ramal || null,
-                                area: userData.area || null,
-                                acesso: userData.acesso || [],
-                            };
+        const userDocRef = doc(db(), 'users', userId);
 
-                            setUserInfo(userWithId);
-                            await AsyncStorage.setItem('@UserInfo', JSON.stringify(userWithId));
-                        }
-                    } else {
-                        console.warn(`Documento do usuário ${userId} não existe mais`);
+        const unsubscribe = onSnapshot(
+            userDocRef,
+            async (doc) => {
+                if (doc.exists()) {
+                    const userData = doc.data();
+                    if (userData) {
+                        console.log('Dados do usuário atualizados via listener');
+                        const userWithId: User = {
+                            id: doc.id,
+                            user: userData.user || '',
+                            email: userData.email || '',
+                            cargo: userData.cargo || '',
+                            photoURL: userData.photoURL || null,
+                            telefone: userData.telefone || null,
+                            ramal: userData.ramal || null,
+                            area: userData.area || null,
+                            acesso: userData.acesso || [],
+                        };
+
+                        setUserInfo(userWithId);
+                        await AsyncStorage.setItem('@UserInfo', JSON.stringify(userWithId));
                     }
-                },
-                (error) => {
-                    console.error('Erro no listener:', error);
+                } else {
+                    console.warn(`Documento do usuário ${userId} não existe mais`);
                 }
-            );
+            },
+            (error) => {
+                console.error('Erro no listener:', error);
+            }
+        );
 
         userListenerRef.current = unsubscribe;
     };
@@ -87,12 +99,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             }
 
             console.log(`Atualizando dados do usuário manualmente: ${userInfo.id}`);
-            const userDoc = await firestore()
-                .collection('users')
-                .doc(userInfo.id)
-                .get();
+            const userDocRef = doc(db(), 'users', userInfo.id);
+            const userDoc = await getDoc(userDocRef);
 
-            if (userDoc.exists) {
+            if (userDoc.exists()) {
                 const userData = userDoc.data();
                 if (userData) {
                     const updatedUser: User = {
@@ -121,6 +131,58 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             }
         } catch (error) {
             console.error('Erro ao atualizar dados do usuário:', error);
+        }
+    };
+
+    const updateUserInfo = async () => {
+        try {
+            setIsLoading(true);
+            const userEmail = await AsyncStorage.getItem('userEmail');
+
+            if (!userEmail) {
+                throw new Error('Email do usuário não encontrado');
+            }
+
+            const email = userEmail.replace(/"/g, "").toLowerCase();
+
+            const usersQuery = query(
+                collection(db(), 'users'),
+                where('email', '==', email.toLowerCase())
+            );
+
+            const usersSnapshot = await getDocs(usersQuery);
+
+            if (usersSnapshot.empty) {
+                console.warn(`Usuário com email ${email} não encontrado`);
+                throw new Error('Usuário não encontrado');
+            }
+
+            const userDoc = usersSnapshot.docs[0];
+            const userData = userDoc.data();
+            const userWithId: User = {
+                id: userDoc.id,
+                user: userData.user || '',
+                email: userData.email || '',
+                cargo: userData.cargo || '',
+                photoURL: userData.photoURL || null,
+                telefone: userData.telefone || null,
+                ramal: userData.ramal || null,
+                area: userData.area || null,
+                acesso: userData.acesso || [],
+            };
+
+            await AsyncStorage.setItem('@UserInfo', JSON.stringify(userWithId));
+            setUserInfo(userWithId);
+
+            // Configura o listener com o ID do usuário
+            await setupUserListener(userDoc.id);
+            console.log('Dados de usuário atualizados e listener configurado');
+
+        } catch (error) {
+            console.error('Erro em updateUserInfo:', error);
+            throw error;
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -158,57 +220,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                 currentUserIdRef.current = null;
             }
         };
-    }, []); // Sem dependências para executar apenas uma vez
-
-    const updateUserInfo = async () => {
-        try {
-            setIsLoading(true);
-            const userEmail = await AsyncStorage.getItem('userEmail');
-
-            if (!userEmail) {
-                throw new Error('Email do usuário não encontrado');
-            }
-
-            const email = userEmail.replace(/"/g, "").toLowerCase();
-
-            const usersSnapshot = await firestore()
-                .collection('users')
-                .where('email', '==', email.toLowerCase())
-                .get();
-
-            if (usersSnapshot.empty) {
-                console.warn(`Usuário com email ${email} não encontrado`);
-                throw new Error('Usuário não encontrado');
-            }
-
-            const userDoc = usersSnapshot.docs[0];
-            const userData = userDoc.data();
-            const userWithId: User = {
-                id: userDoc.id,
-                user: userData.user || '',
-                email: userData.email || '',
-                cargo: userData.cargo || '',
-                photoURL: userData.photoURL || null,
-                telefone: userData.telefone || null,
-                ramal: userData.ramal || null,
-                area: userData.area || null,
-                acesso: userData.acesso || [],
-            };
-
-            await AsyncStorage.setItem('@UserInfo', JSON.stringify(userWithId));
-            setUserInfo(userWithId);
-
-            // Configura o listener com o ID do usuário
-            await setupUserListener(userDoc.id);
-            console.log('Dados de usuário atualizados e listener configurado');
-
-        } catch (error) {
-            console.error('Erro em updateUserInfo:', error);
-            throw error;
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    }, []);
+    // =====
 
     const clearUserInfo = async () => {
         try {
@@ -242,16 +255,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         try {
             if (!userInfo?.id) throw new Error('Usuário não encontrado');
 
-            await firestore()
-                .collection('users')
-                .doc(userInfo.id)
-                .update({
-                    photoURL,
-                    updatedAt: firestore.FieldValue.serverTimestamp()
-                });
+            const userDocRef = doc(db(), 'users', userInfo.id);
+            await updateDoc(userDocRef, {
+                photoURL,
+                updatedAt: serverTimestamp()
+            });
 
             console.log('Foto de perfil atualizada com sucesso');
-            // Não precisamos atualizar o state manualmente, o listener vai fazer isso
 
         } catch (error) {
             console.error('Erro ao atualizar foto:', error);

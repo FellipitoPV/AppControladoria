@@ -63,7 +63,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
     const buscarLavagens = async () => {
         try {
             setLoading(true);
-    
+
             // Buscar lavagens no novo formato
             const snapshotNovo = await getDocs(
                 query(
@@ -71,7 +71,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                     orderBy('createdAt', 'desc')
                 )
             );
-    
+
             // Buscar lavagens no formato antigo
             const snapshotAntigo = await getDocs(
                 query(
@@ -79,19 +79,39 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                     where('placaVeiculo', '!=', null)
                 )
             );
-    
-            console.log(`Quantidade de lavagens novas: ${snapshotNovo.size}`);
-            console.log(`Quantidade de lavagens antigas: ${snapshotAntigo.size}`);
-    
+
             // Processar dados do novo formato
             const dadosNovos = snapshotNovo.docs
                 .filter(doc => !doc.data().placaVeiculo)
                 .map(doc => {
                     const data = doc.data() as LavagemInterface;
+                    let dataField: Timestamp;
+                    if (data.data instanceof Timestamp && !isNaN(data.data.seconds)) {
+                        dataField = data.data;
+                    } else if (typeof data.data === 'string' && data.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                        // Formato DD/MM/YYYY
+                        const [dia, mes, ano] = data.data.split('/').map(Number);
+                        const date = new Date(ano, mes - 1, dia);
+                        // Adicionar hora, se disponível (HH:mm ou HH:mm:ss)
+                        if (data.hora && data.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
+                            const timeParts = data.hora.split(':').map(Number);
+                            const [hours, minutes, seconds = 0] = timeParts;
+                            date.setHours(hours, minutes, seconds);
+                        }
+                        if (!isNaN(date.getTime())) {
+                            dataField = Timestamp.fromDate(date);
+                        } else {
+                            console.warn(`Data inválida no documento ${doc.id}:`, data.data, data.hora);
+                            dataField = Timestamp.fromDate(new Date());
+                        }
+                    } else {
+                        console.warn(`Formato de data inesperado no documento ${doc.id}:`, data.data);
+                        dataField = Timestamp.fromDate(new Date());
+                    }
                     return {
                         id: doc.id,
                         responsavel: data.responsavel || '',
-                        data: data.data || '',
+                        data: dataField,
                         hora: data.hora || '',
                         veiculo: data.veiculo || { placa: '', tipo: '' },
                         tipoLavagem: data.tipoLavagem || '',
@@ -99,19 +119,41 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                         fotos: data.fotos || [],
                         observacoes: data.observacoes || '',
                         status: data.status || 'concluido',
-                        createdAt: data.createdAt || null,
+                        createdAt: data.createdAt instanceof Timestamp && !isNaN(data.createdAt.seconds)
+                            ? data.createdAt
+                            : Timestamp.fromDate(new Date()),
                         createdBy: data.createdBy || null,
                         agendamentoId: data.agendamentoId || null
                     } as LavagemInterface;
                 });
-    
+
             // Processar dados do formato antigo
             const dadosAntigos = snapshotAntigo.docs.map(doc => {
                 const data = doc.data();
+                let timestamp: Timestamp;
+                if (data.data && typeof data.data === 'string' && data.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                    // Formato antigo: data "DD/MM/YYYY" e hora "HH:mm" ou "HH:mm:ss"
+                    const [dia, mes, ano] = data.data.split('/').map(Number);
+                    const date = new Date(ano, mes - 1, dia);
+                    if (data.hora && data.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
+                        const timeParts = data.hora.split(':').map(Number);
+                        const [hours, minutes, seconds = 0] = timeParts;
+                        date.setHours(hours, minutes, seconds);
+                    }
+                    if (!isNaN(date.getTime())) {
+                        timestamp = Timestamp.fromDate(date);
+                    } else {
+                        console.warn(`Data inválida no documento antigo ${doc.id}:`, data.data, data.hora);
+                        timestamp = Timestamp.fromDate(new Date());
+                    }
+                } else {
+                    console.warn(`Data ausente ou inválida no documento antigo ${doc.id}:`, data.data);
+                    timestamp = Timestamp.fromDate(new Date());
+                }
                 return {
                     id: doc.id,
                     responsavel: data.responsavel || '',
-                    data: data.data || '',
+                    data: timestamp,
                     hora: data.hora || '',
                     veiculo: {
                         placa: data.placaVeiculo || '',
@@ -126,20 +168,22 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                     fotos: [],
                     observacoes: data.observacoes || '',
                     status: 'concluido',
-                    createdAt: data.createdAt ?
-                        (typeof data.createdAt === 'string' ?
-                            Timestamp.fromDate(new Date(data.createdAt)) :
-                            data.createdAt
-                        ) : null,
+                    createdAt: data.createdAt
+                        ? (typeof data.createdAt === 'string'
+                            ? Timestamp.fromDate(new Date(data.createdAt))
+                            : data.createdAt instanceof Timestamp && !isNaN(data.createdAt.seconds)
+                                ? data.createdAt
+                                : Timestamp.fromDate(new Date()))
+                        : Timestamp.fromDate(new Date()),
                     createdBy: null,
                     agendamentoId: null
                 } as LavagemInterface;
             });
-    
+
             // Processar fotos do formato antigo
             for (const lavagem of dadosAntigos) {
                 const docData = snapshotAntigo.docs.find(doc => doc.id === lavagem.id)?.data();
-    
+
                 if (docData) {
                     if (docData.photoUrls && Array.isArray(docData.photoUrls)) {
                         lavagem.fotos = docData.photoUrls.map((url: string, index: number) => ({
@@ -157,39 +201,38 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                     }
                 }
             }
-    
+
             // Combinar dados dos dois formatos
             const todosDados = [...dadosNovos, ...dadosAntigos];
-    
-            // Ordenar por data de criação
+
+            // Ordenar por data de criação (do mais novo para o mais velho)
             const dadosOrdenados = todosDados.sort((a, b) => {
-                let dataA = 0;
-                let dataB = 0;
-    
-                if (a.createdAt && typeof a.createdAt.toDate === 'function') {
-                    dataA = a.createdAt.toDate().getTime();
+                let dataA: Date = new Date(0); // Data padrão para casos inválidos
+                let dataB: Date = new Date(0);
+
+                if (a.createdAt instanceof Timestamp && !isNaN(a.createdAt.seconds)) {
+                    dataA = a.createdAt.toDate();
+                } else if (typeof a.createdAt === 'string' && a.createdAt.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*Z$/)) {
+                    dataA = new Date(a.createdAt);
                 }
-                else if (a.createdAt && typeof a.createdAt === 'string') {
-                    dataA = new Date(a.createdAt).getTime();
+
+                if (b.createdAt instanceof Timestamp && !isNaN(b.createdAt.seconds)) {
+                    dataB = b.createdAt.toDate();
+                } else if (typeof b.createdAt === 'string' && b.createdAt.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*Z$/)) {
+                    dataB = new Date(b.createdAt);
                 }
-    
-                if (b.createdAt && typeof b.createdAt.toDate === 'function') {
-                    dataB = b.createdAt.toDate().getTime();
-                }
-                else if (b.createdAt && typeof b.createdAt === 'string') {
-                    dataB = new Date(b.createdAt).getTime();
-                }
-    
-                return dataB - dataA;
+
+                // Ordenar do mais recente (maior timestamp) para o mais antigo (menor timestamp)
+                return dataB.getTime() - dataA.getTime();
             });
-    
+
             setTodasLavagens(dadosOrdenados);
-    
+
             // Aplicar paginação inicial
             const primeiraPagina = dadosOrdenados.slice(0, ITEMS_PER_PAGE);
             setLavagens(primeiraPagina);
             setHasMore(dadosOrdenados.length > ITEMS_PER_PAGE);
-    
+
             // Animar entrada dos cards
             Animated.parallel([
                 Animated.timing(fadeAnim, {
@@ -203,7 +246,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                     useNativeDriver: true
                 })
             ]).start();
-    
+
         } catch (error) {
             console.error('Erro ao buscar lavagens:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível carregar o histórico de lavagens', 3000);
@@ -212,7 +255,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
             setRefreshing(false);
         }
     };
-    
+
     const handleDelete = async (id: string) => {
         try {
             await deleteDoc(doc(db(), 'registroLavagens', id));
@@ -294,32 +337,47 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
         }
     }, [filterStatus, filterVeiculo, filterTipoLavagem]);
 
-    const formatarData = (data: string) => {
+    const formatarData = (data: Timestamp | string | undefined, hora?: string) => {
         if (!data) return '';
 
         try {
-            // Assumindo que data está em formato DD/MM/YYYY
-            const parts = data.split('/');
-            if (parts.length !== 3) return data;
+            let date: Date;
+            if (typeof data === 'string') {
+                // Formato DD/MM/YYYY
+                const parts = data.split('/');
+                if (parts.length !== 3) return data;
+                const dia = parseInt(parts[0]);
+                const mes = parseInt(parts[1]) - 1; // Mês em JS começa em 0
+                const ano = parseInt(parts[2]);
+                date = new Date(ano, mes, dia);
 
-            const dia = parseInt(parts[0]);
-            const mes = parseInt(parts[1]) - 1; // Mês em JS começa em 0
-            const ano = parseInt(parts[2]);
-
-            const date = new Date(ano, mes, dia);
-
-            // Formatar para exibição (com nome do dia da semana)
+                // Adicionar hora, se disponível (HH:mm ou HH:mm:ss)
+                if (hora) {
+                    const timeParts = hora.split(':').map(Number);
+                    if (timeParts.length >= 2) {
+                        const [hours, minutes, seconds = 0] = timeParts;
+                        date.setHours(hours, minutes, seconds);
+                    }
+                }
+            } else {
+                // Timestamp
+                if (isNaN(data.seconds) || isNaN(data.nanoseconds)) {
+                    console.warn('Timestamp inválido:', data);
+                    return '';
+                }
+                date = data.toDate();
+            }
+            if (isNaN(date.getTime())) throw new Error('Invalid time value');
             return format(date, "EEE, dd 'de' MMM", { locale: ptBR });
         } catch (error) {
             console.error('Erro ao formatar data:', error);
-            return data;
+            return '';
         }
     };
 
     const renderLavagemCard = (lavagem: LavagemInterface, index: number) => {
         const tipoLavagemInfo = getTipoLavagemDetails(lavagem.tipoLavagem);
-        const dataFormatada = formatarData(lavagem.data);
-        const animationDelay = index * 100; // Escalonar animação por índice
+        const dataFormatada = formatarData(lavagem.data, lavagem.hora);
 
         return (
             <Animated.View

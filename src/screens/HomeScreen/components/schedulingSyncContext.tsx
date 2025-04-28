@@ -1,8 +1,11 @@
 // schedulingSyncContext.tsx
-import React, { createContext, useState, useContext, useEffect, useMemo } from 'react';
-import firestore from '@react-native-firebase/firestore';
+
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { db } from '../../../../firebase';
 
 // Tipos
 interface AgendamentoLavagem {
@@ -64,49 +67,39 @@ export function SchedulingSyncProvider({ children }: { children: React.ReactNode
         console.log('Iniciando sincronização com Firestore');
         setSyncStatus('syncing');
 
-        const unsubscribe = firestore()
-            .collection('agendamentos')
-            .onSnapshot({
-                next: async (snapshot) => {
-                    try {
-                        const agendamentosData: AgendamentoLavagem[] = [];
+        const unsubscribe = onSnapshot(collection(db(), 'agendamentos'), {
+            next: async (snapshot) => {
+                try {
+                    const agendamentosData: AgendamentoLavagem[] = [];
 
-                        snapshot.forEach(doc => {
-                            const data = doc.data();
-                            agendamentosData.push({
-                                id: doc.id,
-                                placa: data.placa || '',
-                                tipoLavagem: data.tipoLavagem || '',
-                                data: data.data || '',
-                                concluido: Boolean(data.concluido)
-                            });
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        agendamentosData.push({
+                            id: doc.id,
+                            placa: data.placa || '',
+                            tipoLavagem: data.tipoLavagem || '',
+                            data: data.data || '',
+                            concluido: Boolean(data.concluido)
                         });
+                    });
 
-                        console.log('Dados recebidos do Firestore:', agendamentosData.length);
+                    console.log('Dados recebidos do Firestore:', agendamentosData.length);
 
-                        setAgendamentos(agendamentosData);
-                        await saveLocally(agendamentosData);
-                        setSyncStatus('idle');
-                    } catch (error) {
-                        console.error('Erro ao processar dados do Firestore:', error);
-                        setSyncStatus('error');
-                    }
-                },
-                error: (error) => {
-                    console.error('Erro na sincronização:', error);
+                    setAgendamentos(agendamentosData);
+                    await saveLocally(agendamentosData);
+                    setSyncStatus('idle');
+                } catch (error) {
+                    console.error('Erro ao processar dados do Firestore:', error);
                     setSyncStatus('error');
                 }
-            });
+            },
+            error: (error) => {
+                console.error('Erro na sincronização:', error);
+                setSyncStatus('error');
+            }
+        });
 
         setFirestoreUnsubscribe(() => unsubscribe);
-    };
-
-    // Força sincronização manual
-    const forceSync = async () => {
-        const netInfo = await NetInfo.fetch();
-        if (netInfo.isConnected) {
-            startFirestoreSync();
-        }
     };
 
     // Marcar agendamento como concluído
@@ -123,14 +116,21 @@ export function SchedulingSyncProvider({ children }: { children: React.ReactNode
 
             // Se estiver online, atualiza no Firestore
             if (netInfo.isConnected) {
-                await firestore()
-                    .collection('agendamentos')
-                    .doc(agendamentoId)
-                    .update({ concluido: true });
+                await updateDoc(doc(db(), 'agendamentos', agendamentoId), {
+                    concluido: true
+                });
             }
         } catch (error) {
             console.error('Erro ao marcar como concluído:', error);
             throw error;
+        }
+    };
+
+    // Força sincronização manual
+    const forceSync = async () => {
+        const netInfo = await NetInfo.fetch();
+        if (netInfo.isConnected) {
+            startFirestoreSync();
         }
     };
 

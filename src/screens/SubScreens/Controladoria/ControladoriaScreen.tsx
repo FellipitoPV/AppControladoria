@@ -1,28 +1,29 @@
-import React, { useEffect, useState } from 'react';
 import {
-    View,
-    ScrollView,
-    StyleSheet,
-    Dimensions,
-    TouchableOpacity,
-} from 'react-native';
-import {
+    Button,
+    Card,
+    ProgressBar,
     Surface,
     Text,
-    Card,
-    Button,
-    ProgressBar,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { customTheme } from '../../../theme/theme';
-import ModernHeader from '../../../assets/components/ModernHeader';
-import firestore from '@react-native-firebase/firestore';
-import { useUser } from '../../../contexts/userContext';
-import { hasAccess } from '../../Adm/types/admTypes';
-import { ProgramacaoEquipamento } from './types/logisticTypes';
-import { useNetwork } from '../../../contexts/NetworkContext';
-import database from '@react-native-firebase/database';
+import {
+    Dimensions,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db, dbRealTime } from '../../../../firebase';
+import { getDatabase, onValue, ref } from 'firebase/database';
+
 import ActionButton from '../../../assets/components/ActionButton';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import ModernHeader from '../../../assets/components/ModernHeader';
+import { ProgramacaoEquipamento } from './types/logisticTypes';
+import { customTheme } from '../../../theme/theme';
+import { useNetwork } from '../../../contexts/NetworkContext';
+import { useUser } from '../../../contexts/userContext';
 
 const { width } = Dimensions.get('window');
 
@@ -80,11 +81,11 @@ export default function ControladoriaScreen({ navigation }: any) {
             }
 
             // Agora usamos o database do Firebase Realtime (não o Firestore)
-            const snapshot = await database()
-                .ref('programacoes')
-                .once('value');
+            const snapshot = await new Promise((resolve, reject) => {
+                onValue(ref(dbRealTime(), 'programacoes'), (snap) => resolve(snap), reject);
+            });
 
-            const data = snapshot.val();
+            const data = (snapshot as any)?.val();
 
             if (!data) {
                 setAgendamentosPendentes(0);
@@ -108,6 +109,7 @@ export default function ControladoriaScreen({ navigation }: any) {
         }
     };
 
+    // Função para buscar estatísticas de lavagem
     const fetchLavagemStats = async () => {
         try {
             // Datas de referência como timestamps
@@ -118,9 +120,7 @@ export default function ControladoriaScreen({ navigation }: any) {
             const inicioMes = getStartOfMonth();
 
             // Buscar todos os registros da coleção registroLavagens
-            const snapshot = await firestore()
-                .collection('registroLavagens')
-                .get();
+            const snapshot = await getDocs(collection(db(), 'registroLavagens'));
 
             let statsHoje = 0;
             let statsSemana = 0;
@@ -177,7 +177,7 @@ export default function ControladoriaScreen({ navigation }: any) {
             };
 
             // Processar todos os documentos
-            snapshot.docs.forEach(processarDocumento);
+            snapshot.forEach(processarDocumento);
 
             const total = snapshot.size;
 

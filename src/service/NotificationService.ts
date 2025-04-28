@@ -1,6 +1,7 @@
 // NotificationService.ts
-import PushNotification from 'react-native-push-notification';
+
 import { Platform } from 'react-native';
+import PushNotification from 'react-native-push-notification';
 
 class NotificationService {
     constructor() {
@@ -150,7 +151,7 @@ class NotificationService {
     // Função para cancelar todas as notificações
     cancelAllNotifications = () => {
         PushNotification.cancelAllLocalNotifications();
-        console.log("🧹 Todas as notificações foram canceladas");
+        //console.log("🧹 Todas as notificações foram canceladas");
     };
 
     // Função específica para cancelar notificação repetitiva

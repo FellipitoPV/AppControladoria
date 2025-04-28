@@ -19,6 +19,7 @@ import { DropdownRef } from '../../../../helpers/Types';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { ProdutoEstoque } from './lavagemTypes';
 import { customTheme } from '../../../../theme/theme';
+import dayjs from 'dayjs';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
 
 interface ProductSelectionModalProps {
@@ -83,6 +84,9 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     }, [visible, initialProduct, screenHeight]);
 
     const handleConfirm = () => {
+        console.log('Selected Product:', selectedProduct);
+        console.log('Quantity:', quantity);
+        
         if (!selectedProduct) {
             showGlobalToast('error', 'Erro', 'Selecione um produto', 2000);
             return;
@@ -109,8 +113,8 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
             unidadeMedida: produtoSelecionado?.unidadeMedida || 'litro',
             quantidadeMinima: produtoSelecionado?.quantidadeMinima || '0',
             photoUrl: produtoSelecionado?.photoUrl || '',
-            createdAt: produtoSelecionado?.createdAt || new Date().toISOString(),
-            updatedAt: produtoSelecionado?.updatedAt || new Date().toISOString(),
+            createdAt: produtoSelecionado?.createdAt || dayjs().toISOString(),
+            updatedAt: produtoSelecionado?.updatedAt || dayjs().toISOString(),
         });
 
         // Reset states and close

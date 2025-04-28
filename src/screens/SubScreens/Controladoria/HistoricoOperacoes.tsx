@@ -1,23 +1,24 @@
-import React, { useEffect, useState } from 'react';
 import {
-    View,
+    ActivityIndicator,
+    Linking,
+    Platform,
     ScrollView,
     StyleSheet,
     TouchableOpacity,
-    Platform,
-    Linking,
-    ActivityIndicator,
+    View,
 } from 'react-native';
-import { Text, Surface, Dialog, Portal } from 'react-native-paper';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import database from '@react-native-firebase/database';
-import storage from '@react-native-firebase/storage';
-import { NavigationProp } from '@react-navigation/native';
+import { Container, ProgramacaoEquipamento } from './types/logisticTypes';
+import { Dialog, Portal, Surface, Text } from 'react-native-paper';
+import React, { useEffect, useState } from 'react';
+import { getDatabase, onValue, ref, remove } from 'firebase/database';
+
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useUser } from '../../../contexts/userContext';
-import { showGlobalToast } from '../../../helpers/GlobalApi';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { NavigationProp } from '@react-navigation/native';
 import { customTheme } from '../../../theme/theme';
-import { ProgramacaoEquipamento, Container } from './types/logisticTypes';
+import { dbRealTime } from '../../../../firebase';
+import { showGlobalToast } from '../../../helpers/GlobalApi';
+import { useUser } from '../../../contexts/userContext';
 
 const HistoricoOperacoes = ({ navigation }: { navigation: NavigationProp<any> }) => {
     const { userInfo } = useUser();
@@ -36,14 +37,19 @@ const HistoricoOperacoes = ({ navigation }: { navigation: NavigationProp<any> })
     const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
     useEffect(() => {
+        setFilteredOperacoes(operacoes);
+    }, [operacoes]);
+
+
+    useEffect(() => {
         const buscarHistorico = async () => {
             try {
                 // Busca todos os registros do histórico
-                const snapshot = await database()
-                    .ref('historico')
-                    .once('value');
+                const snapshot = await new Promise((resolve, reject) => {
+                    onValue(ref(dbRealTime(), 'historico'), (snap) => resolve(snap), reject);
+                });
 
-                const data = snapshot.val();
+                const data = (snapshot as any)?.val();
 
                 if (data) {
                     const historicoArray = Object.entries(data).map(([key, value]: [string, any]) => ({
@@ -70,18 +76,12 @@ const HistoricoOperacoes = ({ navigation }: { navigation: NavigationProp<any> })
         buscarHistorico();
     }, []);
 
-    useEffect(() => {
-        setFilteredOperacoes(operacoes);
-    }, [operacoes]);
-
     // Função para deletar do histórico
     const handleDelete = async () => {
         if (!selectedOperacao) return;
 
         try {
-            await database()
-                .ref(`historico/${selectedOperacao.firebaseKey}`)
-                .remove();
+            await remove(ref(dbRealTime(), `historico/${selectedOperacao.firebaseKey}`));
 
             // Atualiza a lista local
             setOperacoes(prevOperacoes =>

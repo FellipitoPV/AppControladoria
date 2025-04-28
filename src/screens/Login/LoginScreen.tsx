@@ -21,7 +21,7 @@ import WelcomeScreen from './WelcomeScreen';
 import { auth } from '../../../firebase';
 import { customTheme } from '../../theme/theme';
 import { showGlobalToast } from '../../helpers/GlobalApi';
-import { signInWithEmailAndPassword } from 'firebase/auth'
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useUser } from '../../contexts/userContext';
 
 const inputTheme = {
@@ -40,14 +40,12 @@ type RootStackParamList = {
     Home: undefined;
     ForgotPass: undefined;
     Register: undefined;
-    // Outras rotas
 };
 
 type LoginScreenProps = {
     navigation: StackNavigationProp<RootStackParamList, 'Login'>;
     route?: RouteProp<RootStackParamList, 'Login'>;
 };
-
 
 const LoginScreen: React.FC<LoginScreenProps> = ({
     navigation,
@@ -56,7 +54,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     const { updateUserInfo } = useUser();
     const [email, setEmail] = useState('');
     const [welcomeIsOpen, setWelcomeIsOpen] = useState<boolean>(true);
-
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -76,10 +73,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         }, [welcomeIsOpen])
     );
 
-    // Primeiro, modifique os useEffects de navegação
     useEffect(() => {
         const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
-            // Só previne a navegação se não for uma navegação de replace
             if (!welcomeIsOpen && e.data.action.type !== 'REPLACE') {
                 e.preventDefault();
                 setWelcomeIsOpen(true);
@@ -89,7 +84,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         return unsubscribe;
     }, [navigation, welcomeIsOpen]);
 
-    // Modifique a função handleLogin
     const handleLogin = async (
         loginEmail: string,
         loginPassword: string,
@@ -100,31 +94,50 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         setIsLoading(true);
 
         try {
+            // Valida o email
+            if (!loginEmail || typeof loginEmail !== 'string' || loginEmail.trim() === '') {
+                console.error('Email inválido:', loginEmail);
+                throw new Error('Por favor, forneça um email válido');
+            }
+
+            // Valida a senha
+            if (!loginPassword || typeof loginPassword !== 'string' || loginPassword.trim() === '') {
+                console.error('Senha inválida:', loginPassword);
+                throw new Error('Por favor, forneça uma senha válida');
+            }
+
+            console.log('Tentando login com:', { email: loginEmail.toLowerCase(), password: loginPassword });
+
             // Autenticação no Firebase
-            await signInWithEmailAndPassword(auth(),
+            const userCredential = await signInWithEmailAndPassword(
+                auth(),
                 loginEmail.toLowerCase(),
                 loginPassword
             );
+            console.log('Usuário autenticado:', userCredential.user.uid);
 
-            // Salva as credenciais
-            await AsyncStorage.setItem('userEmail', loginEmail.toLowerCase());
-            await AsyncStorage.setItem('userPassword', loginPassword);
-
-            // Atualiza as informações do usuário e aguarda a conclusão
-            await updateUserInfo();
-
-            // Verifica se o userInfo foi atualizado corretamente
-            const savedUserInfo = await AsyncStorage.getItem('@UserInfo');
-            if (!savedUserInfo) {
-                throw new Error('Falha ao carregar informações do usuário');
+            // Salva as credenciais apenas se não for login automático
+            if (!isAutoLogin) {
+                await AsyncStorage.setItem('userEmail', loginEmail);
+                await AsyncStorage.setItem('userPassword', loginPassword);
+                console.log('Credenciais salvas no AsyncStorage:', { email: loginEmail.toLowerCase(), password: loginPassword });
             }
 
-            // Desativa o welcomeIsOpen antes de navegar
-            setWelcomeIsOpen(false);
+            // Atualiza as informações do usuário
+            await updateUserInfo();
+            console.log('updateUserInfo chamado com sucesso');
 
-            // Pequeno timeout para garantir que o estado foi atualizado
+            // Verifica se userInfo foi salvo no AsyncStorage
+            const savedUserInfo = await AsyncStorage.getItem('@UserInfo');
+            if (!savedUserInfo) {
+                console.warn('Nenhuma informação de usuário salva em @UserInfo');
+                throw new Error('Falha ao carregar informações do usuário');
+            }
+            console.log('userInfo salvo:', savedUserInfo);
+
+            // Navega para a próxima tela
+            setWelcomeIsOpen(false);
             setTimeout(() => {
-                // Navegar para a próxima tela ou para Home
                 if (nextScreen) {
                     navigation.replace(nextScreen as keyof RootStackParamList, nextScreenParams);
                 } else {
@@ -133,19 +146,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             }, 100);
 
             if (!isAutoLogin) {
-                showGlobalToast(
-                    'success',
-                    'Login realizado com sucesso!',
-                    '',
-                    2000
-                );
+                showGlobalToast('success', 'Login realizado com sucesso!', '', 2000);
             }
         } catch (error: any) {
-            console.error('Erro completo no login:', error);
-
+            console.error('Erro no login:', error);
             if (!isAutoLogin) {
                 let errorMessage = 'Erro ao fazer login';
-
                 if (error.code === 'auth/user-not-found') {
                     errorMessage = 'Usuário não encontrado';
                 } else if (error.code === 'auth/wrong-password') {
@@ -154,49 +160,51 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                     errorMessage = 'Email inválido';
                 } else if (error.message === 'Falha ao carregar informações do usuário') {
                     errorMessage = 'Não foi possível carregar suas informações';
+                } else if (error.message === 'Por favor, forneça um email válido') {
+                    errorMessage = 'Por favor, forneça um email válido';
+                } else if (error.message === 'Por favor, forneça uma senha válida') {
+                    errorMessage = 'Por favor, forneça uma senha válida';
                 }
-
-                showGlobalToast(
-                    'error',
-                    'Erro no login',
-                    errorMessage,
-                    4000
-                );
+                showGlobalToast('error', 'Erro no login', errorMessage, 4000);
             }
             throw error;
         } finally {
-            setIsLoading(false)
+            setIsLoading(false);
         }
     };
-
-    // Verificar autenticação ao iniciar
-    useEffect(() => {
-        checkAuthentication();
-    }, []);
 
     const checkAuthentication = async () => {
         try {
             const savedEmail = await AsyncStorage.getItem('userEmail');
             const savedPassword = await AsyncStorage.getItem('userPassword');
+            console.log('Credenciais encontradas no AsyncStorage:', { savedEmail, savedPassword });
 
-            // Verificar se há parâmetros de navegação passados na autenticação
-            const nextScreen = route?.params?.nextScreen;
-            const nextScreenParams = route?.params?.nextScreenParams;
-
-            if (savedEmail && savedPassword) {
-                await handleLogin(
-                    savedEmail,
-                    savedPassword,
-                    true,
-                    nextScreen,
-                    nextScreenParams
-                );
+            // Limpa credenciais inválidas
+            if (savedEmail === null || savedPassword === null) {
+                console.log('Credenciais inválidas encontradas, limpando AsyncStorage');
+                await AsyncStorage.removeItem('userEmail');
+                await AsyncStorage.removeItem('userPassword');
+            } else if (savedEmail && savedPassword) {
+                console.log('Tentando login automático');
+                await handleLogin(savedEmail, savedPassword, true, route?.params?.nextScreen, route?.params?.nextScreenParams);
+            } else {
+                console.log('Nenhuma credencial salva encontrada');
             }
         } catch (error) {
             console.error('Erro na verificação de autenticação:', error);
         } finally {
             setIsCheckingAuth(false);
         }
+    };
+
+    useEffect(() => {
+        checkAuthentication();
+    }, []);
+
+    // Log para verificar o estado do email no momento do login manual
+    const handleManualLogin = () => {
+        console.log('Estado atual do formulário:', { email, password });
+        handleLogin(email, password);
     };
 
     if (isCheckingAuth) {
@@ -220,7 +228,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.content}
             >
-                {/* Header com botão voltar */}
                 <View style={styles.header}>
                     <TouchableOpacity
                         onPress={() => setWelcomeIsOpen(true)}
@@ -234,7 +241,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                     </TouchableOpacity>
                 </View>
 
-                {/* Área de boas-vindas */}
                 <View style={styles.welcomeContainer}>
                     <Text variant="headlineMedium" style={styles.welcomeText}>
                         Bem-vindo de volta!
@@ -244,13 +250,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                     </Text>
                 </View>
 
-                {/* Formulário */}
                 <View style={styles.formContainer}>
                     <TextInput
                         mode="flat"
                         label="Email"
                         value={email}
-                        onChangeText={setEmail}
+                        onChangeText={(text) => {
+                            console.log('Email input alterado:', text);
+                            setEmail(text);
+                        }}
                         style={styles.input}
                         theme={inputTheme}
                         autoCapitalize="none"
@@ -261,7 +269,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                         mode="flat"
                         label="Senha"
                         value={password}
-                        onChangeText={setPassword}
+                        onChangeText={(text) => {
+                            console.log('Senha input alterado:', text);
+                            setPassword(text);
+                        }}
                         secureTextEntry={!showPassword}
                         right={
                             <TextInput.Icon
@@ -283,16 +294,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                     </TouchableOpacity>
 
                     <SaveButton
-                        onPress={() => handleLogin(email, password)}
+                        onPress={handleManualLogin}
                         text="Login"
                         iconName="login"
                         loading={isLoading}
                         disabled={!email || !password}
                     />
-
                 </View>
 
-                {/* Footer */}
                 <View style={styles.footer}>
                     <Text style={styles.footerText}>
                         Não tem uma conta?{' '}
@@ -307,7 +316,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
-}
+};
 
 const { width } = Dimensions.get('window');
 

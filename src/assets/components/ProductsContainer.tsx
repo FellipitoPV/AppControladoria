@@ -1,54 +1,68 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
-    View,
     StyleSheet,
-    TouchableOpacity
+    TouchableOpacity,
+    View
 } from 'react-native';
 import {
-    Text,
-    Surface
+    Surface,
+    Text
 } from 'react-native-paper';
+
+import { FormFieldConfig } from './Fomulario/FormularioConfig';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { customTheme } from '../../../../theme/theme';
-import { ProductSelectionModal } from './ProductSelectionModal';
-import { ProdutoEstoque } from './lavagemTypes';
+import { ProductSelectionModal } from '../../screens/SubScreens/Lavagem/Components/ProductSelectionModal';
+import { ProdutoEstoque } from '../../contexts/backgroundSyncContext';
+import { customTheme } from '../../theme/theme';
 
-
-export interface ProductsContainerProps {
-    produtos: ProdutoEstoque[];
-    selectedProducts: ProdutoEstoque[];
-    onAddProduct: (produto: ProdutoEstoque) => void;
-    onRemoveProduct: (index: number) => void;
-    onUpdateProduct: (index: number, produto: ProdutoEstoque) => void;
+interface ProductsContainerProps {
+    field: FormFieldConfig;
+    value: ProdutoEstoque[];
+    onChange: (name: string, value: ProdutoEstoque[]) => void;
 }
 
 const ProductsContainer: React.FC<ProductsContainerProps> = ({
-    produtos,
-    selectedProducts,
-    onAddProduct,
-    onRemoveProduct,
-    onUpdateProduct
+    field,
+    value,
+    onChange,
 }) => {
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [editingProductIndex, setEditingProductIndex] = useState<number | null>(null);
 
-    // useEffect(() => {
-    //     console.log("Produto incial:", selectedProducts)
+    const handleAddProduct = (produto: ProdutoEstoque) => {
+        console.log('handleAddProduct chamado com produto:', produto);
+        const newProducts = [...value, produto];
+        onChange(field.name, newProducts);
+        // Removido: field.products?.onAddProduct?.(produto);
+    };
 
-    // }, []);
+    const handleRemoveProduct = (index: number) => {
+        console.log('handleRemoveProduct chamado com index:', index);
+        const newProducts = value.filter((_, idx) => idx !== index);
+        onChange(field.name, newProducts);
+        field.products?.onRemoveProduct?.(index);
+    };
+
+    const handleUpdateProduct = (index: number, produto: ProdutoEstoque) => {
+        console.log('handleUpdateProduct chamado com index:', index, 'produto:', produto);
+        const newProducts = [...value];
+        newProducts[index] = produto;
+        onChange(field.name, newProducts);
+        field.products?.onUpdateProduct?.(index, produto);
+    };
 
     const handleEditProduct = (index: number) => {
+        console.log('handleEditProduct chamado com index:', index);
         setEditingProductIndex(index);
         setIsModalVisible(true);
     };
 
-    const handleModalConfirm = (ProdutoEstoque: ProdutoEstoque) => {
+    const handleModalConfirm = (produto: ProdutoEstoque) => {
+        console.log('handleModalConfirm chamado com produto:', produto);
         if (editingProductIndex !== null) {
-            // Editing existing ProdutoEstoque
-            onUpdateProduct(editingProductIndex, ProdutoEstoque);
+            handleUpdateProduct(editingProductIndex, produto);
         } else {
-            // Adding new ProdutoEstoque
-            onAddProduct(ProdutoEstoque);
+            handleAddProduct(produto);
         }
         setIsModalVisible(false);
         setEditingProductIndex(null);
@@ -56,25 +70,13 @@ const ProductsContainer: React.FC<ProductsContainerProps> = ({
 
     return (
         <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-                <MaterialCommunityIcons
-                    name="package"
-                    size={20}
-                    color={customTheme.colors.primary}
-                />
-                <Text variant="titleMedium" style={styles.sectionTitle}>
-                    Produtos Utilizados
-                </Text>
-            </View>
 
             <View style={styles.inputGroup}>
-                {selectedProducts.map((item, index) => (
+                {value.map((item, index) => (
                     <View key={`produto-${index}`} style={styles.produtoRow}>
                         <TouchableOpacity
                             style={styles.productButton}
-                            onPress={() => {
-                                handleEditProduct(index)
-                            }}
+                            onPress={() => handleEditProduct(index)}
                         >
                             <View style={styles.productButtonContent}>
                                 <MaterialCommunityIcons
@@ -85,12 +87,12 @@ const ProductsContainer: React.FC<ProductsContainerProps> = ({
                                 <View style={styles.productTextContainer}>
                                     <Text style={styles.productNameText}>{item.nome}</Text>
                                     <Text style={styles.productQuantityText}>
-                                        Quantidade: {item.quantidade}
+                                        Quantidade: {item.quantidade} {item.unidadeMedida || ''}
                                     </Text>
                                 </View>
                             </View>
                             <TouchableOpacity
-                                onPress={() => onRemoveProduct(index)}
+                                onPress={() => handleRemoveProduct(index)}
                                 style={styles.removeButton}
                             >
                                 <MaterialCommunityIcons
@@ -106,6 +108,7 @@ const ProductsContainer: React.FC<ProductsContainerProps> = ({
                 <TouchableOpacity
                     style={styles.addProductButton}
                     onPress={() => {
+                        console.log('Abrindo modal para adicionar produto');
                         setEditingProductIndex(null);
                         setIsModalVisible(true);
                     }}
@@ -116,7 +119,7 @@ const ProductsContainer: React.FC<ProductsContainerProps> = ({
                         color={customTheme.colors.primary}
                     />
                     <Text style={styles.addProductButtonText}>
-                        Adicionar Produto
+                        Adicionar {field.label}
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -128,22 +131,18 @@ const ProductsContainer: React.FC<ProductsContainerProps> = ({
                     setEditingProductIndex(null);
                 }}
                 onConfirm={handleModalConfirm}
-                availableProducts={produtos}
-                selectedProducts={selectedProducts} // Adicione esta linha
+                availableProducts={field.products?.availableProducts || []}
+                selectedProducts={value}
                 initialProduct={
-                    editingProductIndex !== null
-                        ? selectedProducts[editingProductIndex]
-                        : undefined
+                    editingProductIndex !== null ? value[editingProductIndex] : undefined
                 }
             />
-
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     section: {
-        marginBottom: 32,
     },
     sectionHeader: {
         flexDirection: 'row',

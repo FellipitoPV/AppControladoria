@@ -1,35 +1,19 @@
-import React from 'react';
+import { LavagemInterface, PLACAS_VEICULOS } from './lavagemTypes';
 import {
-    View,
-    StyleSheet,
     ScrollView,
-    TouchableOpacity
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Surface, Text } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { customTheme } from '../../../../theme/theme';
-import { PLACAS_VEICULOS } from './lavagemTypes';
 
-interface Lavagem {
-    id: string;
-    responsavel: string;
-    data: string;
-    hora: string;
-    veiculo: {
-        placa: string;
-        tipo: string;
-        numeroEquipamento?: string;
-    };
-    tipoLavagem: string;
-    produtos: Array<{
-        nome: string;
-        quantidade: number;
-    }>;
-    createdAt: number;
-}
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import React from 'react';
+import { Timestamp } from 'firebase/firestore';
+import { customTheme } from '../../../../theme/theme';
 
 interface RelatorioContentProps {
-    lavagens: Lavagem[];
+    lavagens: LavagemInterface[];
     onGerarExcel: () => Promise<void>;  // Nova prop
     loading: boolean;                    // Nova prop
 }
@@ -140,7 +124,10 @@ const RelatorioContent: React.FC<RelatorioContentProps> = ({
                             <View style={styles.headerTopRow}>
                                 <View style={styles.placaContainer}>
                                     {(() => {
-                                        const vehicleInfo = getVehicleDisplayInfo(lavagem.veiculo);
+                                        const vehicleInfo = getVehicleDisplayInfo({
+                                            ...lavagem.veiculo,
+                                            numeroEquipamento: lavagem.veiculo.numeroEquipamento ?? undefined,
+                                        });
                                         return (
                                             <>
                                                 <Icon
@@ -170,7 +157,7 @@ const RelatorioContent: React.FC<RelatorioContentProps> = ({
                                     style={styles.dataIcon}
                                 />
                                 <Text style={styles.dataText}>
-                                    {lavagem.data} - {lavagem.hora}
+                                    {lavagem.data && lavagem.data instanceof Timestamp ? lavagem.data.toDate().toLocaleDateString() : lavagem.data} - {lavagem.hora}
                                 </Text>
                             </View>
                         </View>

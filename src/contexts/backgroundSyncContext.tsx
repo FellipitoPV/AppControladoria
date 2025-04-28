@@ -1,11 +1,12 @@
 // backgroundSyncContext.tsx
 
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { collection, doc, getDocs, limit, onSnapshot, query, updateDoc } from 'firebase/firestore';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { IAgendamentoLavagem } from '../screens/SubScreens/Lavagem/Components/lavagemTypes';
 import NetInfo from '@react-native-community/netinfo';
-import { firebase } from '@react-native-firebase/firestore';
+import { db } from '../../firebase';
 
 export type UnidadeMedida = 'unidade' | 'kilo' | 'litro';
 
@@ -16,7 +17,6 @@ export interface ProdutoEstoque {
     quantidade: string;
     quantidadeMinima: string;
     unidadeMedida: UnidadeMedida;
-    descricao: string;
     photoUrl: string | null;
     createdAt: string;
     updatedAt: string;
@@ -115,7 +115,6 @@ export function BackgroundSyncProvider({ children }: { children: React.ReactNode
         }
     };
 
-    // Função para iniciar sincronização com Firestore
     const startFirestoreSync = (collectionName: string) => {
         logSync('Firestore', `Iniciando sincronização da coleção ${collectionName}`);
 
@@ -125,56 +124,55 @@ export function BackgroundSyncProvider({ children }: { children: React.ReactNode
         }
 
         logSync('Firestore', `Configurando listener para ${collectionName}`);
-        const subscriber = firebase.firestore()
-            .collection(collectionName)
-            .onSnapshot(
-                querySnapshot => {
-                    if (!isMounted.current) return;
+        const subscriber = onSnapshot(
+            collection(db(), collectionName),
+            (querySnapshot) => {
+                if (!isMounted.current) return;
 
-                    logSync('Firestore', `Snapshot recebido para ${collectionName} - ${querySnapshot.docs.length} documentos`);
+                logSync('Firestore', `Snapshot recebido para ${collectionName} - ${querySnapshot.docs.length} documentos`);
 
-                    const syncedData = querySnapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    }));
+                const syncedData = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
 
-                    if (syncedData.length === 0) {
-                        logSync('Warning', `Nenhum dado recebido para ${collectionName}. Verificar coleção no Firebase.`);
-                    } else {
-                        logSync('Firestore', `Dados sincronizados de ${collectionName}: ${syncedData.length} itens`);
-                        if (collectionName === 'produtos') {
-                            logSync('Detail', 'Amostra de produtos:', syncedData.slice(0, 2));
-                        }
+                if (syncedData.length === 0) {
+                    logSync('Warning', `Nenhum dado recebido para ${collectionName}. Verificar coleção no Firebase.`);
+                } else {
+                    logSync('Firestore', `Dados sincronizados de ${collectionName}: ${syncedData.length} itens`);
+                    if (collectionName === 'produtos') {
+                        logSync('Detail', 'Amostra de produtos:', syncedData.slice(0, 2));
                     }
+                }
 
-                    const timestamp = new Date();
-                    setSyncStates(prev => {
-                        logSync('State', `Atualizando estado para ${collectionName}`);
-                        return {
-                            ...prev,
-                            [collectionName]: {
-                                data: syncedData,
-                                lastSyncTime: timestamp,
-                                status: 'idle'
-                            }
-                        };
-                    });
-
-                    saveDataLocally(collectionName, syncedData, timestamp);
-                },
-                error => {
-                    if (!isMounted.current) return;
-
-                    logSync('Error', `Erro na sincronização de ${collectionName}:`, error);
-                    setSyncStates(prev => ({
+                const timestamp = new Date();
+                setSyncStates(prev => {
+                    logSync('State', `Atualizando estado para ${collectionName}`);
+                    return {
                         ...prev,
                         [collectionName]: {
-                            ...prev[collectionName],
-                            status: 'error'
+                            data: syncedData,
+                            lastSyncTime: timestamp,
+                            status: 'idle'
                         }
-                    }));
-                }
-            );
+                    };
+                });
+
+                saveDataLocally(collectionName, syncedData, timestamp);
+            },
+            (error) => {
+                if (!isMounted.current) return;
+
+                logSync('Error', `Erro na sincronização de ${collectionName}:`, error);
+                setSyncStates(prev => ({
+                    ...prev,
+                    [collectionName]: {
+                        ...prev[collectionName],
+                        status: 'error'
+                    }
+                }));
+            }
+        );
 
         setUnsubscribers(prev => ({
             ...prev,
@@ -246,6 +244,7 @@ export function BackgroundSyncProvider({ children }: { children: React.ReactNode
     }, []);
 
     // Inicialização
+    // Inicialização
     useEffect(() => {
         const initialize = async () => {
             logSync('Init', 'Inicializando sistema de sincronização');
@@ -277,7 +276,7 @@ export function BackgroundSyncProvider({ children }: { children: React.ReactNode
             // Verificar configuração do Firebase
             try {
                 logSync('Firestore', 'Verificando conexão com Firebase');
-                const testRef = await firebase.firestore().collection('produtos').limit(1).get();
+                const testRef = await getDocs(query(collection(db(), 'produtos'), limit(1)));
                 logSync('Firestore', `Conexão de teste com Firebase: ${testRef.empty ? 'Vazia' : 'OK'}`);
                 if (testRef.empty) {
                     logSync('Warning', 'A coleção de produtos parece estar vazia no Firebase');
@@ -319,10 +318,7 @@ export function BackgroundSyncProvider({ children }: { children: React.ReactNode
             // Se estiver online, atualiza no Firestore
             if (netInfo.isConnected) {
                 logSync('Agendamento', `Atualizando agendamento ${agendamentoId} no Firestore`);
-                await firebase.firestore()
-                    .collection('agendamentos')
-                    .doc(agendamentoId)
-                    .update({ concluido: true });
+                await updateDoc(doc(db(), 'agendamentos', agendamentoId), { concluido: true });
                 logSync('Agendamento', 'Firestore atualizado com sucesso');
             } else {
                 logSync('Warning', 'Dispositivo offline, aguardando sincronização futura');

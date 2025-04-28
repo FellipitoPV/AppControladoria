@@ -1,3 +1,5 @@
+import { Timestamp } from "firebase/firestore";
+
 // lavagemTypes.ts
 export type TipoEquipamento = 'COMPACTADORA' | 'CAÇAMBA' | 'CONTAINER' | 'COLETOR';
 
@@ -18,6 +20,13 @@ export interface ProdutoEstoque {
     updatedAt: string;
 }
 
+export interface SelectableItem {
+    id?: string;
+    nome: string; // Nome do item (e.g., "Desengraxante" ou "ABC-1234")
+    tipo?: string; // Tipo do item (e.g., "veiculo", "equipamento", "produto")
+    [key: string]: any; // Para campos adicionais (e.g., quantidade, unidadeMedida, numeroEquipamento)
+}
+
 export interface ProdutoSelecionado {
     produto: string;
     quantidade: string;
@@ -32,7 +41,7 @@ export interface Equipamento {
 export interface LavagemInterface {
     id: string;
     responsavel: string;
-    data: string;
+    data: Timestamp | string; // Permitir string para dados antigos
     hora: string;
     veiculo: {
         placa: string;
@@ -51,7 +60,7 @@ export interface LavagemInterface {
     }>;
     observacoes?: string;
     status: string;
-    createdAt: any;
+    createdAt: Timestamp | string | null; // Ajustado para maior clareza
     createdBy: string | null;
     agendamentoId?: string | null;
 }
