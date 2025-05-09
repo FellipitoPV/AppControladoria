@@ -1,24 +1,23 @@
+import * as XLSX from 'xlsx';
+
 import {
     Alert,
     Modal,
     SafeAreaView,
     ScrollView,
     StyleSheet,
-    TouchableOpacity,
     View
 } from 'react-native';
 import {
     Button,
-    Card,
-    Chip,
-    Divider,
     Surface,
     Text
 } from 'react-native-paper';
-import React, { useEffect, useState } from 'react';
-import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { showGlobalToast, verificarConectividadeAPI } from '../../../helpers/GlobalApi';
+import { useEffect, useState } from 'react';
 
+import { Compostagem } from '../../../helpers/Types';
 import FilterCardCompost from './components/FilterCardCompost';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ModernHeader from '../../../assets/components/ModernHeader';
@@ -26,32 +25,11 @@ import RNFS from 'react-native-fs';
 import RelatorioCompostagemContent from './components/RelatorioCompostagemContent';
 import Share from 'react-native-share';
 import { customTheme } from '../../../theme/theme';
+import dayjs from 'dayjs';
 import { db } from '../../../../firebase';
+import isBetween from 'dayjs/plugin/isBetween';
 
-// Componente para exibir o conteúdo do relatório
-
-
-
-
-interface Compostagem {
-    id: string;
-    responsavel: string;
-    data: string;
-    hora: string;
-    leira: string;
-    tempAmb: number;
-    tempBase: number;
-    tempMeio: number;
-    tempTopo: number;
-    umidadeAmb: number;
-    umidadeLeira: number;
-    ph: string;
-    odor: string;
-    observacao?: string;
-    isMedicaoRotina: boolean;
-    photoUrls?: string[];
-    createdAt: number;
-}
+dayjs.extend(isBetween);
 
 export default function RelatorioCompostagem({ navigation }: { navigation: any }) {
     const [dataInicio, setDataInicio] = useState<Date>(new Date());
@@ -61,7 +39,6 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
     const [leirasFiltradas, setLeirasFiltradas] = useState<string[]>([]);
     const [showRotina, setShowRotina] = useState<boolean>(false);
     const [isConnectionModalVisible, setIsConnectionModalVisible] = useState(false);
-    
     const [leirasDisponiveis, setLeirasDisponiveis] = useState<string[]>([]);
 
     useEffect(() => {
@@ -71,92 +48,91 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
     const carregarLeirasDisponiveis = async () => {
         try {
             const querySnapshot = await getDocs(collection(db(), 'compostagens'));
-    
-            // Obtenha todas as leiras únicas
             const leiras = querySnapshot.docs
                 .map(doc => doc.data().leira)
-                .filter((leira, index, self) => 
+                .filter((leira, index, self) =>
                     leira && self.indexOf(leira) === index
                 )
                 .sort();
-    
             setLeirasDisponiveis(leiras);
         } catch (error) {
             console.error('Erro ao carregar leiras:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível carregar as leiras disponíveis', 4000);
         }
     };
-    
+
     const buscarCompostagensPorIntervalo = async () => {
         try {
             setLoading(true);
-    
-            const inicioFormatado = formatarData(dataInicio);
-            const fimFormatado = formatarData(dataFim);
-    
-            if (dataInicio > dataFim) {
+            console.log('Iniciando busca de compostagens...');
+
+            const inicio = dayjs(dataInicio).startOf('day');
+            const fim = dayjs(dataFim).endOf('day');
+            console.log(`Intervalo de busca: ${inicio.format('YYYY-MM-DD')} a ${fim.format('YYYY-MM-DD')}`);
+
+            if (inicio.isAfter(fim)) {
                 Alert.alert(
                     'Erro',
                     'A data de início deve ser anterior ou igual à data final.'
                 );
+                setLoading(false);
+                console.log('Erro: Data de início posterior à data final');
                 return;
             }
-    
+
             const compostagemQuery = query(
                 collection(db(), 'compostagens'),
-                where('data', '>=', inicioFormatado),
-                where('data', '<=', fimFormatado),
-                orderBy('data', 'desc')
+                orderBy('timestamp', 'desc')
             );
-    
+
             const snapshot = await getDocs(compostagemQuery);
-    
+            console.log(`Total de documentos encontrados: ${snapshot.docs.length}`);
+
             let dados = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
-            } as Compostagem))
-            .filter(compostagem => {
-                // Filtro por tipo de medição
-                if (showRotina) {
-                    return compostagem.isMedicaoRotina === true;
-                } else {
-                    return !compostagem.isMedicaoRotina;
-                }
+            } as Compostagem)).filter(compostagem => {
+                const isRotinaMatch = showRotina ? compostagem.isMedicaoRotina === true : !compostagem.isMedicaoRotina;
+                console.log(`Compostagem ID: ${compostagem.id}, isMedicaoRotina: ${compostagem.isMedicaoRotina}, Filtro rotina: ${showRotina}, Passou: ${isRotinaMatch}`);
+                return isRotinaMatch;
             });
-    
+            console.log(`Após filtro de tipo de medição: ${dados.length} compostagens`);
+
+            // Filtrar por intervalo de datas usando timestamp
+            dados = dados.filter(compostagem => {
+                const compostagemDate = dayjs(compostagem.timestamp);
+                const isInRange = compostagemDate.isBetween(inicio, fim, null, '[]');
+                console.log(`Compostagem ID: ${compostagem.id}, Timestamp: ${compostagem.timestamp}, Data: ${compostagemDate.format('YYYY-MM-DD HH:mm')}, Está no intervalo: ${isInRange}`);
+                return isInRange;
+            });
+            console.log(`Após filtro de datas: ${dados.length} compostagens`);
+
             // Aplicar filtro de leiras se houver leiras selecionadas
             if (leirasFiltradas.length > 0) {
-                dados = dados.filter(compostagem =>
-                    leirasFiltradas.includes(compostagem.leira)
-                );
+                dados = dados.filter(compostagem => {
+                    const isLeiraMatch = leirasFiltradas.includes(compostagem.leira);
+                    console.log(`Compostagem ID: ${compostagem.id}, Leira: ${compostagem.leira}, Leiras filtradas: ${leirasFiltradas}, Passou: ${isLeiraMatch}`);
+                    return isLeiraMatch;
+                });
+                console.log(`Após filtro de leiras: ${dados.length} compostagens`);
             }
-    
-            // Ordenar por data e hora
-            dados.sort((a, b) => {
-                const dataA = new Date(a.data.split('/').reverse().join('-') + ' ' + a.hora);
-                const dataB = new Date(b.data.split('/').reverse().join('-') + ' ' + b.hora);
-                return dataB.getTime() - dataA.getTime();
-            });
-    
+
             setCompostagens(dados);
-    
+            console.log(`Compostagens finais definidas: ${dados.length}`);
+
         } catch (error) {
             console.error('Erro ao buscar compostagens:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível gerar o relatório', 4000);
         } finally {
             setLoading(false);
+            console.log('Busca de compostagens finalizada');
         }
     };
 
-    // Converte as datas para o formato pt-BR
     const formatarData = (data: Date) => {
-        const dia = String(data.getDate()).padStart(2, '0');
-        const mes = String(data.getMonth() + 1).padStart(2, '0');
-        const ano = data.getFullYear();
-        return `${dia}/${mes}/${ano}`;
+        return dayjs(data).format('DD/MM/YYYY');
     };
 
-    // Alternar entre medições de rotina e completas
     const toggleTipoMedicao = () => {
         setShowRotina(!showRotina);
     };
@@ -166,15 +142,6 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
         return `${partes[0]}-${partes[1]}-${partes[2]}`;
     };
 
-    // Função para formatar o horário (remove os segundos)
-    const formatarHorario = (hora: string) => {
-        if (hora.split(':').length === 3) {
-            return hora.split(':').slice(0, 2).join(':');
-        }
-        return hora;
-    };
-
-    // Gerar relatório em Excel
     const gerarRelatorioExcel = async () => {
         if (compostagens.length === 0) {
             showGlobalToast('error', 'Erro', 'Não há dados para gerar o relatório', 4000);
@@ -184,94 +151,56 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
         try {
             setLoading(true);
 
-            // Verificar conectividade primeiro
-            const conectado = await verificarConectividadeAPI();
-            if (!conectado) {
-                setLoading(false);
-                setIsConnectionModalVisible(true);
-                return;
-            }
-
-            showGlobalToast('info',
-                'Gerando Relatório',
-                'O servidor está processando seu relatório...',
-                10000);
-
-            // Formata os horários antes de enviar
+            // Formatando os dados para o Excel
             const compostagensFormatadas = compostagens.map(compostagem => ({
-                ...compostagem,
-                hora: formatarHorario(compostagem.hora)
+                ID: compostagem.id,
+                Data: dayjs(compostagem.timestamp).format('DD/MM/YYYY'),
+                Hora: dayjs(compostagem.timestamp).format('HH:mm'),
+                Leira: compostagem.leira,
+                Responsável: compostagem.responsavel,
+                'Temperatura Ambiente (°C)': compostagem.tempAmb,
+                'Temperatura Base (°C)': compostagem.tempBase,
+                'Temperatura Meio (°C)': compostagem.tempMeio,
+                'Temperatura Topo (°C)': compostagem.tempTopo,
+                'Umidade Ambiente (%)': compostagem.umidadeAmb,
+                'Umidade Leira (%)': compostagem.umidadeLeira,
+                pH: compostagem.ph,
+                Odor: compostagem.odor || 'N/A',
+                Observação: compostagem.observacao,
+                'Tipo de Medição': compostagem.isMedicaoRotina ? 'Rotina' : 'Completa',
+                'Fotos (URIs)': compostagem.photoUris.join('; '),
+                'Fotos (URLs)': compostagem.photoUrls?.join('; ') || 'N/A'
             }));
 
-            const response = await fetch('http://192.168.1.222:3000/gerar-relatorio-compostagem', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    dataInicio: formatarData(dataInicio),
-                    dataFim: formatarData(dataFim),
-                    compostagens: compostagensFormatadas,
-                    tipoMedicao: showRotina ? 'rotina' : 'completa'
-                })
-            });
+            // Criando a planilha
+            const ws = XLSX.utils.json_to_sheet(compostagensFormatadas);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Relatório Compostagem');
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Erro do servidor:', errorText);
-                throw new Error(`Erro na resposta do servidor: ${errorText}`);
-            }
+            // Gerando o arquivo Excel como buffer
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
 
-            showGlobalToast('success',
-                'Relatório Gerado com Sucesso!',
-                '',
-                5000);
-
+            // Definindo o nome do arquivo
             const dataInicioFormatada = formatarDataParaNomeArquivo(formatarData(dataInicio));
             const dataFimFormatada = formatarDataParaNomeArquivo(formatarData(dataFim));
             const tipoRelatorio = showRotina ? 'rotina' : 'completo';
-
-            // Criar nome do arquivo com timestamp
             const fileName = `relatorio_compostagem_${tipoRelatorio}_${dataInicioFormatada}_ate_${dataFimFormatada}.xlsx`;
             const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
 
-            // Converter resposta para base64
-            const data = await response.blob();
-            const reader = new FileReader();
-            reader.readAsDataURL(data);
+            // Escrevendo o arquivo no sistema de arquivos
+            await RNFS.writeFile(filePath, wbout, 'base64');
 
-            reader.onload = async () => {
-                try {
-                    // Remover cabeçalho do base64 data URL
-                    const base64Data = reader.result?.toString().split(',')[1];
+            // Compartilhando o arquivo
+            await Share.open({
+                url: `file://${filePath}`,
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                filename: fileName
+            });
 
-                    if (!base64Data) {
-                        throw new Error('Erro ao processar arquivo');
-                    }
+            showGlobalToast('success', 'Sucesso', 'Relatório gerado com sucesso!', 4000);
 
-                    // Salvar arquivo
-                    await RNFS.writeFile(filePath, base64Data, 'base64');
-
-                    // Compartilhar arquivo
-                    await Share.open({
-                        url: `file://${filePath}`,
-                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        filename: fileName
-                    });
-
-                    showGlobalToast('success', 'Sucesso', 'Relatório gerado com sucesso!', 4000);
-
-                    // Limpar arquivo após compartilhar
-                    await RNFS.unlink(filePath);
-
-                } catch (error) {
-                    console.warn(error);
-                }
-            };
-
-            reader.onerror = () => {
-                showGlobalToast('error', 'Erro', 'Erro ao processar o arquivo', 4000);
-            };
+            // Removendo o arquivo temporário
+            await RNFS.unlink(filePath);
 
         } catch (error) {
             console.error('Erro ao gerar relatório:', error);
@@ -281,7 +210,6 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
         }
     };
 
-    // Modal de erro de conexão
     const ConnectionErrorModal = () => (
         <Modal
             visible={isConnectionModalVisible}

@@ -1,21 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
 import {
-    View,
-    TouchableOpacity,
-    Modal,
+    ActivityIndicator,
+    Alert,
     Animated,
     Dimensions,
-    StyleSheet,
+    Modal,
     ScrollView,
-    ActivityIndicator,
-    Alert
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { Surface, Text, Button } from 'react-native-paper';
+import React, { useEffect, useRef, useState } from 'react';
+import { Surface, Text } from 'react-native-paper';
+
+import ConfirmationModal from '../../../assets/components/ConfirmationModal';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { User } from '../../Adm/types/admTypes';
 import { customTheme } from '../../../theme/theme';
 import dayjs from 'dayjs';
-import ConfirmationModal from '../../../assets/components/ConfirmationModal';
-import { User } from '../../Adm/types/admTypes';
 
 interface MeetingDetailsModalProps {
     visible: boolean;
@@ -94,6 +95,14 @@ const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({
     // Item de informação simples
     const InfoItem: React.FC<{ icon: string; label: string; value: string }> = ({ icon, label, value }) => (
         <View style={styles.infoItem}>
+            {currentUser.cargo === "Administrador" && label === "Identificação no sistema" && (
+                <MaterialCommunityIcons
+                    name="shield-account"
+                    size={20}
+                    color={customTheme.colors.primary}
+                    style={styles.infoIcon}
+                />
+            )}
             <MaterialCommunityIcons
                 name={icon}
                 size={22}
@@ -104,6 +113,7 @@ const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({
                 <Text style={styles.infoLabel}>{label}</Text>
                 <Text style={styles.infoValue}>{value || 'Não informado'}</Text>
             </View>
+
         </View>
     );
 
@@ -151,6 +161,7 @@ const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({
                 >
                     <Surface style={styles.modalContent}>
                         <ScrollView>
+
                             {/* Header */}
                             <View style={styles.modalHeader}>
                                 <View style={styles.modalHeaderContent}>
@@ -202,6 +213,7 @@ const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({
 
                             {/* Conteúdo formatado como Card de informações */}
                             <View style={styles.contentWrapper}>
+
                                 {/* Informações da Reunião */}
                                 <View style={styles.sectionContainer}>
                                     <SectionHeader icon="information" title="Detalhes" />
@@ -230,6 +242,13 @@ const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({
                                             icon="account"
                                             label="Agendado por"
                                             value={meeting.createdBy}
+                                        />
+                                    )}
+                                    {currentUser.cargo === "Administrador" && (
+                                        <InfoItem
+                                            icon="server"
+                                            label="Identificação no sistema"
+                                            value={meeting.id}
                                         />
                                     )}
                                 </View>

@@ -104,7 +104,7 @@ PushNotification.createChannel(
         importance: PushNotification.Importance.HIGH,
         vibrate: true,
     },
-    (created) => console.log(`Default Channel created: ${created}`)
+    //(created) => console.log(`Default Channel created: ${created}`)
 );
 
 export default function Main() {

@@ -11,6 +11,7 @@ import { Compostagem } from '../../../helpers/Types';
 import FormularioComponent from '../../../assets/components/Fomulario/FormularioComponent';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Timestamp } from 'firebase/firestore';
 import { customTheme } from '../../../theme/theme';
 import { dbStorage } from '../../../../firebase';
 import { useUser } from '../../../contexts/userContext';
@@ -393,6 +394,7 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                 data: dayjs(values.dataEHora as Dayjs).toISOString(),
                 responsavel: userInfo?.user ?? '',
                 leira: values.leira as string,
+                timestamp: Timestamp.now(),
                 isMedicaoRotina,
                 tempAmb: isMedicaoRotina ? '' : (values.tempAmb as string),
                 tempBase: isMedicaoRotina ? '' : (values.tempBase as string),

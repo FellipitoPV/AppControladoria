@@ -1,6 +1,4 @@
 // NotificationService.ts
-
-import { Platform } from 'react-native';
 import PushNotification from 'react-native-push-notification';
 
 class NotificationService {
@@ -21,7 +19,7 @@ class NotificationService {
                 importance: 4,
                 vibrate: true,
             },
-            (created) => console.log(`Channel created: ${created}`)
+            (created) => console.log(`Channel created: ${created} no TS`)
         );
     };
 

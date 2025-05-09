@@ -1,42 +1,24 @@
-import React, { useState, useEffect } from 'react';
 import {
-    View,
+    Button,
+    Card,
+    Chip,
+    DataTable,
+    Divider,
+    Switch,
+    Text
+} from 'react-native-paper';
+import React, { useEffect, useState } from 'react';
+import {
+    ScrollView,
     StyleSheet,
     TouchableOpacity,
-    ActivityIndicator,
-    ScrollView
+    View
 } from 'react-native';
-import {
-    Text,
-    Card,
-    Button,
-    Divider,
-    DataTable,
-    Switch,
-    Chip
-} from 'react-native-paper';
+
+import { Compostagem } from '../../../../helpers/Types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../../theme/theme';
-
-interface Compostagem {
-    id: string;
-    responsavel: string;
-    data: string;
-    hora: string;
-    leira: string;
-    tempAmb: number;
-    tempBase: number;
-    tempMeio: number;
-    tempTopo: number;
-    umidadeAmb: number;
-    umidadeLeira: number;
-    ph: string;
-    odor: string;
-    observacao?: string;
-    isMedicaoRotina: boolean;
-    photoUrls?: string[];
-    createdAt: number;
-}
+import dayjs from 'dayjs';
 
 interface RelatorioCompostagemContentProps {
     compostagens: Compostagem[];
@@ -361,8 +343,8 @@ const RelatorioCompostagemContent: React.FC<RelatorioCompostagemContentProps> = 
                     <ScrollView>
                         {compostagens.map((comp) => (
                             <DataTable.Row key={comp.id}>
-                                <DataTable.Cell>{comp.data}</DataTable.Cell>
-                                <DataTable.Cell>{comp.hora.split(':').slice(0, 2).join(':')}</DataTable.Cell>
+                                <DataTable.Cell>{dayjs(comp.data).format("DD/MM/YYYY")}</DataTable.Cell>
+                                <DataTable.Cell>{dayjs(comp.data).format("hh:mm")}</DataTable.Cell>
                                 <DataTable.Cell>Leira {comp.leira}</DataTable.Cell>
                                 <DataTable.Cell numeric>{comp.tempMeio || '-'}</DataTable.Cell>
                             </DataTable.Row>
@@ -375,26 +357,26 @@ const RelatorioCompostagemContent: React.FC<RelatorioCompostagemContentProps> = 
                     {compostagens.map((comp) => (
                         <Card key={comp.id} style={styles.detailCard}>
                             <TouchableOpacity
-                                onPress={() => toggleCardExpansion(comp.id)}
+                                onPress={() => comp.id && toggleCardExpansion(comp.id)}
                                 style={styles.cardHeader}
                             >
                                 <View style={styles.cardHeaderLeft}>
                                     <Icon name="calendar" size={16} color={customTheme.colors.primary} />
                                     <Text style={styles.cardDate}>
-                                        {comp.data} às {comp.hora.split(':').slice(0, 2).join(':')}
+                                        {dayjs(comp.data).format("DD/MM/YYYY")} às {dayjs(comp.data).format("HH:mm")}
                                     </Text>
                                 </View>
                                 <View style={styles.cardHeaderRight}>
                                     <Chip icon="silo" compact>Leira {comp.leira}</Chip>
                                     <Icon
-                                        name={expandedCards[comp.id] ? "chevron-up" : "chevron-down"}
+                                        name={expandedCards[comp.id ?? ''] ? "chevron-up" : "chevron-down"}
                                         size={20}
                                         color={customTheme.colors.primary}
                                     />
                                 </View>
                             </TouchableOpacity>
 
-                            {expandedCards[comp.id] && (
+                            {comp.id && expandedCards[comp.id] && (
                                 <Card.Content style={styles.expandedContent}>
                                     <Divider style={styles.divider} />
 

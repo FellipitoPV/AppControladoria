@@ -73,7 +73,7 @@ export default function LavagemForm({ navigation, route }: LavagemFormInterface)
         ...PLACAS_VEICULOS.map((item) => ({
             label: `${item.value} - ${item.tipo}`,
             value: item.value,
-            icon: '-car',
+            icon: 'car',
             tipo: 'veiculo',
             isCustom: false,
         })),

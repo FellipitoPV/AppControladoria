@@ -1,7 +1,5 @@
 import {
     ActivityIndicator,
-    Alert,
-    Image,
     Platform,
     ScrollView,
     StyleSheet,
@@ -11,10 +9,10 @@ import {
 import {
     Card,
     Surface,
-    Text,
+    Text
 } from 'react-native-paper';
-import React, { useEffect, useRef, useState } from 'react';
 import { off, onValue, ref, remove, set } from 'firebase/database';
+import { useEffect, useRef, useState } from 'react';
 
 import CreateMeetingModal from './components/CreateMeetingModal';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -76,13 +74,13 @@ export default function MeetingsScreen({ navigation }: any) {
     const fetchMeetings = (date: string): (() => void) => {
         try {
             setLoading(true);
-    
+
             // Create reference to meetings node
             const meetingsRef = ref(dbRealTime(), '/meetings');
             const onValueChange = onValue(meetingsRef, snapshot => {
                 const data = snapshot.val();
                 const loadedMeetings: Meeting[] = [];
-    
+
                 if (data) {
                     Object.keys(data).forEach((key) => {
                         const meetingData = data[key];
@@ -92,22 +90,22 @@ export default function MeetingsScreen({ navigation }: any) {
                         };
                         loadedMeetings.push(meeting);
                     });
-    
+
                     // Filter meetings for the specific date
                     const filteredMeetings = loadedMeetings.filter((meeting) => meeting.date === date);
-    
+
                     // Sort meetings by entry time
                     const sortedMeetings = filteredMeetings.sort((a, b) => {
                         const timeA = a.entrada.split(':').map(Number);
                         const timeB = b.entrada.split(':').map(Number);
-    
+
                         if (timeA[0] !== timeB[0]) {
                             return timeA[0] - timeB[0]; // Compare hours
                         } else {
                             return timeA[1] - timeB[1]; // If hours are equal, compare minutes
                         }
                     });
-    
+
                     // Update the local state of meetings with the sorted list
                     setMeetings(sortedMeetings);
                 } else {
@@ -116,25 +114,25 @@ export default function MeetingsScreen({ navigation }: any) {
                 }
                 setLoading(false);
             });
-    
+
             // Return cleanup function
             return () => off(meetingsRef, 'value', onValueChange);
         } catch (error) {
             console.error('Error loading meetings from Realtime Database: ', error);
             showGlobalToast('error', 'Erro', 'Não foi possível carregar as reuniões', 3000);
             setLoading(false);
-    
+
             // Return empty cleanup function in case of error
             return () => { };
         }
     };
-    
+
     const handleDeleteMeeting = async (meetingId: string) => {
         try {
             await remove(ref(dbRealTime(), `/meetings/${meetingId}`));
-    
+
             showGlobalToast('success', 'Sucesso', 'Reunião excluída com sucesso', 3000);
-    
+
             // Refresh meetings after deletion
             const formattedDate = dayjs(selectedDate).format('YYYYMMDD');
             if (activeListenerRef.current) {
@@ -144,7 +142,7 @@ export default function MeetingsScreen({ navigation }: any) {
             if (typeof unsubscribe === 'function') {
                 activeListenerRef.current = unsubscribe;
             }
-    
+
             return Promise.resolve();
         } catch (error) {
             console.error('Erro ao excluir reunião:', error);
@@ -152,12 +150,12 @@ export default function MeetingsScreen({ navigation }: any) {
             return Promise.reject(error);
         }
     };
-    
+
     // Abrir modal para criar nova reunião
     const handleAddMeeting = () => {
         setCreatingMeeting(true);
     };
-    
+
     // Criar reunião a partir dos dados da modal
     const handleCreateMeetingFromModal = async (meetingData: {
         assunto: string;
@@ -167,26 +165,26 @@ export default function MeetingsScreen({ navigation }: any) {
         selectedRoom: string;
     }) => {
         setLoading(true);
-    
+
         try {
             // Formatar dados recebidos do modal
             const currentDate = dayjs(meetingData.selectedDate).format('YYYYMMDD');
             const horaEntrada = dayjs(meetingData.selectedTime).format('HH:mm');
             const horaSaida = dayjs(meetingData.selectedEndTime).format('HH:mm');
-    
+
             // Validações
             if (horaEntrada < '07:00' || horaEntrada > '17:00') {
                 showGlobalToast('error', 'Erro', 'Selecione um horário entre 7h e 17h', 3000);
                 setLoading(false);
                 return;
             }
-    
+
             if (horaSaida <= horaEntrada) {
                 showGlobalToast('error', 'Erro', 'O horário de término deve ser após o início', 3000);
                 setLoading(false);
                 return;
             }
-    
+
             // Verificar conflitos
             const conflictingMeeting = meetings.find((meeting) => {
                 return (
@@ -197,13 +195,13 @@ export default function MeetingsScreen({ navigation }: any) {
                         (horaEntrada <= meeting.entrada && horaSaida > meeting.entrada))
                 );
             });
-    
+
             if (conflictingMeeting) {
                 showGlobalToast('error', 'Erro', `${meetingData.selectedRoom} já está ocupada das ${conflictingMeeting.entrada} às ${conflictingMeeting.saida}.`, 3000);
                 setLoading(false);
                 return;
             }
-    
+
             // Criar a nova reunião
             const novaReuniao = {
                 id: generateUniqueId(),
@@ -214,13 +212,13 @@ export default function MeetingsScreen({ navigation }: any) {
                 assunto: meetingData.assunto,
                 sala: meetingData.selectedRoom
             };
-    
+
             // Salvar a nova reunião no Realtime Database
             await set(ref(dbRealTime(), `/meetings/${novaReuniao.id}`), novaReuniao);
-    
+
             setCreatingMeeting(false);
             showGlobalToast('success', 'Sucesso', 'Reunião criada com sucesso!', 3000);
-    
+
             // Recarregar reuniões
             if (activeListenerRef.current) {
                 activeListenerRef.current();
@@ -244,7 +242,6 @@ export default function MeetingsScreen({ navigation }: any) {
 
     // Lista de salas disponíveis
     const rooms = ['Sala de reunião 1', 'Sala de reunião 2', 'Sala de reunião 3'];
-
 
     // Obter reuniões filtradas por sala (se selecionada)
     const getFilteredMeetings = () => {
@@ -324,7 +321,6 @@ export default function MeetingsScreen({ navigation }: any) {
                     )}
                 </View>
 
-
                 {/* Visualização de salas */}
                 {loading ? (
                     <View style={styles.loaderContainer}>
@@ -361,11 +357,6 @@ export default function MeetingsScreen({ navigation }: any) {
                                                 </View>
                                             ) : (
                                                 <View>
-                                                    {/* <Text style={styles.roomSubtitle}>
-                                                        {roomMeetings.length} {roomMeetings.length === 1 ? 'reunião' : 'reuniões'} agendadas
-                                                    </Text> */}
-
-                                                    {/* Aquí usamos el componente MeetingItem para cada reunión */}
                                                     {roomMeetings.map((meeting) => (
                                                         <MeetingItem
                                                             key={meeting.id}
@@ -439,34 +430,91 @@ export default function MeetingsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-    roomsContainer: {
+    container: {
         flex: 1,
-        paddingBottom: 12,
+        backgroundColor: customTheme.colors.background || '#F8F9FA',
     },
-    roomCard: {
-        marginBottom: 16,
-        borderRadius: 16,
-        elevation: 3,
+    content: {
+        flex: 1,
+        padding: 20,
+    },
+    headerSection: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    datePickerContainer: {
+        flex: 1,
+        marginRight: 16,
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 8,
+        backgroundColor: customTheme.colors.surface || '#FFFFFF',
+        borderWidth: 1,
+        borderColor: customTheme.colors.outline || '#E0E0E0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    dateText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface || '#333333',
+        marginLeft: 8,
+        fontFamily: 'Roboto-Medium',
+    },
+    addButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: customTheme.colors.primary || '#005CFF',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 8,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
-        overflow: 'hidden',
-        backgroundColor: customTheme.colors.surface,
+        elevation: 3,
+    },
+    addButtonText: {
+        color: customTheme.colors.onPrimary || '#FFFFFF',
+        fontWeight: '600',
+        fontSize: 16,
+        marginLeft: 8,
+        fontFamily: 'Roboto-Medium',
+    },
+    roomsContainer: {
+        flex: 1,
+    },
+    roomCard: {
+        marginBottom: 20,
+        borderRadius: 8,
+        backgroundColor: customTheme.colors.surface || '#FFFFFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        elevation: 4,
     },
     roomCardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
-        backgroundColor: customTheme.colors.surfaceVariant,
+        backgroundColor: customTheme.colors.surfaceVariant || '#F1F4FF',
         borderBottomWidth: 1,
-        borderBottomColor: customTheme.colors.outlineVariant,
+        borderBottomColor: customTheme.colors.outlineVariant || '#E0E0E0',
     },
     roomTitle: {
         fontSize: 18,
-        fontWeight: '600',
-        color: customTheme.colors.onSurface,
+        fontWeight: '700',
+        color: customTheme.colors.onSurface || '#333333',
         marginLeft: 8,
+        fontFamily: 'Roboto-Bold',
     },
     roomCardContent: {
         padding: 16,
@@ -476,17 +524,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         padding: 20,
-        backgroundColor: customTheme.colors.primaryContainer + '30',
-        borderRadius: 12,
+        backgroundColor: customTheme.colors.primaryContainer + '20' || '#E6F0FF',
+        borderRadius: 8,
         borderWidth: 1,
-        borderColor: customTheme.colors.primary + '20',
-        borderStyle: 'dashed',
+        borderColor: customTheme.colors.primary + '10' || '#B3D4FF',
     },
     emptyRoomText: {
         fontSize: 16,
         marginLeft: 10,
-        color: customTheme.colors.primary,
+        color: customTheme.colors.primary || '#005CFF',
         fontWeight: '500',
+        fontFamily: 'Roboto-Medium',
     },
     loaderContainer: {
         flex: 1,
@@ -496,53 +544,9 @@ const styles = StyleSheet.create({
     },
     loaderText: {
         marginTop: 16,
-        color: customTheme.colors.onSurfaceVariant,
+        color: customTheme.colors.onSurfaceVariant || '#666666',
         fontSize: 16,
         fontWeight: '500',
-    },
-    container: {
-        flex: 1,
-        backgroundColor: customTheme.colors.surface,
-    },
-    content: {
-        flex: 1,
-        padding: 16,
-    },
-    headerSection: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    datePickerContainer: {
-        flex: 1,
-        marginRight: 16,
-    },
-    datePickerButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 10,
-        borderRadius: 12,
-        borderWidth: 1,
-        backgroundColor: customTheme.colors.surface,
-    },
-    dateText: {
-        fontSize: 16,
-        fontWeight: '500',
-        marginLeft: 8,
-    },
-    addButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.primary,
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        borderRadius: 24,
-        elevation: 2,
-    },
-    addButtonText: {
-        color: customTheme.colors.onPrimary || '#ffffff',
-        fontWeight: '600',
-        marginLeft: 6,
+        fontFamily: 'Roboto-Medium',
     },
 });
