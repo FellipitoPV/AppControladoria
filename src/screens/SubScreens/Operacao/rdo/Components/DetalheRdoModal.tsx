@@ -21,9 +21,9 @@ import { useUser } from '../../../../../contexts/userContext';
 import { showGlobalToast, verificarConectividadeAPI } from '../../../../../helpers/GlobalApi';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
-import storage from '@react-native-firebase/storage';
-import firestore from '@react-native-firebase/firestore';
-import { refresh } from '@react-native-community/netinfo';
+import { ref, set, onValue, off } from 'firebase/database';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db, dbRealTime } from '../../../../../../firebase';
 
 interface DetalheRdoModalProps {
     visible: boolean;
@@ -31,6 +31,27 @@ interface DetalheRdoModalProps {
     refresh: () => void;
     relatorio: FormDataInterface;
 }
+
+const sanitizeObject = (obj: Record<string, any>): Record<string, any> => {
+    const sanitized: Record<string, any> = {};
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const value = obj[key];
+            if (value === undefined) {
+                sanitized[key] = null;
+            } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+                sanitized[key] = sanitizeObject(value);
+            } else if (Array.isArray(value)) {
+                sanitized[key] = value.map(item =>
+                    item && typeof item === 'object' ? sanitizeObject(item) : item
+                );
+            } else {
+                sanitized[key] = value;
+            }
+        }
+    }
+    return sanitized;
+};
 
 const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
     visible,
@@ -121,6 +142,12 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
         try {
             setIsPdfLoading(true);
 
+            if (!relatorio.id) {
+                throw new Error('ID do relatório não definido');
+            }
+
+            console.log('Objeto relatorio antes de salvar:', JSON.stringify(relatorio, null, 2));
+
             // Verificar se já existe PDF e se está atualizado
             if (relatorio?.pdfUrl) {
                 const lastPdfGenerated = relatorio.lastPdfGenerated
@@ -133,31 +160,25 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                         ? new Date(relatorio.createdAt.seconds * 1000)
                         : null;
 
-                // Se PDF existe e está atualizado, faça download direto
                 if (lastPdfGenerated && lastUpdated && lastPdfGenerated > lastUpdated) {
                     console.log("PDF já atualizado, baixando existente");
 
-                    // Baixar PDF da URL existente
                     const clienteNome = getPrimeiroNome(relatorio?.clienteNome ? relatorio.clienteNome : "");
                     const numeroRdo = relatorio.numeroRdo;
                     const fileName = `${clienteNome}-${numeroRdo}.pdf`;
-
-                    // Use esse fileName em todos os lugares onde você salva e compartilha o arquivo
                     const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
-                    // Download do arquivo
+
                     await RNFS.downloadFile({
                         fromUrl: relatorio.pdfUrl,
                         toFile: filePath
                     }).promise;
 
-                    // Compartilhar arquivo
                     await Share.open({
                         url: `file://${filePath}`,
                         type: 'application/pdf',
                         filename: fileName
                     });
 
-                    // Limpar arquivo após compartilhar
                     await RNFS.unlink(filePath);
 
                     setIsPdfLoading(false);
@@ -165,22 +186,20 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                     return;
                 }
             }
-            else {
-                console.log("A URL está no momento assim: ", relatorio.pdfUrl)
-            }
 
-            // Verificar conectividade
-            const conectado = await verificarConectividadeAPI();
-            if (!conectado) {
-                setIsPdfLoading(false);
-                showGlobalToast(
-                    'error',
-                    'Sem conexão com o servidor.',
-                    'O Servidor para gerar documentos se encontra fora do alcance...',
-                    10000
-                );
-                return;
-            }
+            // PASSO 1: Salvar solicitação no Realtime Database
+            const requestId = Date.now().toString(); // Gera um ID único baseado no timestamp
+            const pdfRequestRef = ref(dbRealTime(), `pdfRequests/${requestId}`);
+
+            const sanitizedRelatorio = sanitizeObject(relatorio);
+
+            await set(pdfRequestRef, {
+                rdoId: relatorio.id,
+                data: sanitizedRelatorio,
+                status: 'pending',
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            });
 
             showGlobalToast(
                 'info',
@@ -189,87 +208,71 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                 15000
             );
 
-            // Solicitar novo PDF
-            const apiUrl = 'http://192.168.1.222:3000/gerar-relatorio-rdo';
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(relatorio)
-            });
+            // PASSO 2: Monitorar a resposta do servidor
+            const unsubscribe = onValue(pdfRequestRef, async (snapshot) => {
+                const requestData = snapshot.val();
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Erro na resposta do servidor: ${errorText}`);
-            }
+                if (requestData?.status === 'completed' && requestData.pdfUrl) {
+                    // Parar de monitorar após receber a resposta
+                    off(pdfRequestRef);
 
-            // Processar PDF e salvar URL no Firebase
-            const data = await response.blob();
-            const reader = new FileReader();
-            reader.readAsDataURL(data);
+                    // PASSO 3: Atualizar o documento no Firestore com a URL do PDF
+                    const rdoDocRef = doc(db(), 'relatoriosRDO', relatorio.id);
+                    await updateDoc(rdoDocRef, {
+                        pdfUrl: requestData.pdfUrl,
+                        lastPdfGenerated: serverTimestamp()
+                    });
 
-            reader.onload = async () => {
-                try {
-                    const base64Data = reader.result?.toString().split(',')[1];
+                    // Atualizar localmente para evitar nova requisição
+                    refresh();
 
-                    if (!base64Data) {
-                        throw new Error('Erro ao processar arquivo PDF');
-                    }
-
-                    // Salvar arquivo localmente
-                    const clienteNome = getPrimeiroNome(relatorio?.clienteNome ? relatorio.clienteNome : "");
-                    const numeroRdo = relatorio.numeroRdo;
-                    const fileName = `${clienteNome}-${numeroRdo}.pdf`;
-                    const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`; await RNFS.writeFile(filePath, base64Data, 'base64');
-
-                    // Upload para Firebase Storage
-                    const reference = storage().ref(`RelatoriosRDO/${numeroRdo}.pdf`);
-                    await reference.putFile(filePath);
-
-                    // Obter URL de download
-                    const downloadUrl = await reference.getDownloadURL();
-
-                    // Atualizar documento no Firestore
-                    await firestore()
-                        .collection('relatoriosRDO')
-                        .doc(relatorio.id)
-                        .update({
-                            pdfUrl: downloadUrl,
-                            lastPdfGenerated: firestore.FieldValue.serverTimestamp()
-                        });
-
-                    refresh()
-
-                    // Compartilhar arquivo
+                    // Baixar e compartilhar o PDF
                     try {
+                        const clienteNome = getPrimeiroNome(relatorio?.clienteNome ? relatorio.clienteNome : "");
+                        const numeroRdo = relatorio.numeroRdo;
+                        const fileName = `${clienteNome}-${numeroRdo}.pdf`;
+                        const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
+
+                        await RNFS.downloadFile({
+                            fromUrl: requestData.pdfUrl,
+                            toFile: filePath
+                        }).promise;
+
                         await Share.open({
                             url: `file://${filePath}`,
                             type: 'application/pdf',
                             filename: fileName
                         });
+
+                        await RNFS.unlink(filePath);
+
+                        showGlobalToast('success', 'Sucesso', 'PDF gerado com sucesso!', 4000);
                     } catch (shareError) {
-                        // Apenas loga o erro de compartilhamento, mas não o trata como erro crítico
-                        console.log('Usuário cancelou compartilhamento:', shareError);
+                        console.log('Erro ao compartilhar PDF:', shareError);
+                        showGlobalToast('success', 'Sucesso', 'PDF gerado com sucesso!', 4000);
                     }
 
-                    // O toast de sucesso e limpeza do arquivo devem ficar fora do try/catch do Share
-                    showGlobalToast('success', 'Sucesso', 'PDF gerado com sucesso!', 4000);
-
-                    // Limpar arquivo após tentar compartilhar (independente do resultado)
-
-                    await RNFS.unlink(filePath);
-                } catch (error) {
-                    console.warn('Erro ao processar ou compartilhar PDF:', error);
-                    showGlobalToast('error', 'Erro', 'Erro ao processar o PDF', 4000);
+                    setIsPdfLoading(false);
+                    onClose();
+                } else if (requestData?.status === 'error') {
+                    off(pdfRequestRef);
+                    showGlobalToast('error', 'Erro', 'Falha ao gerar PDF: ' + (requestData.errorMessage || ''), 4000);
+                    setIsPdfLoading(false);
+                    onClose();
                 }
+            });
 
-            };
+            // Timeout para caso o servidor não responda
+            setTimeout(() => {
+                off(pdfRequestRef);
+                showGlobalToast('error', 'Erro', 'Tempo excedido ao gerar PDF', 4000);
+                setIsPdfLoading(false);
+                onClose();
+            }, 300000); // 5 minutos de timeout
 
         } catch (error) {
-            console.warn('Aviso ao compartilhar PDF:', error);
-            //showGlobalToast('error', 'Erro', 'Não foi possível gerar o PDF', 4000);
-        } finally {
+            console.warn('Erro ao gerar PDF:', error);
+            showGlobalToast('error', 'Erro', 'Não foi possível iniciar o processo de geração do PDF', 4000);
             setIsPdfLoading(false);
             onClose();
         }
