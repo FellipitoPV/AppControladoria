@@ -190,7 +190,7 @@ const CreateMeetingModal: React.FC<CreateMeetingModalProps> = ({
     // Create meeting handler
     const handleCreateMeeting = () => {
         // Validate inputs
-        console.log("Criando reunião dentro da modal")
+        // console.log("Criando reunião dentro da modal")
         if (!assunto.trim()) {
             setErrorAssunto(true);
             return;

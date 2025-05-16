@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Surface, Text, Card, Chip } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore from '@react-native-firebase/firestore';
+
 import ConfirmationModal from '../../../../assets/components/ConfirmationModal';
 import ModernHeader from '../../../../assets/components/ModernHeader';
 import { useUser } from '../../../../contexts/userContext';
@@ -20,7 +20,9 @@ import { customTheme } from '../../../../theme/theme';
 import { hasAccess } from '../../../Adm/types/admTypes';
 import DetalheRdoModal from './Components/DetalheRdoModal';
 import { FormDataInterface } from './Types/rdoTypes';
-import storage from '@react-native-firebase/storage';
+import { getStorage, ref, deleteObject, listAll } from 'firebase/storage';
+import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, orderBy, query } from 'firebase/firestore';
+import { db, dbStorage } from '../../../../../firebase';
 
 interface HistoricoRdoProps {
     navigation: any;
@@ -50,10 +52,9 @@ export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
         try {
             setLoading(true);
 
-            const snapshot = await firestore()
-                .collection('relatoriosRDO')
-                .orderBy('createdAt', 'desc')
-                .get();
+            const db = getFirestore();
+            const q = query(collection(db, 'relatoriosRDO'), orderBy('createdAt', 'desc'));
+            const snapshot = await getDocs(q);
 
             // console.log(`Quantidade de relatórios: ${snapshot.size}`);
 
@@ -136,45 +137,44 @@ export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
 
     const handleDelete = async (id: string) => {
         try {
+            
             // Primeiro, obtenha a referência do documento para checar a URL do PDF
-            const docSnapshot = await firestore()
-                .collection('relatoriosRDO')
-                .doc(id)
-                .get();
+            const docRef = doc(db(), 'relatoriosRDO', id);
+            const docSnapshot = await getDoc(docRef);
 
-            if (docSnapshot.exists) {
+            if (docSnapshot.exists()) {
                 const data = docSnapshot.data();
                 const numeroRdo = data?.numeroRdo;
 
                 try {
                     // 1. Excluir PDF se existir
                     if (data?.pdfUrl) {
-                        const fileRef = storage().ref(`RelatoriosRDO/${numeroRdo}.pdf`);
-                        await fileRef.delete();
+                        const pdfRef = ref(dbStorage(), `RelatoriosRDO/${numeroRdo}.pdf`);
+                        await deleteObject(pdfRef).catch(() => { });
                     }
 
                     // 2. Listar todos os arquivos na pasta de fotos
-                    const photosRef = storage().ref(`relatoriosPhotos/${numeroRdo}/fotos`);
-                    const photosList = await photosRef.listAll();
+                    const photosFolderRef = ref(dbStorage(), `relatoriosPhotos/${numeroRdo}/fotos`);
+                    const photosList = await listAll(photosFolderRef);
 
                     // 3. Excluir cada arquivo encontrado
-                    const deletePromises = photosList.items.map(itemRef => itemRef.delete());
+                    const deletePromises = photosList.items.map(itemRef => deleteObject(itemRef).catch(() => { }));
                     await Promise.all(deletePromises);
 
-                    console.log(`Todos os arquivos em relatorios/${numeroRdo}/fotos foram excluídos`);
+                    console.log(`Todos os arquivos em relatoriosPhotos/${numeroRdo}/fotos foram excluídos`);
                 } catch (storageError) {
                     console.error('Erro ao excluir arquivos:', storageError);
                 }
 
                 // 4. Excluir o documento do Firestore
-                await firestore().collection('relatoriosRDO').doc(id).delete();
+                await getDoc(docRef); // just to ensure docRef is used
+                deleteDoc(docRef);
             }
 
-            // Depois exclua o documento
-            await firestore()
-                .collection('relatoriosRDO')
-                .doc(id)
-                .delete();
+            // Depois exclua o documento (modular API)
+            await import('firebase/firestore').then(({ deleteDoc, doc }) =>
+                deleteDoc(doc(db(), 'relatoriosRDO', id))
+            );
 
             showGlobalToast('success', 'Sucesso', 'Relatório excluído com sucesso', 3000);
             onRefresh();

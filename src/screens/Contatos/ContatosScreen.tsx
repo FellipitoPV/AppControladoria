@@ -5,6 +5,9 @@ import {
     Text,
     TextInput,
     useTheme,
+    Modal,
+    Portal,
+    Button,
 } from 'react-native-paper';
 import {
     Dimensions,
@@ -16,13 +19,12 @@ import {
     View,
 } from 'react-native';
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import LinearGradient from 'react-native-linear-gradient';
 import ModernHeader from '../../assets/components/ModernHeader';
 import { User } from '../Adm/types/admTypes';
 import { customTheme } from '../../theme/theme';
-import { db } from '../../../firebase';
+import { FirestoreGet } from '../../Hooks/Firebase/firebaseAPI';
 
 const { width } = Dimensions.get('window');
 
@@ -33,26 +35,20 @@ export default function ContatosScreen({ navigation }: any) {
     const [filter, setFilter] = useState('');
     const [users, setUsers] = useState<User[]>([]);
     const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+    const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    const [modalVisible, setModalVisible] = useState(false);
 
-    // Atualizar acessarUsuarios
+    // Função para buscar usuários usando FirestoreGet
     const acessarUsuarios = async () => {
         try {
-            const snapshot = await getDocs(collection(db(), 'users'));
+            const listaUsuarios: User[] = await FirestoreGet({
+                collectionPath: 'users'
+            });
 
-            const listaUsuarios: User[] = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                user: doc.data().user,
-                email: doc.data().email,
-                telefone: doc.data().telefone,
-                cargo: doc.data().cargo,
-                ramal: doc.data().ramal || '',
-                area: doc.data().area || '',
-                photoURL: doc.data().photoURL || ''
-            }));
-
+            // Filtra usuários com cargo Administrador ou email @ecologika.com.br
             const filteredUsers = listaUsuarios.filter(user =>
                 user.cargo === 'Administrador' ||
-                user.email.toLowerCase().endsWith('@ecologika.com.br')
+                (SHOW_ONLY_ECOLOGIKA_EMAILS && user.email.toLowerCase().endsWith('@ecologika.com.br'))
             );
 
             setUsers(filteredUsers);
@@ -88,97 +84,209 @@ export default function ContatosScreen({ navigation }: any) {
         Linking.openURL(`tel:${phone}`);
     };
 
+    const getCargoIcon = (cargo: string) => {
+        return cargo === 'Administrador' ? 'admin-panel-settings' : 'work';
+    };
+
+    const openModal = (user: User) => {
+        setSelectedUser(user);
+        setModalVisible(true);
+    };
+
+    const closeModal = () => {
+        setModalVisible(false);
+        setSelectedUser(null);
+    };
+
     const ContactCard = ({ user }: { user: User }) => (
-        <Surface style={styles.card}>
-            {/* Barra de gradiente superior */}
-            <View style={styles.cardGradient} />
-
-            <View style={styles.cardContent}>
-
-                {/* Cabeçalho do Card */}
-                <View style={styles.cardHeader}>
-                    {user.photoURL ? (
-                        <Avatar.Image
-                            size={56}
-                            source={{ uri: user.photoURL }}
-                            style={styles.avatar}
-                        />
-                    ) : (
-                        <Avatar.Icon
-                            size={56}
-                            icon={() => (
+        <TouchableOpacity
+            onPress={() => openModal(user)}
+            activeOpacity={0.8}
+            style={styles.cardTouchable}
+        >
+            <Surface style={styles.card}>
+                <LinearGradient
+                    colors={[`${customTheme.colors.primary}10`, '#FFFFFF']}
+                    style={styles.cardGradient}
+                />
+                <View style={styles.cardBorder} />
+                <View style={styles.cardContent}>
+                    <View style={styles.cardHeader}>
+                        {user.photoURL ? (
+                            <Avatar.Image
+                                size={48}
+                                source={{ uri: user.photoURL }}
+                                style={styles.avatar}
+                            />
+                        ) : (
+                            <Avatar.Icon
+                                size={48}
+                                icon={() => (
+                                    <Icon
+                                        name="person"
+                                        size={28}
+                                        color="#FFF"
+                                    />
+                                )}
+                                style={styles.avatar}
+                            />
+                        )}
+                        <View style={styles.headerInfo}>
+                            <Text variant="titleMedium" style={styles.userName}>
+                                {user.user}
+                            </Text>
+                            <View style={styles.cargoContainer}>
                                 <Icon
-                                    name="person"
-                                    size={32}
-                                    color="#FFF"
+                                    name={getCargoIcon(user.cargo)}
+                                    size={16}
+                                    color={customTheme.colors.primary}
+                                    style={styles.cargoIcon}
                                 />
-                            )}
-                            style={styles.avatar}
-                        />
-                    )}
-                    <View style={styles.headerInfo}>
-                        <Text variant="titleMedium" style={styles.userName}>
-                            {user.user}
-                        </Text>
-                        <Chip
-                            style={styles.cargoChip}
-                            textStyle={styles.cargoChipText}
-                        >
-                            {user.cargo}
-                        </Chip>
+                                <Text style={styles.cargoText}>
+                                    {user.cargo}
+                                </Text>
+                            </View>
+                        </View>
                     </View>
                 </View>
+            </Surface>
+        </TouchableOpacity>
+    );
 
-                {/* Informações de Contato */}
-                <View style={styles.contactInfo}>
-                    {/* Email */}
-                    <TouchableOpacity
-                        onPress={() => handleEmailPress(user.email)}
-                        style={styles.contactItem}
-                    >
-                        <Icon
-                            name="mail"
-                            size={20}
-                            color={customTheme.colors.primary}
+    const ContactModal = () => (
+        <Portal>
+            <Modal
+                visible={modalVisible}
+                onDismiss={closeModal}
+                contentContainerStyle={styles.modalContainer}
+            >
+                {selectedUser && (
+                    <View style={styles.modalContent}>
+                        <LinearGradient
+                            colors={[customTheme.colors.primary, customTheme.colors.secondary]}
+                            style={styles.modalHeaderGradient}
                         />
-                        <Text style={styles.contactText} numberOfLines={1}>
-                            {user.email}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {/* Telefone */}
-                    {user.telefone && (
-                        <TouchableOpacity
-                            onPress={() => user.telefone && handlePhonePress(user.telefone)}
-                            style={[styles.contactItem, styles.phoneItem]}
-                        >
-                            <Icon
-                                name="phone"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                            <Text style={styles.contactText}>
-                                {user.telefone}
+                        <View style={styles.modalHeader}>
+                            {selectedUser.photoURL ? (
+                                <Avatar.Image
+                                    size={80}
+                                    source={{ uri: selectedUser.photoURL }}
+                                    style={styles.modalAvatar}
+                                />
+                            ) : (
+                                <Avatar.Icon
+                                    size={80}
+                                    icon={() => (
+                                        <Icon
+                                            name="person"
+                                            size={48}
+                                            color="#FFF"
+                                        />
+                                    )}
+                                    style={styles.modalAvatar}
+                                />
+                            )}
+                            <Text variant="titleLarge" style={styles.modalUserName}>
+                                {selectedUser.user}
                             </Text>
-                        </TouchableOpacity>
-                    )}
-
-                    {/* Ramal */}
-                    {user.ramal && (
-                        <View style={[styles.contactItem, styles.ramalItem]}>
-                            <Icon
-                                name="menu-book"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                            <Text style={styles.contactText}>
-                                Ramal: {user.ramal}
-                            </Text>
+                            <View style={styles.modalCargoContainer}>
+                                <Icon
+                                    name={getCargoIcon(selectedUser.cargo)}
+                                    size={18}
+                                    color={customTheme.colors.primary}
+                                />
+                                <Text style={styles.modalCargoText}>
+                                    {selectedUser.cargo}
+                                </Text>
+                            </View>
                         </View>
-                    )}
-                </View>
-            </View>
-        </Surface>
+
+                        <View style={styles.modalInfo}>
+                            {/* Email */}
+                            <View style={styles.modalContactItem}>
+                                <Icon
+                                    name="mail"
+                                    size={24}
+                                    color={customTheme.colors.primary}
+                                />
+                                <Text style={styles.modalContactText} numberOfLines={1}>
+                                    {selectedUser.email}
+                                </Text>
+                                <Button
+                                    mode="outlined"
+                                    onPress={() => handleEmailPress(selectedUser.email)}
+                                    style={styles.modalActionButton}
+                                    icon="mail"
+                                    compact
+                                >
+                                    Enviar
+                                </Button>
+                            </View>
+
+                            {/* Telefone */}
+                            {selectedUser.telefone && (
+                                <View style={styles.modalContactItem}>
+                                    <Icon
+                                        name="phone"
+                                        size={24}
+                                        color={customTheme.colors.secondary}
+                                    />
+                                    <Text style={styles.modalContactText}>
+                                        {selectedUser.telefone}
+                                    </Text>
+                                    <Button
+                                        mode="outlined"
+                                        onPress={() => handlePhonePress(selectedUser.telefone!)}
+                                        style={styles.modalActionButton}
+                                        icon="phone"
+                                        compact
+                                    >
+                                        Ligar
+                                    </Button>
+                                </View>
+                            )}
+
+                            {/* Ramal */}
+                            {selectedUser.ramal && (
+                                <View style={styles.modalContactItem}>
+                                    <Icon
+                                        name="menu-book"
+                                        size={24}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.modalContactText}>
+                                        Ramal: {selectedUser.ramal}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* Área */}
+                            {selectedUser.area && (
+                                <View style={styles.modalContactItem}>
+                                    <Icon
+                                        name="business"
+                                        size={24}
+                                        color={customTheme.colors.secondary}
+                                    />
+                                    <Text style={styles.modalContactText}>
+                                        Área: {selectedUser.area}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+
+                        <Button
+                            mode="contained"
+                            onPress={closeModal}
+                            style={styles.modalCloseButton}
+                            icon="close"
+                        >
+                            Fechar
+                        </Button>
+                    </View>
+                )}
+            </Modal>
+        </Portal>
     );
 
     return (
@@ -198,11 +306,13 @@ export default function ContatosScreen({ navigation }: any) {
                     onChangeText={setFilter}
                     left={<TextInput.Icon
                         icon={() => (
-                            <Icon
-                                name="search"
-                                size={24}
-                                color={customTheme.colors.primary}
-                            />
+                            <Surface style={styles.searchIconSurface}>
+                                <Icon
+                                    name="search"
+                                    size={24}
+                                    color={customTheme.colors.primary}
+                                />
+                            </Surface>
                         )}
                     />}
                     style={styles.searchInput}
@@ -219,14 +329,18 @@ export default function ContatosScreen({ navigation }: any) {
             >
                 {filteredUsers.length === 0 ? (
                     <Surface style={styles.emptyState}>
+                        <LinearGradient
+                            colors={[`${customTheme.colors.primary}20`, `${customTheme.colors.secondary}20`]}
+                            style={styles.emptyStateGradient}
+                        />
                         <Icon
                             name="phone"
-                            size={48}
+                            size={64}
                             color={customTheme.colors.primary}
                             style={styles.emptyStateIcon}
                         />
                         <Text variant="titleMedium" style={styles.emptyStateTitle}>
-                            Nenhum resultado encontrado
+                            Nenhum contato encontrado
                         </Text>
                         <Text style={styles.emptyStateSubtitle}>
                             Tente buscar por outro nome, cargo ou área
@@ -242,24 +356,16 @@ export default function ContatosScreen({ navigation }: any) {
                     </View>
                 )}
             </ScrollView>
+
+            <ContactModal />
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    contactsGrid: {
-        width: '100%',
-        gap: 16,
-    },
-    card: {
-        width: '100%', // Ao invés de calcular com base na width da tela
-        borderRadius: 8,
-        overflow: 'hidden',
-        elevation: 2,
-    },
     safeArea: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: customTheme.colors.background,
     },
     searchContainer: {
         padding: 16,
@@ -269,11 +375,20 @@ const styles = StyleSheet.create({
     },
     searchInput: {
         backgroundColor: '#FFFFFF',
+        borderRadius: 10,
+        elevation: 2,
+    },
+    searchIconSurface: {
+        borderRadius: 20,
+        backgroundColor: `${customTheme.colors.primary}20`,
+        padding: 4,
     },
     resultCount: {
-        marginTop: 8,
+        marginTop: 12,
         color: customTheme.colors.onSurfaceVariant,
         fontSize: 14,
+        textAlign: 'center',
+        fontWeight: '500',
     },
     scrollView: {
         flex: 1,
@@ -281,8 +396,37 @@ const styles = StyleSheet.create({
     scrollContent: {
         padding: 16,
     },
+    contactsGrid: {
+        width: '100%',
+        gap: 16,
+    },
+    cardTouchable: {
+        transform: [{ scale: 1 }],
+    },
+    card: {
+        width: '100%',
+        borderRadius: 16,
+        backgroundColor: '#FFFFFF',
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+        overflow: 'hidden',
+    },
     cardGradient: {
-        height: 3,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    cardBorder: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 4,
         backgroundColor: customTheme.colors.primary,
     },
     cardContent: {
@@ -290,64 +434,154 @@ const styles = StyleSheet.create({
     },
     cardHeader: {
         flexDirection: 'row',
-        gap: 12,
-        marginBottom: 16,
+        alignItems: 'center',
+        gap: 16,
     },
     avatar: {
         backgroundColor: customTheme.colors.primary,
+        borderWidth: 2,
+        borderColor: `${customTheme.colors.primary}50`,
     },
     headerInfo: {
         flex: 1,
     },
     userName: {
-        fontWeight: '600',
-        marginBottom: 4,
+        fontWeight: '700',
+        fontSize: 18,
+        color: customTheme.colors.onSurface,
     },
-    cargoChip: {
-        backgroundColor: `${customTheme.colors.primary}20`,
-        // height: 24,
-    },
-    cargoChipText: {
-        color: customTheme.colors.primary,
-        fontSize: 12,
-    },
-    contactInfo: {
-        gap: 8,
-    },
-    contactItem: {
+    cargoContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        padding: 8,
-        borderRadius: 8,
-        backgroundColor: `${customTheme.colors.primary}10`,
+        marginTop: 4,
     },
-    phoneItem: {
-        backgroundColor: `${customTheme.colors.secondary}10`,
+    cargoIcon: {
+        opacity: 0.8,
     },
-    ramalItem: {
-        backgroundColor: `${customTheme.colors.primary}10`,
-    },
-    contactText: {
-        flex: 1,
+    cargoText: {
         fontSize: 14,
-        color: customTheme.colors.onSurface,
+        color: customTheme.colors.onSurfaceVariant,
+        fontWeight: '500',
     },
     emptyState: {
-        padding: 32,
+        padding: 40,
         alignItems: 'center',
-        borderRadius: 8,
+        borderRadius: 16,
+        backgroundColor: '#FFFFFF',
+        elevation: 3,
+        position: 'relative',
+        overflow: 'hidden',
     },
-    emptyStateIcon: {
-        marginBottom: 16,
+    emptyStateGradient: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         opacity: 0.5,
     },
+    emptyStateIcon: {
+        marginBottom: 20,
+        opacity: 0.7,
+    },
     emptyStateTitle: {
-        marginBottom: 8,
-        color: customTheme.colors.onSurfaceVariant,
+        marginBottom: 12,
+        color: customTheme.colors.onSurface,
+        fontWeight: '700',
+        fontSize: 18,
     },
     emptyStateSubtitle: {
         color: customTheme.colors.onSurfaceVariant,
         textAlign: 'center',
+        fontSize: 15,
+        lineHeight: 22,
+    },
+    modalContainer: {
+        backgroundColor: '#FFFFFF',
+        margin: 20,
+        borderRadius: 20,
+        padding: 24,
+        maxHeight: '85%',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+    },
+    modalContent: {
+        alignItems: 'center',
+        gap: 20,
+    },
+    modalHeaderGradient: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 120,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+    },
+    modalHeader: {
+        alignItems: 'center',
+        gap: 12,
+        marginTop: 20,
+        marginBottom: 16,
+    },
+    modalAvatar: {
+        backgroundColor: customTheme.colors.primary,
+        borderWidth: 3,
+        borderColor: '#FFFFFF',
+        elevation: 4,
+    },
+    modalUserName: {
+        fontWeight: '800',
+        fontSize: 22,
+        color: customTheme.colors.onSurface,
+    },
+    modalCargoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: `${customTheme.colors.primary}20`,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+    },
+    modalCargoText: {
+        color: customTheme.colors.primary,
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    modalInfo: {
+        width: '100%',
+        gap: 16,
+    },
+    modalContactItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: `${customTheme.colors.primary}05`,
+    },
+    modalContactText: {
+        flex: 1,
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
+        fontWeight: '500',
+    },
+    modalActionButton: {
+        borderColor: customTheme.colors.primary,
+        borderWidth: 1,
+        borderRadius: 8,
+    },
+    modalCloseButton: {
+        marginTop: 20,
+        backgroundColor: customTheme.colors.primary,
+        borderRadius: 10,
+        paddingVertical: 8,
+        width: '60%',
+        alignSelf: 'center',
     },
 });

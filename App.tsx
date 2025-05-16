@@ -198,9 +198,9 @@ export default function App() {
       const savedEmail = await AsyncStorage.getItem('userEmail');
       const savedPassword = await AsyncStorage.getItem('userPassword');
       if (savedEmail && savedPassword) {
-        console.log('Tentando login automático com credenciais salvas');
+        // console.log('Tentando login automático com credenciais salvas');
         await signInWithEmailAndPassword(auth(), savedEmail, savedPassword);
-        console.log('Login automático bem-sucedido');
+        // console.log('Login automático bem-sucedido');
         setIsLoggedIn(true);
         await AsyncStorage.setItem('isLoggedIn', 'true');
         return true;
@@ -221,12 +221,12 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth(), async (user) => {
       if (user) {
-        console.log('Usuário já autenticado:', user.uid);
+        // console.log('Usuário já autenticado:', user.uid);
         setIsLoggedIn(true);
         await AsyncStorage.setItem('isLoggedIn', 'true');
         setIsReady(true);
       } else {
-        console.log('Nenhum usuário autenticado, tentando login automático');
+        // console.log('Nenhum usuário autenticado, tentando login automático');
         const autoLoginSuccess = await tryAutoLogin();
         if (!autoLoginSuccess) {
           setIsLoggedIn(false);

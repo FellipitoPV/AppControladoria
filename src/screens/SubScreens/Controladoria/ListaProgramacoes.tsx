@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { Text, Surface, Dialog, Portal, Modal } from 'react-native-paper';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import database from '@react-native-firebase/database';
 
 import { NavigationProp } from '@react-navigation/native';
 import { useNetwork } from '../../../contexts/NetworkContext';
@@ -21,6 +20,7 @@ import { customTheme } from '../../../theme/theme';
 import { Container, ProgramacaoEquipamento, Responsavel } from './types/logisticTypes';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import { hasAccess } from '../../Adm/types/admTypes';
+import { getDatabase, ref, onValue, off, set, remove } from 'firebase/database';
 
 function alpha(color: string, opacity: number): string {
     const opacityHex = Math.round(opacity * 255).toString(16).padStart(2, '0');
@@ -51,30 +51,31 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
 
     useEffect(() => {
         const buscarProgramacoes = () => {
-            const ref = database().ref('programacoes');
+            const db = getDatabase();
+            const programacoesRef = ref(db, 'programacoes');
 
-            ref.on('value', snapshot => {
-                const data = snapshot.val();
-                if (data) {
-                    const programacoesArray = Object.entries(data).map(([key, value]: [string, any]) => ({
-                        firebaseKey: key,
-                        ...value
-                    }));
+            const listener = onValue(programacoesRef, snapshot => {
+            const data = snapshot.val();
+            if (data) {
+                const programacoesArray = Object.entries(data).map(([key, value]: [string, any]) => ({
+                firebaseKey: key,
+                ...value
+                }));
 
-                    // Ordena por data
-                    const programacoesOrdenadas = programacoesArray.sort((a, b) => {
-                        return new Date(a.dataEntrega).getTime() - new Date(b.dataEntrega).getTime();
-                    });
+                // Ordena por data
+                const programacoesOrdenadas = programacoesArray.sort((a, b) => {
+                return new Date(a.dataEntrega).getTime() - new Date(b.dataEntrega).getTime();
+                });
 
-                    setProgramacoes(programacoesOrdenadas);
-                } else {
-                    setProgramacoes([]);
-                }
-                setLoading(false);
+                setProgramacoes(programacoesOrdenadas);
+            } else {
+                setProgramacoes([]);
+            }
+            setLoading(false);
             });
 
             // Cleanup listener
-            return () => ref.off();
+            return () => off(programacoesRef, 'value', listener);
         };
 
         buscarProgramacoes();
@@ -96,9 +97,10 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
             setLoading(true);
             setDeleteDialogVisible(false);
 
-            await database()
-                .ref(`programacoes/${programacao.firebaseKey}`)
-                .remove();
+            const db = getDatabase();
+            await import('firebase/database').then(({ remove, ref }) =>
+                remove(ref(db, `programacoes/${programacao.firebaseKey}`))
+            );
 
             showGlobalToast(
                 'success',
@@ -144,15 +146,12 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                 }
             };
 
-            // Salvar no Firebase Database (não real-time)
-            await database()
-                .ref(`historico/${programacao.firebaseKey}`)
-                .set(conclusaoData);
+            // Salvar no Firebase Database (modular)
+            const db = getDatabase();
+            await set(ref(db, `historico/${programacao.firebaseKey}`), conclusaoData);
 
             // Remover da lista de programações ativas
-            await database()
-                .ref(`programacoes/${programacao.firebaseKey}`)
-                .remove();
+            await remove(ref(db, `programacoes/${programacao.firebaseKey}`));
 
             showGlobalToast('success', 'Sucesso', 'Operação concluída com sucesso!', 3000);
         } catch (error) {
@@ -245,9 +244,14 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
         }
 
         try {
-            await database()
-                .ref(`programacoes/${programacao.firebaseKey}/${tipo === 'carregamento' ? 'responsavelCarregamento' : 'responsavelOperacao'}`)
-                .set(responsavel);
+            const db = getDatabase();
+            await set(
+                ref(
+                    db,
+                    `programacoes/${programacao.firebaseKey}/${tipo === 'carregamento' ? 'responsavelCarregamento' : 'responsavelOperacao'}`
+                ),
+                responsavel
+            );
 
             // Atualiza o estado local após assumir a operação
             if (tipo === 'operacao') {

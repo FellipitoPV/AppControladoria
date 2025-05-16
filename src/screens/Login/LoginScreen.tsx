@@ -185,7 +185,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                 await AsyncStorage.removeItem('userEmail');
                 await AsyncStorage.removeItem('userPassword');
             } else if (savedEmail && savedPassword) {
-                console.log('Tentando login automático');
+                // console.log('Tentando login automático');
                 await handleLogin(savedEmail, savedPassword, true, route?.params?.nextScreen, route?.params?.nextScreenParams);
             } else {
                 console.log('Nenhuma credencial salva encontrada');

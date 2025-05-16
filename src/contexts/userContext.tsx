@@ -51,7 +51,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             userListenerRef.current = null;
         }
 
-        console.log(`Configurando listener para o usuário: ${userId}`);
+        // console.log(`Configurando listener para o usuário: ${userInfo?.user}`);
         currentUserIdRef.current = userId;
 
         const userDocRef = doc(db(), 'users', userId);
@@ -62,7 +62,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                 if (doc.exists()) {
                     const userData = doc.data();
                     if (userData) {
-                        console.log('Dados do usuário atualizados via listener');
+                        // console.log('Dados do usuário atualizados via listener');
                         const userWithId: User = {
                             id: doc.id,
                             user: userData.user || '',
@@ -119,7 +119,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
                     setUserInfo(updatedUser);
                     await AsyncStorage.setItem('@UserInfo', JSON.stringify(updatedUser));
-                    console.log('Dados do usuário atualizados via refresh manual');
+                    // console.log('Dados do usuário atualizados via refresh manual');
 
                     // Garantir que o listener esteja ativo para este usuário
                     if (!userListenerRef.current || currentUserIdRef.current !== userInfo.id) {

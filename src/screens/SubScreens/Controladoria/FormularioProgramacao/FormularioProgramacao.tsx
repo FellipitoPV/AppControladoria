@@ -12,7 +12,6 @@ import { Text, Surface, TextInput } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
-import database from '@react-native-firebase/database';
 import { useUser } from '../../../../contexts/userContext';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
 import { customTheme } from '../../../../theme/theme';
@@ -20,6 +19,7 @@ import { Equipment, Container, ClienteInterface, ProgramacaoEquipamento, cliente
 import ModernHeader from '../../../../assets/components/ModernHeader';
 import { DropdownRef, Equipamento } from '../../Operacao/rdo/Types/rdoTypes';
 import EquipmentSection from '../Components/EquipmentSection';
+import { getDatabase, ref, push, update } from 'firebase/database';
 
 
 
@@ -134,9 +134,7 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
                 createdBy: userInfo?.user || '',
             };
 
-            await database()
-                .ref('programacoes')
-                .push(novaProgramacao);
+            await push(ref(getDatabase(), 'programacoes'), novaProgramacao);
 
             if (equipamentosSelecionados.length || containersSelecionados.length) {
                 await atualizarStatusEquipamentos();
@@ -230,7 +228,8 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
 
             // Só faz o update se tiver alterações para fazer
             if (Object.keys(updates).length > 0) {
-                await database().ref().update(updates);
+                const db = getDatabase();
+                await update(ref(getDatabase()), updates);
             }
         } catch (error) {
             console.error('Erro ao atualizar status:', error);

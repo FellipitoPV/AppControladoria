@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, memo } from 'react';
 import {
     View,
     TouchableOpacity,
@@ -6,9 +6,10 @@ import {
     Animated,
     Dimensions,
     StyleSheet,
-    ScrollView,
+    FlatList,
     Image,
-    ActivityIndicator
+    ActivityIndicator,
+    ScrollView
 } from 'react-native';
 import { Surface, Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -21,9 +22,9 @@ import { useUser } from '../../../../../contexts/userContext';
 import { showGlobalToast, verificarConectividadeAPI } from '../../../../../helpers/GlobalApi';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
-import storage from '@react-native-firebase/storage';
-import firestore from '@react-native-firebase/firestore';
-import { refresh } from '@react-native-community/netinfo';
+import { ref as storageRef, getDownloadURL, uploadBytes } from 'firebase/storage';
+import { collection, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db, dbStorage } from '../../../../../../firebase';
 
 interface DetalheRdoModalProps {
     visible: boolean;
@@ -44,135 +45,93 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
     const [loadingPhotos, setLoadingPhotos] = useState<{ [key: string]: boolean }>({});
     const [isEditLoading, setIsEditLoading] = useState(false);
     const [isPdfLoading, setIsPdfLoading] = useState(false);
-
-    const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>({ uri: "", id: "" });
+    const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
     const [isPhotoModalVisible, setIsPhotoModalVisible] = useState(false);
-
     const [isPdfAtualizado, setIsPdfAtualizado] = useState<boolean>(false);
 
-    const canEdit = () => userInfo && hasAccess(userInfo, 'operacao', 2);
+    const canEdit = useMemo(() => userInfo && hasAccess(userInfo, 'operacao', 2), [userInfo]);
 
-    // Animação de slide
+    // Animação simplificada
     const screenHeight = Dimensions.get('screen').height;
     const slideAnim = useRef(new Animated.Value(screenHeight)).current;
 
     useEffect(() => {
-        const podeEdit = canEdit();
-        // console.log("Usuario pode editar? ", podeEdit);
-
         if (visible) {
-            // Animar entrada
-            Animated.spring(slideAnim, {
+            Animated.timing(slideAnim, {
                 toValue: 0,
-                friction: 8,
-                tension: 40,
+                duration: 250,
                 useNativeDriver: true
             }).start();
         } else {
-            // Animar saída
             Animated.timing(slideAnim, {
                 toValue: screenHeight,
-                duration: 300,
+                duration: 200,
                 useNativeDriver: true
             }).start();
         }
     }, [visible, screenHeight]);
 
-    function getPrimeiroNome(nomeCompleto: string): string {
+    const getPrimeiroNome = useMemo(() => (nomeCompleto: string): string => {
         if (!nomeCompleto) return "Cliente";
-
-        // Divide o nome nos espaços e pega o primeiro elemento
         const nomes = nomeCompleto.trim().split(' ');
         return nomes[0];
-    }
+    }, []);
 
-    const handleDismiss = () => {
-        Animated.spring(slideAnim, {
-            toValue: 1200,
-            bounciness: 2,
-            speed: 20,
-            useNativeDriver: true
-        }).start();
-
-        setTimeout(() => {
-            onClose();
-        }, 50);
-    };
-
-    const getTempoLabel = (tempo: string) => {
+    const getTempoLabel = useMemo(() => (tempo: string) => {
         if (!tempo) return 'Não informado';
         const tempoItem = CONDICOES_TEMPO.find(item => item.value === tempo);
         return tempoItem ? tempoItem.label : tempo;
-    };
+    }, []);
 
-    const getMaterialLabel = () => {
+    const getMaterialLabel = useMemo(() => () => {
         if (!relatorio.material) return 'Não informado';
         const materialItem = MATERIAIS.find(item => item.value === relatorio.material);
         return materialItem ? materialItem.label : relatorio.material;
-    };
+    }, [relatorio.material]);
 
-    const getDiaSemanaLabel = () => {
+    const getDiaSemanaLabel = useMemo(() => () => {
         if (!relatorio.diaSemana) return 'Não informado';
         const diaItem = DIAS_SEMANA.find(item => item.value === relatorio.diaSemana);
         return diaItem ? diaItem.label : relatorio.diaSemana;
+    }, [relatorio.diaSemana]);
+
+    const handleDismiss = () => {
+        Animated.timing(slideAnim, {
+            toValue: screenHeight,
+            duration: 200,
+            useNativeDriver: true
+        }).start(() => onClose());
     };
 
     const handleGeneratePdf = async () => {
         try {
             setIsPdfLoading(true);
 
-            // Verificar se já existe PDF e se está atualizado
-            if (relatorio?.pdfUrl) {
-                const lastPdfGenerated = relatorio.lastPdfGenerated
-                    ? new Date(relatorio.lastPdfGenerated.seconds * 1000)
-                    : null;
+            if (relatorio?.pdfUrl && isPdfAtualizado) {
+                const clienteNome = getPrimeiroNome(relatorio?.clienteNome || "");
+                const numeroRdo = relatorio.numeroRdo;
+                const fileName = `${clienteNome}-${numeroRdo}.pdf`;
+                const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
 
-                const lastUpdated = relatorio.updatedAt
-                    ? new Date(relatorio.updatedAt.seconds * 1000)
-                    : relatorio.createdAt
-                        ? new Date(relatorio.createdAt.seconds * 1000)
-                        : null;
+                await RNFS.downloadFile({
+                    fromUrl: relatorio.pdfUrl,
+                    toFile: filePath
+                }).promise;
 
-                // Se PDF existe e está atualizado, faça download direto
-                if (lastPdfGenerated && lastUpdated && lastPdfGenerated > lastUpdated) {
-                    console.log("PDF já atualizado, baixando existente");
+                await Share.open({
+                    url: `file://${filePath}`,
+                    type: 'application/pdf',
+                    filename: fileName
+                });
 
-                    // Baixar PDF da URL existente
-                    const clienteNome = getPrimeiroNome(relatorio?.clienteNome ? relatorio.clienteNome : "");
-                    const numeroRdo = relatorio.numeroRdo;
-                    const fileName = `${clienteNome}-${numeroRdo}.pdf`;
-
-                    // Use esse fileName em todos os lugares onde você salva e compartilha o arquivo
-                    const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
-                    // Download do arquivo
-                    await RNFS.downloadFile({
-                        fromUrl: relatorio.pdfUrl,
-                        toFile: filePath
-                    }).promise;
-
-                    // Compartilhar arquivo
-                    await Share.open({
-                        url: `file://${filePath}`,
-                        type: 'application/pdf',
-                        filename: fileName
-                    });
-
-                    // Limpar arquivo após compartilhar
-                    await RNFS.unlink(filePath);
-
-                    setIsPdfLoading(false);
-                    onClose();
-                    return;
-                }
-            }
-            else {
-                console.log("A URL está no momento assim: ", relatorio.pdfUrl)
+                await RNFS.unlink(filePath);
+                setIsPdfLoading(false);
+                onClose();
+                return;
             }
 
-            // Verificar conectividade
             const conectado = await verificarConectividadeAPI();
             if (!conectado) {
-                setIsPdfLoading(false);
                 showGlobalToast(
                     'error',
                     'Sem conexão com o servidor.',
@@ -189,7 +148,6 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                 15000
             );
 
-            // Solicitar novo PDF
             const apiUrl = 'http://192.168.1.222:3000/gerar-relatorio-rdo';
             const response = await fetch(apiUrl, {
                 method: 'POST',
@@ -204,7 +162,6 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                 throw new Error(`Erro na resposta do servidor: ${errorText}`);
             }
 
-            // Processar PDF e salvar URL no Firebase
             const data = await response.blob();
             const reader = new FileReader();
             reader.readAsDataURL(data);
@@ -212,36 +169,33 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
             reader.onload = async () => {
                 try {
                     const base64Data = reader.result?.toString().split(',')[1];
+                    if (!base64Data) throw new Error('Erro ao processar arquivo PDF');
 
-                    if (!base64Data) {
-                        throw new Error('Erro ao processar arquivo PDF');
-                    }
-
-                    // Salvar arquivo localmente
-                    const clienteNome = getPrimeiroNome(relatorio?.clienteNome ? relatorio.clienteNome : "");
+                    const clienteNome = getPrimeiroNome(relatorio?.clienteNome || "");
                     const numeroRdo = relatorio.numeroRdo;
                     const fileName = `${clienteNome}-${numeroRdo}.pdf`;
-                    const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`; await RNFS.writeFile(filePath, base64Data, 'base64');
+                    const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
 
-                    // Upload para Firebase Storage
-                    const reference = storage().ref(`RelatoriosRDO/${numeroRdo}.pdf`);
-                    await reference.putFile(filePath);
+                    await RNFS.writeFile(filePath, base64Data, 'base64');
 
-                    // Obter URL de download
-                    const downloadUrl = await reference.getDownloadURL();
+ 
+                    const reference = storageRef(dbStorage(), `RelatoriosRDO/${numeroRdo}.pdf`);
+                    // Função para upload de arquivo local para o Firebase Storage
+                    const uploadFile = async (reference: any, filePath: string) => {
+                        const fileData = await RNFS.readFile(filePath, 'base64');
+                        const blob = Buffer.from(fileData, 'base64');
+                        await uploadBytes(reference, blob);
+                    };
+                    await uploadFile(reference, filePath);
+                    const downloadUrl = await getDownloadURL(reference);
 
-                    // Atualizar documento no Firestore
-                    await firestore()
-                        .collection('relatoriosRDO')
-                        .doc(relatorio.id)
-                        .update({
-                            pdfUrl: downloadUrl,
-                            lastPdfGenerated: firestore.FieldValue.serverTimestamp()
-                        });
+                    await updateDoc(doc(collection(db(), 'relatoriosRDO'), relatorio.id), {
+                        pdfUrl: downloadUrl,
+                        lastPdfGenerated: serverTimestamp()
+                    });
 
-                    refresh()
+                    refresh();
 
-                    // Compartilhar arquivo
                     try {
                         await Share.open({
                             url: `file://${filePath}`,
@@ -249,26 +203,18 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                             filename: fileName
                         });
                     } catch (shareError) {
-                        // Apenas loga o erro de compartilhamento, mas não o trata como erro crítico
                         console.log('Usuário cancelou compartilhamento:', shareError);
                     }
 
-                    // O toast de sucesso e limpeza do arquivo devem ficar fora do try/catch do Share
                     showGlobalToast('success', 'Sucesso', 'PDF gerado com sucesso!', 4000);
-
-                    // Limpar arquivo após tentar compartilhar (independente do resultado)
-
                     await RNFS.unlink(filePath);
                 } catch (error) {
                     console.warn('Erro ao processar ou compartilhar PDF:', error);
                     showGlobalToast('error', 'Erro', 'Erro ao processar o PDF', 4000);
                 }
-
             };
-
         } catch (error) {
             console.warn('Aviso ao compartilhar PDF:', error);
-            //showGlobalToast('error', 'Erro', 'Não foi possível gerar o PDF', 4000);
         } finally {
             setIsPdfLoading(false);
             onClose();
@@ -280,45 +226,29 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
         setIsPhotoModalVisible(true);
     };
 
-    // Adicione a função para fechar a modal de foto
     const handleClosePhoto = () => {
         setIsPhotoModalVisible(false);
         setSelectedPhoto(null);
     };
 
-    // Verifique durante o carregamento do componente
     useEffect(() => {
         if (relatorio?.pdfUrl) {
             const lastPdfGenerated = relatorio.lastPdfGenerated
                 ? new Date(relatorio.lastPdfGenerated.seconds * 1000)
                 : null;
-
             const lastUpdated = relatorio.updatedAt
                 ? new Date(relatorio.updatedAt.seconds * 1000)
                 : relatorio.createdAt
                     ? new Date(relatorio.createdAt.seconds * 1000)
                     : null;
 
-            console.log("===== DEBUG DATAS PDF =====");
-            console.log("PDF URL:", relatorio.pdfUrl);
-            console.log("lastPdfGenerated (raw):", relatorio.lastPdfGenerated);
-            console.log("lastPdfGenerated (date):", lastPdfGenerated);
-            console.log("updatedAt (raw):", relatorio.updatedAt);
-            console.log("createdAt (raw):", relatorio.createdAt);
-            console.log("lastUpdated (date):", lastUpdated);
-            console.log("Comparação:", lastPdfGenerated && lastUpdated ? lastPdfGenerated > lastUpdated : 'Dados insuficientes');
-            console.log("PDF atualizado?", !!(lastPdfGenerated && lastUpdated && lastPdfGenerated > lastUpdated));
-            console.log("========================");
-
             setIsPdfAtualizado(!!(lastPdfGenerated && lastUpdated && lastPdfGenerated > lastUpdated));
         } else {
-            console.log("Sem PDF URL disponível");
             setIsPdfAtualizado(false);
         }
     }, [relatorio]);
 
-    // Item de informação simples
-    const InfoItem: React.FC<{ icon: string; label: string; value: string }> = ({ icon, label, value }) => (
+    const InfoItem = memo(({ icon, label, value }: { icon: string; label: string; value: string }) => (
         <View style={styles.infoItem}>
             <MaterialCommunityIcons
                 name={icon}
@@ -331,10 +261,9 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                 <Text style={styles.infoValue}>{value || 'Não informado'}</Text>
             </View>
         </View>
-    );
+    ));
 
-    // Cabeçalho de seção
-    const SectionHeader: React.FC<{ icon: string; title: string }> = ({ icon, title }) => (
+    const SectionHeader = memo(({ icon, title }: { icon: string; title: string }) => (
         <View style={styles.sectionHeader}>
             <MaterialCommunityIcons
                 name={icon}
@@ -342,6 +271,39 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                 color={customTheme.colors.primary}
             />
             <Text style={styles.sectionTitle}>{title}</Text>
+        </View>
+    ));
+
+    const renderPhotoItem = ({ item, index }: { item: Photo; index: number }) => (
+        <View style={styles.photoItemContainer}>
+            <TouchableOpacity
+                style={styles.photoItem}
+                onPress={() => handleOpenPhoto(item)}
+                activeOpacity={0.8}
+            >
+                <Image
+                    source={{ uri: item.uri }}
+                    style={styles.photoThumbnail}
+                    resizeMode="cover"
+                    onLoadStart={() => setLoadingPhotos(prev => ({ ...prev, [item.id || index]: true }))}
+                    onLoadEnd={() => setLoadingPhotos(prev => ({ ...prev, [item.id || index]: false }))}
+                />
+                {loadingPhotos[item.id || index] && (
+                    <View style={styles.loadingOverlay}>
+                        <ActivityIndicator
+                            size="large"
+                            color={customTheme.colors.primary}
+                        />
+                    </View>
+                )}
+                <View style={styles.photoOverlay}>
+                    <MaterialCommunityIcons
+                        name="magnify-plus"
+                        size={20}
+                        color="#FFFFFF"
+                    />
+                </View>
+            </TouchableOpacity>
         </View>
     );
 
@@ -365,16 +327,11 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                 <Animated.View
                     style={[
                         styles.modalContainer,
-                        {
-                            transform: [{
-                                translateY: slideAnim
-                            }]
-                        }
+                        { transform: [{ translateY: slideAnim }] }
                     ]}
                 >
                     <Surface style={styles.modalContent}>
                         <ScrollView>
-                            {/* Header */}
                             <View style={styles.modalHeader}>
                                 <View style={styles.modalHeaderContent}>
                                     <MaterialCommunityIcons
@@ -384,7 +341,6 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                     />
                                     <Text variant="titleLarge">Detalhes do RDO</Text>
                                 </View>
-
                                 <View style={styles.headerActions}>
                                     <TouchableOpacity
                                         onPress={handleGeneratePdf}
@@ -411,44 +367,44 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                             />
                                         )}
                                     </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        onPress={async () => {
-                                            setIsEditLoading(true);
-                                            try {
-                                                await new Promise(resolve => setTimeout(resolve, 300)); // Small delay for smooth transition
-                                                navigation.navigate('RdoForm', {
-                                                    mode: 'edit',
-                                                    relatorioData: relatorio,
-                                                    cliente: relatorio.cliente,
-                                                    servico: relatorio.servico,
-                                                    onGoBack: refresh,
-                                                });
-                                            } catch (error) {
-                                                console.error('Error navigating to edit form:', error);
-                                            } finally {
-                                                setIsEditLoading(false);
-                                                onClose()
-                                            }
-                                        }}
-                                        style={styles.editButton}
-                                        activeOpacity={0.7}
-                                        disabled={isEditLoading}
-                                    >
-                                        {isEditLoading ? (
-                                            <ActivityIndicator
-                                                size="small"
-                                                color={customTheme.colors.primary}
-                                            />
-                                        ) : canEdit() && (
-                                            <MaterialCommunityIcons
-                                                name="pencil"
-                                                size={24}
-                                                color={customTheme.colors.primary}
-                                            />
-                                        )}
-                                    </TouchableOpacity>
-
+                                    {canEdit && (
+                                        <TouchableOpacity
+                                            onPress={async () => {
+                                                setIsEditLoading(true);
+                                                try {
+                                                    await new Promise(resolve => setTimeout(resolve, 300));
+                                                    navigation.navigate('RdoForm', {
+                                                        mode: 'edit',
+                                                        relatorioData: relatorio,
+                                                        cliente: relatorio.cliente,
+                                                        servico: relatorio.servico,
+                                                        onGoBack: refresh,
+                                                    });
+                                                } catch (error) {
+                                                    console.error('Error navigating to edit form:', error);
+                                                } finally {
+                                                    setIsEditLoading(false);
+                                                    onClose();
+                                                }
+                                            }}
+                                            style={styles.editButton}
+                                            activeOpacity={0.7}
+                                            disabled={isEditLoading}
+                                        >
+                                            {isEditLoading ? (
+                                                <ActivityIndicator
+                                                    size="small"
+                                                    color={customTheme.colors.primary}
+                                                />
+                                            ) : (
+                                                <MaterialCommunityIcons
+                                                    name="pencil"
+                                                    size={24}
+                                                    color={customTheme.colors.primary}
+                                                />
+                                            )}
+                                        </TouchableOpacity>
+                                    )}
                                     <TouchableOpacity
                                         onPress={handleDismiss}
                                         style={styles.closeButton}
@@ -462,22 +418,16 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                     </TouchableOpacity>
                                 </View>
                             </View>
-
-                            {/* Conteúdo formatado como Card de informações */}
                             <View style={styles.contentWrapper}>
-                                {/* Informações Básicas */}
                                 <View style={styles.sectionContainer}>
                                     <SectionHeader icon="information" title="Informações Básicas" />
                                     <InfoItem icon="pound" label="Número do RDO" value={relatorio.numeroRdo} />
                                     <InfoItem icon="domain" label="Cliente" value={relatorio.clienteNome || relatorio.cliente} />
-
                                     <InfoItem icon="account" label="Responsável" value={relatorio.responsavel} />
                                     <InfoItem icon="account-hard-hat" label="Função" value={relatorio.funcao} />
                                     <InfoItem icon="calendar" label="Data" value={relatorio.data} />
                                     <InfoItem icon="calendar-week" label="Dia da Semana" value={getDiaSemanaLabel()} />
                                 </View>
-
-                                {/* Detalhes da Operação */}
                                 <View style={styles.sectionContainer}>
                                     <SectionHeader icon="clock" title="Detalhes da Operação" />
                                     <InfoItem icon="hammer-wrench" label="Serviço" value={relatorio.servico} />
@@ -485,8 +435,6 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                     <InfoItem icon="clock-start" label="Início da Operação" value={relatorio.inicioOperacao} />
                                     <InfoItem icon="clock-end" label="Término da Operação" value={relatorio.terminoOperacao} />
                                 </View>
-
-                                {/* Condições do Tempo */}
                                 {relatorio.condicaoTempo && (
                                     <View style={styles.sectionContainer}>
                                         <SectionHeader icon="weather-partly-cloudy" title="Condições do Tempo" />
@@ -521,8 +469,6 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                         </View>
                                     </View>
                                 )}
-
-                                {/* Profissionais */}
                                 {Array.isArray(relatorio.profissionais) && relatorio.profissionais.length > 0 && (
                                     <View style={styles.sectionContainer}>
                                         <SectionHeader icon="account-group" title="Profissionais" />
@@ -541,8 +487,6 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                         ))}
                                     </View>
                                 )}
-
-                                {/* Equipamentos */}
                                 {Array.isArray(relatorio.equipamentos) && relatorio.equipamentos.length > 0 && (
                                     <View style={styles.sectionContainer}>
                                         <SectionHeader icon="tools" title="Equipamentos" />
@@ -561,8 +505,6 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                         ))}
                                     </View>
                                 )}
-
-                                {/* Atividades */}
                                 {Array.isArray(relatorio.atividades) && relatorio.atividades.length > 0 && (
                                     <View style={styles.sectionContainer}>
                                         <SectionHeader icon="clipboard-list" title="Atividades" />
@@ -583,8 +525,6 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                         ))}
                                     </View>
                                 )}
-
-                                {/* Ocorrências */}
                                 {Array.isArray(relatorio.ocorrencias) && relatorio.ocorrencias.length > 0 && (
                                     <View style={styles.sectionContainer}>
                                         <SectionHeader icon="alert-circle" title="Ocorrências" />
@@ -603,8 +543,6 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                         ))}
                                     </View>
                                 )}
-
-                                {/* Comentários Gerais */}
                                 {relatorio.comentarioGeral && (
                                     <View style={styles.sectionContainer}>
                                         <SectionHeader icon="comment-text" title="Comentários Gerais" />
@@ -615,57 +553,26 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
                                         </View>
                                     </View>
                                 )}
-
-                                {/* Fotos */}
                                 {Array.isArray(relatorio.photos) && relatorio.photos.length > 0 && (
                                     <View style={styles.sectionContainer}>
                                         <SectionHeader icon="image" title="Fotos" />
-                                        <View style={styles.photosGrid}>
-                                            {relatorio.photos.map((photo, index) => (
-                                                <View
-                                                    key={`photo-${photo.id || index}`}
-                                                    style={styles.photoItemContainer}
-                                                >
-                                                    <TouchableOpacity
-                                                        style={styles.photoItem}
-                                                        onPress={() => handleOpenPhoto(photo)}
-                                                        activeOpacity={0.8}
-                                                    >
-                                                        <Image
-                                                            source={{ uri: photo.uri }}
-                                                            style={styles.photoThumbnail}
-                                                            resizeMode="cover"
-                                                            onLoadStart={() => setLoadingPhotos(prevState => ({
-                                                                ...prevState,
-                                                                [photo.id || index]: true
-                                                            }))}
-                                                            onLoadEnd={() => setLoadingPhotos(prevState => ({
-                                                                ...prevState,
-                                                                [photo.id || index]: false
-                                                            }))}
-                                                        />
-                                                        {loadingPhotos[photo.id || index] && (
-                                                            <View style={styles.loadingOverlay}>
-                                                                <ActivityIndicator
-                                                                    size="large"
-                                                                    color={customTheme.colors.primary}
-                                                                />
-                                                            </View>
-                                                        )}
-                                                        <View style={styles.photoOverlay}>
-                                                            <MaterialCommunityIcons
-                                                                name="magnify-plus"
-                                                                size={20}
-                                                                color="#FFFFFF"
-                                                            />
-                                                        </View>
-                                                    </TouchableOpacity>
-                                                </View>
-                                            ))}
-                                        </View>
+                                        <FlatList
+                                            data={relatorio.photos}
+                                            renderItem={renderPhotoItem}
+                                            keyExtractor={(item, index) => `photo-${item.id || index}`}
+                                            numColumns={3}
+                                            initialNumToRender={6}
+                                            maxToRenderPerBatch={6}
+                                            windowSize={5}
+                                            contentContainerStyle={styles.photosGrid}
+                                            getItemLayout={(data, index) => ({
+                                                length: Dimensions.get('window').width / 3,
+                                                offset: (Dimensions.get('window').width / 3) * index,
+                                                index
+                                            })}
+                                        />
                                     </View>
                                 )}
-
                             </View>
                         </ScrollView>
                     </Surface>
@@ -699,8 +606,6 @@ const styles = StyleSheet.create({
         zIndex: 10,
     },
     photosGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
         marginHorizontal: -4,
     },
     photoItem: {

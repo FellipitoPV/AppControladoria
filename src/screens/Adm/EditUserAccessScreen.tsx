@@ -48,7 +48,7 @@ const AccessItem: React.FC<AccessItemProps> = ({ item, selectedLevel, onLevelSel
                 </View>
                 {selectedLevel !== null && (
                     <TouchableOpacity onPress={() => onLevelSelect(item.id, null)} style={styles.removeButton}>
-                        <Icon name="close-circle" size={22} color={customTheme.colors.error} />
+                        <Icon name="close-circle" size={25} color={customTheme.colors.error} />
                     </TouchableOpacity>
                 )}
             </View>
@@ -362,8 +362,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     removeButton: {
-        padding: 0,
-        right: 15,
+        top: 15,
+        right: 25,
     },
     levelButton: {
         paddingHorizontal: 12,
