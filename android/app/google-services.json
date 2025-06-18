@@ -1,0 +1,125 @@
+{
+  "project_info": {
+    "project_number": "708827138368",
+    "firebase_url": "https://ecologikadashboard-default-rtdb.firebaseio.com",
+    "project_id": "ecologikadashboard",
+    "storage_bucket": "ecologikadashboard.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:708827138368:android:5e9575ac320d45aa7252a5",
+        "android_client_info": {
+          "package_name": "com.EstacaoDeTratamento_ecologika"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJhpKrSElvHu7KYO70zdGSVr1UNjf_tA0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:708827138368:android:7f14b616e57f846d7252a5",
+        "android_client_info": {
+          "package_name": "com.balanca_ecologika_controle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJhpKrSElvHu7KYO70zdGSVr1UNjf_tA0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:708827138368:android:3de19b470cbf37e47252a5",
+        "android_client_info": {
+          "package_name": "com.compostagem_ecologika"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJhpKrSElvHu7KYO70zdGSVr1UNjf_tA0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:708827138368:android:21c9be85785cbe7c7252a5",
+        "android_client_info": {
+          "package_name": "com.controladoria_ecologika"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJhpKrSElvHu7KYO70zdGSVr1UNjf_tA0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:708827138368:android:7519334bb6afc1b57252a5",
+        "android_client_info": {
+          "package_name": "com.lavagem.ecologika"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJhpKrSElvHu7KYO70zdGSVr1UNjf_tA0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:708827138368:android:5664531a327489447252a5",
+        "android_client_info": {
+          "package_name": "com.logistica.ecologika"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJhpKrSElvHu7KYO70zdGSVr1UNjf_tA0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
