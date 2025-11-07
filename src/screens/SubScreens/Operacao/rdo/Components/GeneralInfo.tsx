@@ -5,9 +5,9 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { Dropdown } from 'react-native-element-dropdown';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { customTheme } from '../../../../../theme/theme';
-import { clientes } from '../../../Controladoria/types/logisticTypes';
 import { DropdownRef, DIAS_SEMANA, MATERIAIS, FormDataInterface, SERVICOS } from '../Types/rdoTypes';
 import { formatDate } from '../Utils/formUtils';
+import { clientes } from '../../../../../helpers/Types';
 
 interface GeneralInfoProps {
     formData: FormDataInterface;
@@ -39,7 +39,7 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
         label: cliente.razaoSocial,
         value: cliente.cnpjCpf,
         icon: 'domain',
-        endereco: cliente.endereco,
+        // endereco: cliente.,
     }));
 
     // Consolidated save method

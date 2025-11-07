@@ -118,13 +118,16 @@ export const PROFISSIONAIS = [
     { label: 'Coordenador Operacional', value: 'coordenador_operacional', icon: 'account-supervisor' },
     { label: 'Operador de Empilhadeira', value: 'operador_empilhadeira', icon: 'forklift' },
     { label: 'Supervisor de Radioproteção', value: 'supervisor_radioprotecao', icon: 'shield' },
-    { label: 'Supervisor Operacional', value: 'supervisor_operacional', icon: 'account-cog' }
+    { label: 'Supervisor Operacional', value: 'supervisor_operacional', icon: 'account-cog' },
+    { label: 'Técnico de Qualidade', value: 'tecnico_qualidade', icon: 'certificate' }
 ];
 
 export const EQUIPAMENTOS = [
     { label: 'Empilhadeira', value: 'empilhadeira', icon: 'forklift' },
     { label: 'Maçarico', value: 'macarico', icon: 'fire' },
-    { label: 'Poli Corte', value: 'poli_corte', icon: 'content-cut' }
+    { label: 'Poli Corte', value: 'poli_corte', icon: 'content-cut' },
+    { label: 'Lixadeira', value: 'lixadeira', icon: 'cog' },
+    { label: 'Espectrômetro', value: 'espectrometro', icon: 'magnify' }
 ];
 
 export const TIPOS_OCORRENCIAS = [

@@ -391,7 +391,7 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
             }
 
             const compostagemData: Compostagem = {
-                data: dayjs(values.dataEHora as Dayjs).toISOString(),
+                data: dayjs(values.dataEHora as Dayjs).format('YYYY-MM-DD'),
                 responsavel: userInfo?.user ?? '',
                 leira: values.leira as string,
                 timestamp: Timestamp.now(),
@@ -405,8 +405,10 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                 ph: isMedicaoRotina ? '' : (values.ph as string),
                 odor: isMedicaoRotina ? null : (values.odor as string),
                 observacao: values.observacao as string,
-                photoUris: (values.photos as { uri: string; id: string }[]).map((photo) => photo.uri),
+                photoUris: (values.photos as { uri: string; id: string; }[]).map((photo) => photo.uri),
                 photoUrls,
+                createdAt: undefined,
+                hora: ''
             };
 
             const timestamp = Date.now();

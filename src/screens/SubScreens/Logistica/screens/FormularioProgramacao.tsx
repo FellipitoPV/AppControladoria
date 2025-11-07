@@ -16,9 +16,10 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Dropdown } from 'react-native-element-dropdown';
 import database from '@react-native-firebase/database';
 import { useUser } from '../../../../contexts/userContext';
-import { ClienteInterface, clientes, Container, Equipment, ProgramacaoEquipamento } from '../../Controladoria/types/logisticTypes';
+import { ClienteInterface, Container, Equipment, ProgramacaoEquipamento } from '../../Controladoria/types/logisticTypes';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
 import { customTheme } from '../../../../theme/theme';
+import { clientes } from '../../../../helpers/Types';
 
 
 const FormularioProgramacao = ({ navigation }: { navigation: any }) => {

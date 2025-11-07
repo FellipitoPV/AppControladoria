@@ -1,12 +1,16 @@
 import {
     ActivityIndicator,
-    Dimensions,
+    Alert,
     Image,
+    Linking,
+    Platform,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { CameraOptions, launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { PERMISSIONS, RESULTS, check, request } from 'react-native-permissions';
 
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Photo } from '../../Operacao/rdo/Types/rdoTypes';
@@ -28,10 +32,10 @@ const PhotoGalleryEnhanced: React.FC<PhotoGalleryProps> = ({
     onPhotoPress,
     onDeletePhoto,
     onAddPhoto,
+    sectionTitle,
 }) => {
     const [loadingStates, setLoadingStates] = React.useState<{ [key: string]: boolean }>({});
 
-    // Combinar fotos existentes e novas
     const allPhotos = [
         ...existingPhotos.map(foto => ({
             url: foto.url,
@@ -43,6 +47,85 @@ const PhotoGalleryEnhanced: React.FC<PhotoGalleryProps> = ({
         ...photos
     ];
 
+    const checkCameraPermission = async () => {
+        try {
+            const permission = Platform.select({
+                android: PERMISSIONS.ANDROID.CAMERA,
+                ios: PERMISSIONS.IOS.CAMERA,
+            });
+
+            if (!permission) return false;
+
+            const result = await check(permission);
+            switch (result) {
+                case RESULTS.GRANTED:
+                    return true;
+                case RESULTS.DENIED:
+                    const requestResult = await request(permission);
+                    return requestResult === RESULTS.GRANTED;
+                case RESULTS.BLOCKED:
+                case RESULTS.UNAVAILABLE:
+                    Alert.alert(
+                        'Permissão Necessária',
+                        'Para tirar fotos, é necessário permitir o acesso à câmera nas configurações do aplicativo.',
+                        [
+                            { text: 'Cancelar', style: 'cancel' },
+                            { text: 'Abrir Configurações', onPress: () => Linking.openSettings() },
+                        ]
+                    );
+                    return false;
+                default:
+                    return false;
+            }
+        } catch (error) {
+            console.error('Erro ao verificar permissão da câmera:', error);
+            return false;
+        }
+    };
+
+    const tirarFoto = async () => {
+        const hasPermission = await checkCameraPermission();
+        if (!hasPermission) return;
+
+        const options: CameraOptions = {
+            mediaType: 'photo',
+            saveToPhotos: true,
+            includeBase64: false,
+            includeExtra: true,
+            quality: 1,
+        };
+
+        launchCamera(options, (response: any) => {
+            if (!response.didCancel && !response.error && response.assets?.[0]) {
+                const newPhoto: Photo = {
+                    uri: response.assets[0].uri,
+                    id: Date.now().toString(),
+                    filename: response.assets[0].fileName,
+                };
+                onAddPhoto?.(newPhoto);
+            }
+        });
+    };
+
+    const selecionarDaGaleria = () => {
+        const options: any = {
+            mediaType: 'photo',
+            includeBase64: false,
+            quality: 1,
+        };
+
+        launchImageLibrary(options, (response: any) => {
+            if (!response.didCancel && !response.error && response.assets?.[0]) {
+                const newPhoto: Photo = {
+                    uri: response.assets[0].uri,
+                    id: Date.now().toString(),
+                    filename: response.assets[0].fileName,
+                };
+                onAddPhoto?.(newPhoto);
+            }
+        });
+    };
+
     const handleLoadStart = (photoId: string) => {
         setLoadingStates(prev => ({ ...prev, [photoId]: true }));
     };
@@ -53,7 +136,37 @@ const PhotoGalleryEnhanced: React.FC<PhotoGalleryProps> = ({
 
     return (
         <View style={styles.section}>
+            {sectionTitle && (
+                <View style={styles.sectionHeader}>
+                    <Icon name="camera" size={20} color={customTheme.colors.primary} />
+                    <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+                </View>
+            )}
 
+            {/* Botões de Adicionar Foto */}
+            <View style={styles.photoButtonsContainer}>
+                <TouchableOpacity 
+                    style={styles.dropdownContainer} 
+                    onPress={tirarFoto}
+                >
+                    <View style={styles.photoButton}>
+                        <Icon name="camera" size={24} color={customTheme.colors.primary} />
+                        <Text style={styles.photoButtonText}>Tirar Foto</Text>
+                    </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={styles.dropdownContainer} 
+                    onPress={selecionarDaGaleria}
+                >
+                    <View style={styles.photoButton}>
+                        <Icon name="image" size={24} color={customTheme.colors.primary} />
+                        <Text style={styles.photoButtonText}>Galeria</Text>
+                    </View>
+                </TouchableOpacity>
+            </View>
+
+            {/* Galeria de Fotos */}
             <View style={styles.photoGalleryContainer}>
                 {allPhotos.length === 0 ? (
                     <View style={styles.emptyContainer}>
@@ -69,7 +182,6 @@ const PhotoGalleryEnhanced: React.FC<PhotoGalleryProps> = ({
                 ) : (
                     <View style={styles.photoGrid}>
                         {allPhotos.map((photo) => {
-                            // Determinar URI da imagem (pode ser local ou do Firebase)
                             const imageUri = photo.uri || photo.url || '';
                             const photoId = photo.id || (photo.timestamp?.toString() || '');
 
@@ -129,9 +241,6 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurface,
         fontWeight: '600',
         fontSize: 18,
-    },
-    inputGroup: {
-        gap: 10,
     },
     photoButtonsContainer: {
         flexDirection: 'row',
