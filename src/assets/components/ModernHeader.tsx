@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, TouchableOpacity, StyleProp, ViewStyle } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, StyleProp, ViewStyle, ActivityIndicator } from 'react-native';
 import { Surface, Text, useTheme, MD3Theme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../theme/theme';
@@ -17,6 +17,12 @@ interface ModernHeaderProps {
     rightAction?: () => void;
     /** Nome do ícone do botão direito */
     rightIcon?: string;
+    /** Botão direito com loading (sobrescreve rightAction/rightIcon) */
+    rightButton?: {
+        icon: string;
+        onPress: () => void;
+        loading?: boolean;
+    };
     /** Estilo customizado para o container do header */
     style?: StyleProp<ViewStyle>;
 }
@@ -27,7 +33,8 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
     onBackPress,
     showBackButton = true,
     rightAction,
-    rightIcon = 'close-circle', // Ícone padrão corrigido
+    rightIcon = 'close-circle',
+    rightButton,
     style,
 }) => {
 
@@ -68,6 +75,48 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
         }
     });
 
+    const renderRightButton = () => {
+        if (rightButton) {
+            return (
+                <TouchableOpacity
+                    onPress={rightButton.onPress}
+                    style={[styles.icon, styles.rightAction]}
+                    disabled={rightButton.loading}
+                >
+                    {rightButton.loading ? (
+                        <ActivityIndicator 
+                            size="small" 
+                            color={customTheme.colors.primary} 
+                        />
+                    ) : (
+                        <Icon
+                            name={rightButton.icon}
+                            size={24}
+                            color={customTheme.colors.primary}
+                        />
+                    )}
+                </TouchableOpacity>
+            );
+        }
+
+        if (rightAction) {
+            return (
+                <TouchableOpacity
+                    onPress={rightAction}
+                    style={[styles.icon, styles.rightAction]}
+                >
+                    <Icon
+                        name={rightIcon}
+                        size={24}
+                        color={customTheme.colors.primary}
+                    />
+                </TouchableOpacity>
+            );
+        }
+
+        return null;
+    };
+
     return (
         <Surface style={[styles.header, style]}>
             <View style={styles.headerContent}>
@@ -77,7 +126,7 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
                         style={[styles.icon, styles.iconContainer]}
                     >
                         <Icon
-                            name="arrow-left" // Nome correto do ícone de voltar
+                            name="arrow-left"
                             size={24}
                             color={customTheme.colors.primary}
                         />
@@ -96,18 +145,7 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
                     {title}
                 </Text>
             </View>
-            {rightAction && (
-                <TouchableOpacity
-                    onPress={rightAction}
-                    style={[styles.icon, styles.rightAction]}
-                >
-                    <Icon
-                        name={rightIcon}
-                        size={24}
-                        color={customTheme.colors.primary}
-                    />
-                </TouchableOpacity>
-            )}
+            {renderRightButton()}
         </Surface>
     );
 };
