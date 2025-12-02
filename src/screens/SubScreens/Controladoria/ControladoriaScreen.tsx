@@ -247,7 +247,7 @@ export default function ControladoriaScreen({ navigation }: any) {
 
             {/* Header */}
             <ModernHeader
-                title="Controladoria"
+                title="Gestão de Materiais"
                 iconName="file-document-outline"
                 onBackPress={() => navigation.goBack()}
             />
