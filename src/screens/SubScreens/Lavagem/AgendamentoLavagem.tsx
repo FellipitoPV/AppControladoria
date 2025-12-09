@@ -28,27 +28,7 @@ export default function AgendamentoLavagem({ navigation }: any) {
     } = useBackgroundSync();
 
     const [modalVisible, setModalVisible] = useState(false);
-    const [placaSelecionada, setPlacaSelecionada] = useState('');
-    const [tipoLavagemSelecionado, setTipoLavagemSelecionado] = useState('');
-    const [dataSelecionada, setDataSelecionada] = useState(new Date());
-    const [mostrarDatePicker, setMostrarDatePicker] = useState(false);
-    const [numeroEquipamento, setNumeroEquipamento] = useState('');
-    const [isEquipamento, setIsEquipamento] = useState(false);
     const [mostrarConcluidos, setMostrarConcluidos] = useState(false);
-
-    const veiculoRef = useRef<DropdownRef>(null);
-    const tipoLavagemRef = useRef<DropdownRef>(null);
-
-    // Formatando os dados para o formato do DropDownPicker
-    const placasItems = [...PLACAS_VEICULOS, ...EQUIPAMENTOS].map(item => ({
-        label: item.value,
-        value: item.value
-    }));
-
-    const tiposLavagemItems = TIPOS_LAVAGEM.map(item => ({
-        label: item.label,
-        value: item.value
-    }));
 
     const agendamentosFiltrados = useMemo(() => {
         //console.log('Filtering agendamentos:', agendamentos);
