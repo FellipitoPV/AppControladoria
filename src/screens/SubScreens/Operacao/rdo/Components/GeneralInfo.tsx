@@ -1,13 +1,14 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, TextInput } from 'react-native-paper';
+import { Text, TextInput, ActivityIndicator } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { collection, getDocs } from 'firebase/firestore';
 import { customTheme } from '../../../../../theme/theme';
 import { DropdownRef, DIAS_SEMANA, MATERIAIS, FormDataInterface, SERVICOS } from '../Types/rdoTypes';
 import { formatDate } from '../Utils/formUtils';
-import { clientes } from '../../../../../helpers/Types';
+import { db } from '../../../../../../firebase';
 
 interface GeneralInfoProps {
     formData: FormDataInterface;
@@ -24,9 +25,10 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
     numeroRdo,
     mode
 }) => {
-    // Single state for date
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [clientes, setClientes] = useState<any[]>([]);
+    const [loadingClientes, setLoadingClientes] = useState(true);
 
     // Refs for dropdowns
     const clienteRef = useRef<DropdownRef>(null);
@@ -34,25 +36,45 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
     const diaSemanaRef = useRef<DropdownRef>(null);
     const materialRef = useRef<DropdownRef>(null);
 
+    // Buscar clientes do Firebase
+    useEffect(() => {
+        const buscarClientes = async () => {
+            try {
+                setLoadingClientes(true);
+                const clientesRef = collection(db(), "clientes");
+                const snapshot = await getDocs(clientesRef);
+
+                const listaClientes = snapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data(),
+                }));
+
+                setClientes(listaClientes);
+            } catch (error) {
+                console.error("Erro ao buscar clientes:", error);
+            } finally {
+                setLoadingClientes(false);
+            }
+        };
+
+        buscarClientes();
+    }, []);
+
     // Dropdown data
     const clientesDropdown = clientes.map((cliente) => ({
         label: cliente.razaoSocial,
         value: cliente.cnpjCpf,
         icon: 'domain',
-        // endereco: cliente.,
     }));
 
-    // Consolidated save method
     const saveGeneralInfo = (field: string, value: any) => {
         setFormData(prev => ({
             ...prev,
             [field]: value
         }));
-
-        console.log("Atualizando o:", field, "para o valor:", value)
+        console.log("Atualizando o:", field, "para o valor:", value);
     };
 
-    // Handle date change
     const handleDateChange = (event: any, date?: Date) => {
         setShowDatePicker(false);
         if (date) {
@@ -61,13 +83,11 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
         }
     };
 
-    // Simplified dropdown handlers
     const handleClienteChange = (item: any) => {
         saveGeneralInfo('cliente', item.value);
         saveGeneralInfo('clienteNome', item.label);
     };
 
-    // Updated handleServicoChange method
     const handleServicoChange = (item: { label: string; value?: string; icon?: string }) => {
         saveGeneralInfo('servico', item.label);
     };
@@ -94,7 +114,6 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
             </View>
 
             <View style={styles.inputGroup}>
-                {/* Número do RDO (Não Editável) */}
                 <TextInput
                     mode="outlined"
                     label="Número RDO"
@@ -106,39 +125,30 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                     )} />}
                 />
 
-                {/* Responsável */}
                 <TextInput
                     mode="outlined"
                     label="Responsável"
                     value={formData.responsavel}
                     disabled={!!userInfo}
                     onChangeText={(text) => saveGeneralInfo('responsavel', text)}
-                    style={[
-                        styles.input,
-                        !!userInfo && styles.disabledInput
-                    ]}
+                    style={[styles.input, !!userInfo && styles.disabledInput]}
                     left={<TextInput.Icon icon={() => (
                         <MaterialCommunityIcons name="account-circle" size={24} color={customTheme.colors.primary} />
                     )} />}
                 />
 
-                {/* Função - preenchida automaticamente */}
                 <TextInput
                     mode="outlined"
                     label="Função"
                     value={userInfo?.cargo || ''}
                     disabled={!!userInfo}
                     onChangeText={(text) => saveGeneralInfo('funcao', text)}
-                    style={[
-                        styles.input,
-                        !!userInfo && styles.disabledInput
-                    ]}
+                    style={[styles.input, !!userInfo && styles.disabledInput]}
                     left={<TextInput.Icon icon={() => (
                         <MaterialCommunityIcons name="briefcase" size={24} color={customTheme.colors.primary} />
                     )} />}
                 />
 
-                {/* Data e Dia da Semana */}
                 <View style={styles.rowInputs}>
                     <TouchableOpacity
                         style={styles.dateTimeContainer}
@@ -209,53 +219,58 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                     )}
                 </View>
 
-                {/* Cliente */}
+                {/* Cliente com loading */}
                 <TouchableOpacity
                     style={styles.dropdownContainer}
                     activeOpacity={0.7}
-                    onPress={() => clienteRef.current?.open()}
+                    onPress={() => !loadingClientes && clienteRef.current?.open()}
                 >
-                    <Dropdown
-                        ref={clienteRef}
-                        autoScroll={false}
-                        style={styles.dropdown}
-                        placeholderStyle={styles.placeholderStyle}
-                        selectedTextStyle={styles.selectedTextStyle}
-                        inputSearchStyle={{ color: customTheme.colors.onSurface }}
-                        iconStyle={styles.iconStyle}
-                        data={clientesDropdown}
-                        search
-                        searchPlaceholder="Buscar cliente..."
-                        maxHeight={300}
-                        labelField="label"
-                        valueField="value"
-                        placeholder="Selecione o cliente"
-                        value={formData.cliente}
-                        onChange={handleClienteChange}
-                        renderLeftIcon={() => (
-                            <MaterialCommunityIcons
-                                style={styles.dropdownIcon}
-                                name="domain"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                        )}
-                        renderItem={item => (
-                            <View style={styles.dropdownItem}>
+                    {loadingClientes ? (
+                        <View style={[styles.dropdown, { justifyContent: 'center', alignItems: 'center' }]}>
+                            <ActivityIndicator size="small" color={customTheme.colors.primary} />
+                        </View>
+                    ) : (
+                        <Dropdown
+                            ref={clienteRef}
+                            autoScroll={false}
+                            style={styles.dropdown}
+                            placeholderStyle={styles.placeholderStyle}
+                            selectedTextStyle={styles.selectedTextStyle}
+                            inputSearchStyle={{ color: customTheme.colors.onSurface }}
+                            iconStyle={styles.iconStyle}
+                            data={clientesDropdown}
+                            search
+                            searchPlaceholder="Buscar cliente..."
+                            maxHeight={300}
+                            labelField="label"
+                            valueField="value"
+                            placeholder="Selecione o cliente"
+                            value={formData.cliente}
+                            onChange={handleClienteChange}
+                            renderLeftIcon={() => (
                                 <MaterialCommunityIcons
-                                    name={item.icon}
+                                    style={styles.dropdownIcon}
+                                    name="domain"
                                     size={20}
                                     color={customTheme.colors.primary}
                                 />
-                                <Text style={styles.dropdownLabel}>
-                                    {item.label}
-                                </Text>
-                            </View>
-                        )}
-                    />
+                            )}
+                            renderItem={item => (
+                                <View style={styles.dropdownItem}>
+                                    <MaterialCommunityIcons
+                                        name={item.icon}
+                                        size={20}
+                                        color={customTheme.colors.primary}
+                                    />
+                                    <Text style={styles.dropdownLabel}>
+                                        {item.label}
+                                    </Text>
+                                </View>
+                            )}
+                        />
+                    )}
                 </TouchableOpacity>
 
-                {/* Serviço */}
                 <TouchableOpacity
                     style={styles.dropdownContainer}
                     activeOpacity={0.7}
@@ -271,13 +286,10 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                         data={SERVICOS}
                         maxHeight={300}
                         labelField="label"
-                        valueField="label"  // Change valueField to 'label'
+                        valueField="label"
                         placeholder="Selecione o serviço"
                         value={formData.servico}
-                        onChange={(item) => {
-                            // Ensure the entire item is passed and used consistently
-                            handleServicoChange(item);
-                        }}
+                        onChange={handleServicoChange}
                         renderLeftIcon={() => (
                             <MaterialCommunityIcons
                                 style={styles.dropdownIcon}
@@ -301,7 +313,6 @@ const GeneralInfo: React.FC<GeneralInfoProps> = ({
                     />
                 </TouchableOpacity>
 
-                {/* Material */}
                 <TouchableOpacity
                     style={styles.dropdownContainer}
                     activeOpacity={0.7}
