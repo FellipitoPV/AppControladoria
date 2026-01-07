@@ -40,7 +40,8 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
 
     const styles = StyleSheet.create({
         header: {
-            padding: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -49,30 +50,48 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
             borderBottomColor: customTheme.colors.surfaceVariant,
             borderColor: customTheme.colors.inverseSurface,
             borderBottomWidth: 1,
+            minHeight: 56,
         },
-        headerContent: {
+        leftSection: {
             flexDirection: 'row',
             alignItems: 'center',
             flex: 1,
+            minWidth: 0,
         },
-        headerTitle: {
-            marginLeft: 12,
-            color: customTheme.colors.onSurface,
-            fontWeight: '600',
-        },
-        icon: {
+        iconButton: {
             width: 40,
             height: 40,
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: 20,
         },
+        titleContainer: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginLeft: 8,
+            minWidth: 0,
+        },
         iconContainer: {
+            width: 32,
+            height: 32,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 16,
+            backgroundColor: customTheme.colors.primaryContainer,
             marginRight: 8,
         },
-        rightAction: {
-            marginLeft: 16,
-        }
+        headerTitle: {
+            flex: 1,
+            color: customTheme.colors.onSurface,
+            fontWeight: '600',
+            fontSize: 16,
+        },
+        rightSection: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginLeft: 8,
+        },
     });
 
     const renderRightButton = () => {
@@ -80,7 +99,7 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
             return (
                 <TouchableOpacity
                     onPress={rightButton.onPress}
-                    style={[styles.icon, styles.rightAction]}
+                    style={styles.iconButton}
                     disabled={rightButton.loading}
                 >
                     {rightButton.loading ? (
@@ -103,7 +122,7 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
             return (
                 <TouchableOpacity
                     onPress={rightAction}
-                    style={[styles.icon, styles.rightAction]}
+                    style={styles.iconButton}
                 >
                     <Icon
                         name={rightIcon}
@@ -119,11 +138,11 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
 
     return (
         <Surface style={[styles.header, style]}>
-            <View style={styles.headerContent}>
+            <View style={styles.leftSection}>
                 {showBackButton && (
                     <TouchableOpacity
                         onPress={onBackPress}
-                        style={[styles.icon, styles.iconContainer]}
+                        style={styles.iconButton}
                     >
                         <Icon
                             name="arrow-left"
@@ -132,20 +151,29 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({
                         />
                     </TouchableOpacity>
                 )}
-                {iconName && (
-                    <View style={[styles.icon, { backgroundColor: customTheme.colors.primaryContainer }]}>
-                        <Icon
-                            name={iconName}
-                            size={24}
-                            color={customTheme.colors.primary}
-                        />
-                    </View>
-                )}
-                <Text variant="titleLarge" style={styles.headerTitle}>
-                    {title}
-                </Text>
+                <View style={styles.titleContainer}>
+                    {iconName && (
+                        <View style={styles.iconContainer}>
+                            <Icon
+                                name={iconName}
+                                size={20}
+                                color={customTheme.colors.primary}
+                            />
+                        </View>
+                    )}
+                    <Text 
+                        variant="titleMedium" 
+                        style={styles.headerTitle}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                    >
+                        {title}
+                    </Text>
+                </View>
             </View>
-            {renderRightButton()}
+            <View style={styles.rightSection}>
+                {renderRightButton()}
+            </View>
         </Surface>
     );
 };

@@ -6,6 +6,8 @@ import {
     TouchableOpacity,
     TextInput,
     Alert,
+    Modal,
+    Pressable,
 } from 'react-native';
 import {
     Surface,
@@ -20,9 +22,8 @@ import ModernHeader from '../../../../../assets/components/ModernHeader';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../../../theme/theme';
 import { useUser } from '../../../../../contexts/userContext';
-import { CHECKLIST_DEFINITIONS } from '.././types/ChecklistTypes';
 
-type ConformityStatus = 'C' | 'NC' | '';
+type ConformityStatus = 'C' | 'NC' | 'NA' | '';
 
 interface Question {
     id: string;
@@ -30,69 +31,173 @@ interface Question {
     quantidade?: string;
 }
 
-interface WeekData {
+interface PeriodData {
     items: Record<string, ConformityStatus>;
     observacoes: string;
 }
 
 interface FormData {
-    weeks: Record<number, WeekData>;
+    periods: Record<number, PeriodData>;
+}
+
+interface YearWeek {
+    weekNumber: number;
+    month: number;
+    startDay: number;
+    endDay: number;
+    fullStartDay: number;
+    fullEndDay: number;
+    startDate: Date;
+    endDate: Date;
 }
 
 export default function ChecklistFormScreen({ route, navigation }: any) {
-    const { checklistId, checklistTitle, checklistIcon, location, selectedMonth } = route.params;
+    const { checklistId, checklistTitle, checklistIcon, checklistFrequency, location, selectedMonth } = route.params;
     const { userInfo } = useUser();
     
-    const [selectedWeek, setSelectedWeek] = useState(1);
+    const isWeekly = checklistFrequency === 'Semanal';
+    const year = selectedMonth.getFullYear();
+    
+    const [currentMonth, setCurrentMonth] = useState(selectedMonth.getMonth() + 1);
+    const [selectedPeriod, setSelectedPeriod] = useState(1);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [questions, setQuestions] = useState<Question[]>([]);
+    const [yearWeeks, setYearWeeks] = useState<YearWeek[]>([]);
+    const [showMonthPicker, setShowMonthPicker] = useState(false);
+    
+    const maxPeriods = isWeekly ? 52 : 12;
     
     const [formData, setFormData] = useState<FormData>({
-        weeks: {
-            1: { items: {}, observacoes: '' },
-            2: { items: {}, observacoes: '' },
-            3: { items: {}, observacoes: '' },
-            4: { items: {}, observacoes: '' },
-        }
+        periods: {}
     });
 
+    // Gerar semanas do ano (igual ao web)
+    const getYearWeeks = (year: number): YearWeek[] => {
+        const weeks: YearWeek[] = [];
+        let weekNumber = 1;
+        let currentDate = new Date(year, 0, 1);
+        
+        const firstDayOfWeek = currentDate.getDay();
+        if (firstDayOfWeek !== 0) {
+            currentDate.setDate(currentDate.getDate() - firstDayOfWeek);
+        }
+        
+        while (currentDate.getFullYear() <= year) {
+            const weekStart = new Date(currentDate);
+            const weekEnd = new Date(currentDate);
+            weekEnd.setDate(weekEnd.getDate() + 6);
+            
+            const daysPerMonth: Record<string, number> = {};
+            
+            for (let i = 0; i < 7; i++) {
+                const checkDate = new Date(currentDate);
+                checkDate.setDate(checkDate.getDate() + i);
+                const checkYear = checkDate.getFullYear();
+                const checkMonth = checkDate.getMonth() + 1;
+                const key = `${checkYear}-${checkMonth}`;
+                daysPerMonth[key] = (daysPerMonth[key] || 0) + 1;
+            }
+            
+            let primaryKey = "";
+            let maxDays = 0;
+            
+            Object.entries(daysPerMonth).forEach(([key, days]) => {
+                if (days > maxDays) {
+                    maxDays = days;
+                    primaryKey = key;
+                }
+            });
+            
+            if (primaryKey) {
+                const [yearStr, monthStr] = primaryKey.split('-');
+                const primaryYear = parseInt(yearStr);
+                const primaryMonth = parseInt(monthStr);
+                
+                if (primaryYear === year) {
+                    let startDay = 0;
+                    let endDay = 0;
+                    
+                    for (let i = 0; i < 7; i++) {
+                        const checkDate = new Date(currentDate);
+                        checkDate.setDate(checkDate.getDate() + i);
+                        
+                        if (checkDate.getFullYear() === year && checkDate.getMonth() + 1 === primaryMonth) {
+                            const day = checkDate.getDate();
+                            if (startDay === 0) startDay = day;
+                            endDay = day;
+                        }
+                    }
+                    
+                    const fullStartDay = weekStart.getDate();
+                    const fullEndDay = weekEnd.getDate();
+                    
+                    weeks.push({
+                        weekNumber,
+                        month: primaryMonth,
+                        startDay,
+                        endDay,
+                        fullStartDay,
+                        fullEndDay,
+                        startDate: new Date(weekStart),
+                        endDate: new Date(weekEnd),
+                    });
+                }
+            }
+            
+            weekNumber++;
+            currentDate.setDate(currentDate.getDate() + 7);
+            
+            if (currentDate.getFullYear() > year && currentDate.getMonth() > 0) {
+                break;
+            }
+        }
+        
+        return weeks;
+    };
+
     useEffect(() => {
+        if (isWeekly) {
+            const weeks = getYearWeeks(year);
+            setYearWeeks(weeks);
+        }
         loadQuestions();
         loadSavedData();
     }, []);
 
     const loadQuestions = async () => {
-        const checklistDef = CHECKLIST_DEFINITIONS[checklistId];
-        if (checklistDef && checklistDef.questions) {
-            setQuestions(checklistDef.questions);
-        }
-        setLoading(false);
+        const questionsRef = ref(dbRealTime(), `checklists-config/${checklistId}/questions`);
+        
+        onValue(questionsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                setQuestions(snapshot.val());
+            }
+            setLoading(false);
+        });
     };
 
     const loadSavedData = () => {
-        const year = selectedMonth.getFullYear();
-        const month = String(selectedMonth.getMonth() + 1).padStart(2, '0');
+        const yearStr = year.toString();
         
         const dataRef = ref(
             dbRealTime(), 
-            `checklists/${year}/${month}/${checklistId}/${location.id}`
+            `checklists/${yearStr}/${checklistId}/${location.id}`
         );
         
         onValue(dataRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.val();
-                if (data.weeklyFormData) {
-                    const weeks: Record<number, WeekData> = {};
+                if (data.monthlyFormData) {
+                    const periods: Record<number, PeriodData> = {};
                     
-                    for (let week = 1; week <= 4; week++) {
-                        weeks[week] = data.weeklyFormData[week] || {
-                            items: {},
-                            observacoes: ''
+                    Object.entries(data.monthlyFormData).forEach(([period, periodData]: [string, any]) => {
+                        periods[parseInt(period)] = {
+                            items: periodData.items || {},
+                            observacoes: periodData.observacoes || ''
                         };
-                    }
+                    });
                     
-                    setFormData({ weeks });
+                    setFormData({ periods });
                 }
             }
         });
@@ -104,83 +209,117 @@ export default function ChecklistFormScreen({ route, navigation }: any) {
                 return '#4CAF50';
             case 'NC':
                 return '#F44336';
-            default:
+            case 'NA':
                 return '#9E9E9E';
+            default:
+                return '#E0E0E0';
         }
     };
 
-    const calculateWeekStatus = (weekData: WeekData): 'Pendente' | 'Em Andamento' | 'Concluído' | 'Concluído com NC' => {
-        const items = Object.values(weekData.items);
+    const calculatePeriodStatus = (periodData: PeriodData): 'Pendente' | 'Em Andamento' | 'Concluído' | 'Concluído com NC' => {
+        const items = Object.values(periodData.items);
         if (items.length === 0) return 'Pendente';
         
-        const answered = items.filter(i => i !== '').length;
-        const total = questions.length;
+        const totalItems = questions.length;
+        const completedItems = items.filter(i => i === 'C' || i === 'NC' || i === 'NA').length;
         const hasNC = items.includes('NC');
+        const hasC = items.includes('C');
+        const emptyItems = items.filter(i => i === '').length;
         
-        if (answered === 0) return 'Pendente';
-        if (answered < total) return 'Em Andamento';
-        if (hasNC) return 'Concluído com NC';
-        return 'Concluído';
+        if (completedItems === totalItems) {
+            if (hasNC) return 'Concluído com NC';
+            if (hasC) return 'Concluído';
+        }
+        
+        if (emptyItems < totalItems && emptyItems > 0) {
+            return 'Em Andamento';
+        }
+        
+        return 'Pendente';
     };
 
     const handleItemChange = (questionId: string, value: ConformityStatus) => {
-        setFormData(prev => ({
-            weeks: {
-                ...prev.weeks,
-                [selectedWeek]: {
-                    ...prev.weeks[selectedWeek],
-                    items: {
-                        ...prev.weeks[selectedWeek].items,
-                        [questionId]: value
+        setFormData(prev => {
+            const currentPeriod = prev.periods[selectedPeriod] || { items: {}, observacoes: '' };
+            
+            return {
+                periods: {
+                    ...prev.periods,
+                    [selectedPeriod]: {
+                        ...currentPeriod,
+                        items: {
+                            ...currentPeriod.items,
+                            [questionId]: value
+                        }
                     }
                 }
-            }
-        }));
+            };
+        });
     };
 
     const handleObservacoesChange = (text: string) => {
-        setFormData(prev => ({
-            weeks: {
-                ...prev.weeks,
-                [selectedWeek]: {
-                    ...prev.weeks[selectedWeek],
-                    observacoes: text
+        setFormData(prev => {
+            const currentPeriod = prev.periods[selectedPeriod] || { items: {}, observacoes: '' };
+            
+            return {
+                periods: {
+                    ...prev.periods,
+                    [selectedPeriod]: {
+                        ...currentPeriod,
+                        observacoes: text
+                    }
                 }
-            }
-        }));
+            };
+        });
     };
 
     const handleSave = async () => {
         setSaving(true);
         
         try {
-            const year = selectedMonth.getFullYear();
-            const month = String(selectedMonth.getMonth() + 1).padStart(2, '0');
+            const yearStr = year.toString();
             
-            const weeklyStatus: Record<number, string> = {};
-            for (let week = 1; week <= 4; week++) {
-                weeklyStatus[week] = calculateWeekStatus(formData.weeks[week]);
+            const allPeriodsData: Record<number, any> = {};
+            const periodStatus: Record<number, string> = {};
+            
+            for (let period = 1; period <= maxPeriods; period++) {
+                const periodData = formData.periods[period] || {
+                    items: questions.reduce((acc, q) => ({ ...acc, [q.id]: '' }), {}),
+                    observacoes: ''
+                };
+                
+                const status = calculatePeriodStatus(periodData);
+                
+                allPeriodsData[period] = {
+                    items: periodData.items,
+                    observacoes: periodData.observacoes,
+                    status: status,
+                    responsavel: userInfo?.user || 'Desconhecido'
+                };
+                
+                periodStatus[period] = status;
             }
             
-            const overallStatus = Object.values(weeklyStatus).every(s => s === 'Pendente')
-                ? 'Pendente'
-                : Object.values(weeklyStatus).every(s => s === 'Concluído' || s === 'Concluído com NC')
-                    ? Object.values(weeklyStatus).some(s => s === 'Concluído com NC')
-                        ? 'Concluído com NC'
-                        : 'Concluído'
-                    : 'Em Andamento';
+            const statuses = Object.values(periodStatus);
+            const overallStatus = statuses.every(s => s === 'Concluído')
+                ? 'Concluído'
+                : statuses.some(s => s === 'Concluído com NC')
+                    ? 'Concluído com NC'
+                    : statuses.some(s => s !== 'Pendente')
+                        ? 'Em Andamento'
+                        : 'Pendente';
             
             const saveData = {
                 status: overallStatus,
                 lastUpdate: new Date().toISOString(),
-                weeklyStatus,
-                weeklyFormData: formData.weeks,
+                monthlyStatus: periodStatus,
+                monthlyFormData: allPeriodsData,
                 responsavel: userInfo?.user || 'Desconhecido'
             };
             
             const dataRef = ref(
                 dbRealTime(), 
-                `checklists/${year}/${month}/${checklistId}/${location.id}`
+                `checklists/${yearStr}/${checklistId}/${location.id}`
             );
             
             await set(dataRef, saveData);
@@ -195,41 +334,145 @@ export default function ChecklistFormScreen({ route, navigation }: any) {
         }
     };
 
-    const WeekSelector = () => (
-        <View style={styles.weekSelector}>
-            {[1, 2, 3, 4].map(week => {
-                const isSelected = selectedWeek === week;
-                const weekStatus = calculateWeekStatus(formData.weeks[week]);
-                const statusColor = getStatusColor(
-                    weekStatus === 'Concluído' ? 'C' : 
-                    weekStatus === 'Concluído com NC' ? 'NC' : ''
-                );
-                
-                return (
+    const PeriodSelector = () => {
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        
+        if (isWeekly) {
+            const weeksInMonth = yearWeeks.filter(w => w.month === currentMonth);
+            
+            const formatDate = (date: Date) => {
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                return `${day}/${month}`;
+            };
+            
+            return (
+                <View style={styles.periodSelectorContainer}>
+                    <View style={styles.monthNav}>
+                        <TouchableOpacity
+                            style={[styles.monthNavButton, currentMonth === 1 && styles.monthNavButtonDisabled]}
+                            onPress={() => setCurrentMonth((prev: number) => Math.max(1, prev - 1))}
+                            disabled={currentMonth === 1}
+                        >
+                            <MaterialCommunityIcons name="chevron-left" size={24} color={currentMonth === 1 ? '#CCC' : customTheme.colors.primary} />
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                            style={styles.monthNameButton}
+                            onPress={() => setShowMonthPicker(true)}
+                        >
+                            <Text style={styles.monthNavText}>{monthNames[currentMonth - 1]}</Text>
+                            <MaterialCommunityIcons name="chevron-down" size={20} color={customTheme.colors.primary} />
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity
+                            style={[styles.monthNavButton, currentMonth === 12 && styles.monthNavButtonDisabled]}
+                            onPress={() => setCurrentMonth((prev: number) => Math.min(12, prev + 1))}
+                            disabled={currentMonth === 12}
+                        >
+                            <MaterialCommunityIcons name="chevron-right" size={24} color={currentMonth === 12 ? '#CCC' : customTheme.colors.primary} />
+                        </TouchableOpacity>
+                    </View>
+                    
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.weekScroll}>
+                        <View style={styles.weekButtons}>
+                            {weeksInMonth.map((week, index) => {
+                                const isSelected = selectedPeriod === week.weekNumber;
+                                const periodData = formData.periods[week.weekNumber] || { items: {}, observacoes: '' };
+                                const weekStatus = calculatePeriodStatus(periodData);
+                                const statusColor = getStatusColor(
+                                    weekStatus === 'Concluído' ? 'C' : 
+                                    weekStatus === 'Concluído com NC' ? 'NC' : ''
+                                );
+                                
+                                const startDateStr = formatDate(week.startDate);
+                                const endDateStr = formatDate(week.endDate);
+                                
+                                return (
+                                    <TouchableOpacity
+                                        key={week.weekNumber}
+                                        style={[
+                                            styles.periodButton,
+                                            styles.weekButton,
+                                            isSelected && styles.periodButtonSelected
+                                        ]}
+                                        onPress={() => setSelectedPeriod(week.weekNumber)}
+                                    >
+                                        <View style={[styles.periodDot, { backgroundColor: statusColor }]} />
+                                        <Text style={[styles.periodButtonText, styles.weekButtonText, isSelected && styles.periodButtonTextSelected]}>
+                                            S{index + 1}
+                                        </Text>
+                                        <Text style={[styles.periodDateText, styles.weekDateText, isSelected && styles.periodDateTextSelected]}>
+                                            {startDateStr}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </ScrollView>
+                </View>
+            );
+        }
+        
+        // Mensal
+        return (
+            <View style={styles.periodSelectorContainer}>
+                <View style={styles.monthNav}>
                     <TouchableOpacity
-                        key={week}
-                        style={[
-                            styles.weekButton,
-                            isSelected && styles.weekButtonSelected,
-                            { borderColor: isSelected ? customTheme.colors.primary : '#E0E0E0' }
-                        ]}
-                        onPress={() => setSelectedWeek(week)}
+                        style={[styles.monthNavButton, selectedPeriod === 1 && styles.monthNavButtonDisabled]}
+                        onPress={() => setSelectedPeriod((prev: number) => Math.max(1, prev - 1))}
+                        disabled={selectedPeriod === 1}
                     >
-                        <View style={[styles.weekDot, { backgroundColor: statusColor }]} />
-                        <Text style={[
-                            styles.weekButtonText,
-                            isSelected && styles.weekButtonTextSelected
-                        ]}>
-                            Semana {week}
-                        </Text>
+                        <MaterialCommunityIcons name="chevron-left" size={24} color={selectedPeriod === 1 ? '#CCC' : customTheme.colors.primary} />
                     </TouchableOpacity>
-                );
-            })}
-        </View>
-    );
+                    
+                    <TouchableOpacity 
+                        style={styles.monthNameButton}
+                        onPress={() => setShowMonthPicker(true)}
+                    >
+                        <Text style={styles.monthNavText}>{monthNames[selectedPeriod - 1]}</Text>
+                        <MaterialCommunityIcons name="chevron-down" size={20} color={customTheme.colors.primary} />
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                        style={[styles.monthNavButton, selectedPeriod === 12 && styles.monthNavButtonDisabled]}
+                        onPress={() => setSelectedPeriod((prev: number) => Math.min(12, prev + 1))}
+                        disabled={selectedPeriod === 12}
+                    >
+                        <MaterialCommunityIcons name="chevron-right" size={24} color={selectedPeriod === 12 ? '#CCC' : customTheme.colors.primary} />
+                    </TouchableOpacity>
+                </View>
+                
+                <View style={styles.monthStatusIndicator}>
+                    {monthNames.map((month, index) => {
+                        const period = index + 1;
+                        const periodData = formData.periods[period] || { items: {}, observacoes: '' };
+                        const monthStatus = calculatePeriodStatus(periodData);
+                        const statusColor = getStatusColor(
+                            monthStatus === 'Concluído' ? 'C' : 
+                            monthStatus === 'Concluído com NC' ? 'NC' : ''
+                        );
+                        
+                        return (
+                            <View key={period} style={styles.monthIndicatorItem}>
+                                <View style={[styles.monthIndicatorDot, { backgroundColor: statusColor }]} />
+                                <Text style={[
+                                    styles.monthIndicatorText,
+                                    selectedPeriod === period && styles.monthIndicatorTextSelected
+                                ]}>
+                                    {month}
+                                </Text>
+                            </View>
+                        );
+                    })}
+                </View>
+            </View>
+        );
+    };
 
     const QuestionCard = ({ question }: { question: Question }) => {
-        const currentValue = formData.weeks[selectedWeek].items[question.id] || '';
+        const currentPeriod = formData.periods[selectedPeriod] || { items: {}, observacoes: '' };
+        const currentValue = currentPeriod.items[question.id] || '';
         const statusColor = getStatusColor(currentValue);
 
         return (
@@ -237,7 +480,12 @@ export default function ChecklistFormScreen({ route, navigation }: any) {
                 <View style={styles.questionContent}>
                     <View style={styles.questionHeader}>
                         <MaterialCommunityIcons
-                            name={currentValue === 'C' ? 'check-circle' : currentValue === 'NC' ? 'close-circle' : 'circle-outline'}
+                            name={
+                                currentValue === 'C' ? 'check-circle' : 
+                                currentValue === 'NC' ? 'close-circle' : 
+                                currentValue === 'NA' ? 'minus-circle' : 
+                                'circle-outline'
+                            }
                             size={20}
                             color={statusColor}
                         />
@@ -286,6 +534,24 @@ export default function ChecklistFormScreen({ route, navigation }: any) {
                                 Não Conforme
                             </Text>
                         </TouchableOpacity>
+                        
+                        <TouchableOpacity
+                            style={styles.radioOption}
+                            onPress={() => handleItemChange(question.id, 'NA')}
+                        >
+                            <RadioButton
+                                value="NA"
+                                status={currentValue === 'NA' ? 'checked' : 'unchecked'}
+                                onPress={() => handleItemChange(question.id, 'NA')}
+                                color="#9E9E9E"
+                            />
+                            <Text style={[
+                                styles.radioLabel,
+                                currentValue === 'NA' && { color: '#9E9E9E', fontWeight: '600' }
+                            ]}>
+                                N/A
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Card>
@@ -297,7 +563,7 @@ export default function ChecklistFormScreen({ route, navigation }: any) {
             <Surface style={styles.container}>
                 <ModernHeader
                     title={checklistTitle}
-                    iconName={checklistIcon}
+                    iconName="clipboard-check"
                     onBackPress={() => navigation.goBack()}
                 />
                 <View style={styles.loadingContainer}>
@@ -307,13 +573,66 @@ export default function ChecklistFormScreen({ route, navigation }: any) {
         );
     }
 
-    const hasNonConforming = Object.values(formData.weeks[selectedWeek].items).includes('NC');
+    const currentPeriod = formData.periods[selectedPeriod] || { items: {}, observacoes: '' };
+    const hasNonConforming = Object.values(currentPeriod.items).includes('NC');
+
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
     return (
         <Surface style={styles.container}>
+            <Modal
+                visible={showMonthPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowMonthPicker(false)}
+            >
+                <Pressable 
+                    style={styles.modalOverlay}
+                    onPress={() => setShowMonthPicker(false)}
+                >
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Selecione o Mês</Text>
+                        <ScrollView style={styles.monthList}>
+                            {monthNames.map((month, index) => {
+                                const monthNumber = index + 1;
+                                const periodData = formData.periods[monthNumber] || { items: {}, observacoes: '' };
+                                const monthStatus = calculatePeriodStatus(periodData);
+                                const statusColor = getStatusColor(
+                                    monthStatus === 'Concluído' ? 'C' : 
+                                    monthStatus === 'Concluído com NC' ? 'NC' : ''
+                                );
+                                
+                                return (
+                                    <TouchableOpacity
+                                        key={monthNumber}
+                                        style={styles.monthPickerItem}
+                                        onPress={() => {
+                                            if (isWeekly) {
+                                                setCurrentMonth(monthNumber);
+                                            } else {
+                                                setSelectedPeriod(monthNumber);
+                                            }
+                                            setShowMonthPicker(false);
+                                        }}
+                                    >
+                                        <View style={[styles.monthPickerDot, { backgroundColor: statusColor }]} />
+                                        <Text style={styles.monthPickerText}>{month}</Text>
+                                        <MaterialCommunityIcons 
+                                            name="chevron-right" 
+                                            size={20} 
+                                            color={customTheme.colors.onSurfaceVariant} 
+                                        />
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                </Pressable>
+            </Modal>
+
             <ModernHeader
                 title={checklistTitle}
-                iconName={checklistIcon}
+                iconName="clipboard-check"
                 onBackPress={() => navigation.goBack()}
                 rightButton={{
                     icon: 'content-save',
@@ -331,7 +650,7 @@ export default function ChecklistFormScreen({ route, navigation }: any) {
                 <Text style={styles.locationText}>{location.name}</Text>
             </View>
 
-            <WeekSelector />
+            <PeriodSelector />
 
             <ScrollView
                 style={styles.content}
@@ -351,7 +670,7 @@ export default function ChecklistFormScreen({ route, navigation }: any) {
                         multiline
                         numberOfLines={4}
                         placeholder="Adicione observações relevantes..."
-                        value={formData.weeks[selectedWeek].observacoes}
+                        value={currentPeriod.observacoes}
                         onChangeText={handleObservacoesChange}
                         textAlignVertical="top"
                     />
@@ -401,42 +720,170 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: customTheme.colors.onPrimaryContainer,
+        flex: 1,
     },
-    weekSelector: {
-        flexDirection: 'row',
-        padding: 12,
-        gap: 8,
+    periodSelectorContainer: {
         backgroundColor: customTheme.colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: customTheme.colors.outline,
+        paddingVertical: 12,
     },
-    weekButton: {
-        flex: 1,
+    monthNav: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        marginBottom: 12,
+    },
+    monthNavButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
         justifyContent: 'center',
-        gap: 6,
-        padding: 10,
+        backgroundColor: customTheme.colors.surfaceVariant,
+    },
+    monthNavButtonDisabled: {
+        opacity: 0.3,
+    },
+    monthNameButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        backgroundColor: customTheme.colors.surfaceVariant,
+    },
+    monthNavText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+    },
+    weekScroll: {
+        paddingHorizontal: 12,
+    },
+    weekButtons: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    monthButtons: {
+        flexDirection: 'row',
+        gap: 8,
+        paddingHorizontal: 12,
+    },
+    periodButton: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
         borderRadius: 8,
         borderWidth: 2,
+        borderColor: '#E0E0E0',
         backgroundColor: '#FFF',
+        alignItems: 'center',
+        gap: 4,
+        minWidth: 100,
     },
-    weekButtonSelected: {
+    weekButton: {
+        minWidth: 60,
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+    },
+    periodButtonSelected: {
         backgroundColor: customTheme.colors.primaryContainer,
+        borderColor: customTheme.colors.primary,
     },
-    weekDot: {
+    periodDot: {
         width: 8,
         height: 8,
         borderRadius: 4,
     },
-    weekButtonText: {
+    periodButtonText: {
         fontSize: 12,
         fontWeight: '500',
         color: customTheme.colors.onSurface,
     },
-    weekButtonTextSelected: {
+    weekButtonText: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    periodButtonTextSelected: {
         fontWeight: '600',
         color: customTheme.colors.primary,
+    },
+    periodDateText: {
+        fontSize: 10,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    weekDateText: {
+        fontSize: 9,
+    },
+    periodDateTextSelected: {
+        color: customTheme.colors.primary,
+    },
+    monthStatusIndicator: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        paddingTop: 8,
+    },
+    monthIndicatorItem: {
+        alignItems: 'center',
+        gap: 4,
+    },
+    monthIndicatorDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    monthIndicatorText: {
+        fontSize: 10,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    monthIndicatorTextSelected: {
+        fontWeight: '600',
+        color: customTheme.colors.primary,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        width: '80%',
+        maxHeight: '70%',
+        elevation: 5,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: customTheme.colors.outline,
+    },
+    monthList: {
+        maxHeight: 400,
+    },
+    monthPickerItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+    },
+    monthPickerDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    monthPickerText: {
+        flex: 1,
+        fontSize: 16,
+        color: customTheme.colors.onSurface,
     },
     content: {
         flex: 1,
@@ -460,7 +907,7 @@ const styles = StyleSheet.create({
     },
     questionHeader: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: 8,
         marginBottom: 8,
     },
@@ -469,6 +916,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500',
         color: customTheme.colors.onSurface,
+        lineHeight: 20,
     },
     quantidadeText: {
         fontSize: 12,
@@ -477,7 +925,8 @@ const styles = StyleSheet.create({
     },
     radioGroup: {
         flexDirection: 'row',
-        gap: 16,
+        flexWrap: 'wrap',
+        gap: 12,
     },
     radioOption: {
         flexDirection: 'row',

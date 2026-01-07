@@ -17,7 +17,6 @@ import ModernHeader from '../../../../assets/components/ModernHeader';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../../theme/theme';
 import { useUser } from '../../../../contexts/userContext';
-import { CHECKLIST_DEFINITIONS } from './types/ChecklistTypes';
 
 type ChecklistStatus = 'Pendente' | 'Em Andamento' | 'Concluído' | 'Concluído com NC';
 
@@ -26,7 +25,7 @@ interface ChecklistLocation {
     name: string;
     status: ChecklistStatus;
     lastUpdate?: string;
-    weeklyStatus?: Record<number, ChecklistStatus>;
+    monthlyStatus?: Record<number, ChecklistStatus>;
 }
 
 interface ChecklistDefinition {
@@ -34,17 +33,34 @@ interface ChecklistDefinition {
     title: string;
     description: string;
     icon: string;
+    category: string;
+    frequency: string;
+    questions: Array<{
+        id: string;
+        label: string;
+        quantidade?: string;
+    }>;
     locations: ChecklistLocation[];
 }
 
 interface SavedChecklistData {
-    [dateKey: string]: {
+    [year: string]: {
         [checklistId: string]: {
             [locationId: string]: {
-                status: ChecklistStatus;
+                monthlyFormData: {
+                    [periodNumber: number]: {
+                        items: Record<string, string>;
+                        observacoes: string;
+                        status: ChecklistStatus;
+                        responsavel?: string;
+                    };
+                };
                 lastUpdate: string;
-                weeklyStatus: Record<number, ChecklistStatus>;
+                status: ChecklistStatus;
                 responsavel?: string;
+                monthlyStatus: {
+                    [periodNumber: number]: ChecklistStatus;
+                };
             };
         };
     };
@@ -56,12 +72,164 @@ export default function CheckListScreen({ navigation }: any) {
     const [selectedMonth, setSelectedMonth] = useState(new Date());
     const [savedData, setSavedData] = useState<SavedChecklistData>({});
     const [checklists, setChecklists] = useState<ChecklistDefinition[]>([]);
+    const [loadingDefinitions, setLoadingDefinitions] = useState(true);
 
-    const getDateKey = (date: Date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        return `${year}-${month}`;
+    // Mapear ícones Lucide para MaterialCommunityIcons
+    const getIconName = (lucideIcon: string): string => {
+        const iconMap: Record<string, string> = {
+            'Droplet': 'water',
+            'Droplets': 'water-outline',
+            'Recycle': 'recycle',
+            'AlertTriangle': 'alert-triangle',
+            'ShieldAlert': 'shield-alert',
+            'Shield': 'shield',
+            'Package': 'package-variant',
+            'Boxes': 'package-variant-closed',
+            'Archive': 'archive',
+            'Warehouse': 'warehouse',
+            'ClipboardCheck': 'clipboard-check',
+            'ClipboardList': 'clipboard-text',
+            'Container': 'package',
+            'Lock': 'lock',
+            'Leaf': 'leaf',
+        };
+        
+        return iconMap[lucideIcon] || 'clipboard-check';
     };
+
+    // Buscar definições dos checklists do Firebase
+    useEffect(() => {
+        const definitionsRef = ref(dbRealTime(), 'checklists-config');
+
+        const unsubscribe = onValue(definitionsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                
+                // Filtrar apenas checklists "QSMS - Meio Ambiente"
+                const filteredChecklists = Object.values(data)
+                    .filter((checklist: any) => checklist.category === 'QSMS - Meio Ambiente')
+                    .map((checklist: any) => checklist as ChecklistDefinition);
+                
+                setChecklists(filteredChecklists);
+                console.log('Checklists Meio Ambiente carregados:', filteredChecklists);
+            } else {
+                console.log('Nenhum checklist encontrado');
+                setChecklists([]);
+            }
+            setLoadingDefinitions(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Função para converter semanas em meses (para checklists semanais)
+    const getMonthFromWeek = (weekNumber: number): number => {
+        return Math.ceil(weekNumber / 4);
+    };
+
+    // Função para converter status semanal em mensal
+    const getMonthlyStatusFromWeekly = (
+        weeklyStatus: Record<number, ChecklistStatus>
+    ): Record<number, ChecklistStatus> => {
+        const monthlyStatus: Record<number, ChecklistStatus> = {};
+        const weeksByMonth: Record<number, ChecklistStatus[]> = {};
+        
+        Object.entries(weeklyStatus).forEach(([week, status]) => {
+            const weekNum = parseInt(week);
+            const month = getMonthFromWeek(weekNum);
+            
+            if (month >= 1 && month <= 12) {
+                if (!weeksByMonth[month]) {
+                    weeksByMonth[month] = [];
+                }
+                weeksByMonth[month].push(status);
+            }
+        });
+        
+        Object.entries(weeksByMonth).forEach(([month, statuses]) => {
+            const monthNum = parseInt(month);
+            
+            if (statuses.every(s => s === 'Concluído')) {
+                monthlyStatus[monthNum] = 'Concluído';
+            } else if (statuses.some(s => s === 'Concluído com NC')) {
+                monthlyStatus[monthNum] = 'Concluído com NC';
+            } else if (statuses.some(s => s !== 'Pendente')) {
+                monthlyStatus[monthNum] = 'Em Andamento';
+            } else {
+                monthlyStatus[monthNum] = 'Pendente';
+            }
+        });
+        
+        return monthlyStatus;
+    };
+
+    const updateChecklistsWithData = () => {
+        const year = selectedMonth.getFullYear().toString();
+        
+        const updatedChecklists = checklists.map(checklist => ({
+            ...checklist,
+            locations: checklist.locations.map(location => {
+                const savedDataForLocation = savedData[year]?.[checklist.id]?.[location.id];
+                
+                if (savedDataForLocation) {
+                    // Pegar status mensal (convertendo de semanal se necessário)
+                    let displayMonthlyStatus = savedDataForLocation.monthlyStatus || {};
+                    
+                    if (checklist.frequency === 'Semanal' && savedDataForLocation.monthlyStatus) {
+                        displayMonthlyStatus = getMonthlyStatusFromWeekly(
+                            savedDataForLocation.monthlyStatus
+                        );
+                    }
+                    
+                    return {
+                        ...location,
+                        status: savedDataForLocation.status,
+                        lastUpdate: savedDataForLocation.lastUpdate,
+                        monthlyStatus: displayMonthlyStatus,
+                    };
+                }
+                
+                return {
+                    ...location,
+                    status: 'Pendente' as ChecklistStatus,
+                    lastUpdate: '',
+                    monthlyStatus: {},
+                };
+            }),
+        }));
+
+        setChecklists(updatedChecklists);
+    };
+
+    // Buscar dados salvos dos checklists
+    useEffect(() => {
+        const year = selectedMonth.getFullYear().toString();
+        const checklistsRef = ref(dbRealTime(), `checklists/${year}`);
+        
+        const unsubscribe = onValue(checklistsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                setSavedData(prev => ({
+                    ...prev,
+                    [year]: data,
+                }));
+            } else {
+                setSavedData(prev => ({
+                    ...prev,
+                    [year]: {},
+                }));
+            }
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [selectedMonth]);
+
+    useEffect(() => {
+        if (!loadingDefinitions) {
+            updateChecklistsWithData();
+        }
+    }, [selectedMonth, savedData, loadingDefinitions]);
 
     const getStatusColor = (status: ChecklistStatus) => {
         switch (status) {
@@ -76,63 +244,6 @@ export default function CheckListScreen({ navigation }: any) {
                 return '#9E9E9E';
         }
     };
-
-    const updateChecklistsWithData = () => {
-        const dateKey = getDateKey(selectedMonth);
-        const updatedChecklists = Object.values(CHECKLIST_DEFINITIONS).map(checklist => ({
-            ...checklist,
-            locations: checklist.locations.map(location => {
-                const savedDataForLocation = savedData[dateKey]?.[checklist.id]?.[location.id];
-                
-                if (savedDataForLocation) {
-                    return {
-                        ...location,
-                        status: savedDataForLocation.status,
-                        lastUpdate: savedDataForLocation.lastUpdate,
-                        weeklyStatus: savedDataForLocation.weeklyStatus || {},
-                    };
-                }
-                
-                return {
-                    ...location,
-                    status: 'Pendente' as ChecklistStatus,
-                    lastUpdate: '',
-                    weeklyStatus: {},
-                };
-            }),
-        }));
-
-        setChecklists(updatedChecklists);
-    };
-
-    useEffect(() => {
-        const year = selectedMonth.getFullYear();
-        const month = String(selectedMonth.getMonth() + 1).padStart(2, '0');
-        
-        const checklistsRef = ref(dbRealTime(), `checklists/${year}/${month}`);
-        
-        const unsubscribe = onValue(checklistsRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                setSavedData(prev => ({
-                    ...prev,
-                    [`${year}-${month}`]: data,
-                }));
-            } else {
-                setSavedData(prev => ({
-                    ...prev,
-                    [`${year}-${month}`]: {},
-                }));
-            }
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [selectedMonth]);
-
-    useEffect(() => {
-        updateChecklistsWithData();
-    }, [selectedMonth, savedData]);
 
     const MonthNavigator = () => {
         const months = [
@@ -193,19 +304,22 @@ export default function CheckListScreen({ navigation }: any) {
         );
     };
 
-    const WeekIndicators = ({ weeklyStatus }: { weeklyStatus?: Record<number, ChecklistStatus> }) => {
+    const MonthIndicators = ({ monthlyStatus }: { monthlyStatus?: Record<number, ChecklistStatus> }) => {
+        const monthsShort = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+        
         return (
-            <View style={styles.weekIndicators}>
-                {[1, 2, 3, 4].map(week => {
-                    const status = weeklyStatus?.[week] || 'Pendente';
+            <View style={styles.monthIndicators}>
+                {monthsShort.map((monthLetter, index) => {
+                    const month = index + 1;
+                    const status = monthlyStatus?.[month] || 'Pendente';
                     const color = getStatusColor(status);
                     
                     return (
                         <View
-                            key={week}
-                            style={[styles.weekBadge, { backgroundColor: color }]}
+                            key={month}
+                            style={[styles.monthBadge, { backgroundColor: color }]}
                         >
-                            <Text style={styles.weekBadgeText}>{week}</Text>
+                            <Text style={styles.monthBadgeText}>{monthLetter}</Text>
                         </View>
                     );
                 })}
@@ -217,12 +331,14 @@ export default function CheckListScreen({ navigation }: any) {
         location, 
         checklistId,
         checklistTitle,
-        checklistIcon
+        checklistIcon,
+        checklistFrequency
     }: { 
         location: ChecklistLocation; 
         checklistId: string;
         checklistTitle: string;
         checklistIcon: string;
+        checklistFrequency: string;
     }) => {
         const statusColor = getStatusColor(location.status);
 
@@ -235,31 +351,30 @@ export default function CheckListScreen({ navigation }: any) {
                         checklistId,
                         checklistTitle,
                         checklistIcon,
+                        checklistFrequency,
                         location,
                         selectedMonth
                     });
                 }}
             >
-                <View style={styles.locationContent}>
-                    <View style={styles.locationLeft}>
-                        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-                        <Text style={styles.locationName} numberOfLines={1}>
-                            {location.name}
-                        </Text>
-                    </View>
-                    
-                    <WeekIndicators weeklyStatus={location.weeklyStatus} />
+                <View style={styles.locationHeader}>
+                    <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                    <Text style={styles.locationName} numberOfLines={2}>
+                        {location.name}
+                    </Text>
                 </View>
+                
+                <MonthIndicators monthlyStatus={location.monthlyStatus} />
             </TouchableOpacity>
         );
     };
 
-    if (loading) {
+    if (loading || loadingDefinitions) {
         return (
             <Surface style={styles.container}>
                 <ModernHeader
-                    title="Check-List"
-                    iconName="clipboard-check"
+                    title="Checklist Meio Ambiente"
+                    iconName="leaf"
                     onBackPress={() => navigation.goBack()}
                 />
                 <View style={styles.loadingContainer}>
@@ -272,8 +387,8 @@ export default function CheckListScreen({ navigation }: any) {
     return (
         <Surface style={styles.container}>
             <ModernHeader
-                title="Check-List"
-                iconName="clipboard-check"
+                title="Checklist Meio Ambiente"
+                iconName="leaf"
                 onBackPress={() => navigation.goBack()}
             />
 
@@ -283,49 +398,64 @@ export default function CheckListScreen({ navigation }: any) {
                 style={styles.content}
                 showsVerticalScrollIndicator={false}
             >
-                {checklists.map(checklist => {
-                    const completedCount = checklist.locations.filter(
-                        loc => loc.status === 'Concluído' || loc.status === 'Concluído com NC'
-                    ).length;
-                    const totalCount = checklist.locations.length;
+                {checklists.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                        <MaterialCommunityIcons
+                            name="clipboard-alert-outline"
+                            size={64}
+                            color={customTheme.colors.outline}
+                        />
+                        <Text style={styles.emptyText}>
+                            Nenhum checklist encontrado
+                        </Text>
+                    </View>
+                ) : (
+                    checklists.map(checklist => {
+                        const completedCount = checklist.locations.filter(
+                            loc => loc.status === 'Concluído' || loc.status === 'Concluído com NC'
+                        ).length;
+                        const totalCount = checklist.locations.length;
 
-                    return (
-                        <Card key={checklist.id} style={styles.checklistCard}>
-                            <Card.Content style={styles.cardContent}>
-                                <View style={styles.checklistHeader}>
-                                    <View style={styles.checklistTitleRow}>
-                                        <MaterialCommunityIcons
-                                            name={checklist.icon}
-                                            size={20}
-                                            color={customTheme.colors.primary}
-                                        />
-                                        <Text style={styles.checklistTitle} numberOfLines={1}>
-                                            {checklist.title}
-                                        </Text>
+                        return (
+                            <Card key={checklist.id} style={styles.checklistCard}>
+                                <Card.Content style={styles.cardContent}>
+                                    <View style={styles.checklistHeader}>
+                                        <View style={styles.checklistTitleRow}>
+                                            <MaterialCommunityIcons
+                                                name={getIconName(checklist.icon)}
+                                                size={20}
+                                                color={customTheme.colors.primary}
+                                                style={styles.checklistIcon}
+                                            />
+                                            <Text style={styles.checklistTitle} numberOfLines={2}>
+                                                {checklist.title}
+                                            </Text>
+                                        </View>
+                                        
+                                        <View style={styles.progressBadge}>
+                                            <Text style={styles.progressText}>
+                                                {completedCount}/{totalCount}
+                                            </Text>
+                                        </View>
                                     </View>
-                                    
-                                    <View style={styles.progressBadge}>
-                                        <Text style={styles.progressText}>
-                                            {completedCount}/{totalCount}
-                                        </Text>
-                                    </View>
-                                </View>
 
-                                <View style={styles.locationsContainer}>
-                                    {checklist.locations.map(location => (
-                                        <LocationCard
-                                            key={location.id}
-                                            location={location}
-                                            checklistId={checklist.id}
-                                            checklistTitle={checklist.title}
-                                            checklistIcon={checklist.icon}
-                                        />
-                                    ))}
-                                </View>
-                            </Card.Content>
-                        </Card>
-                    );
-                })}
+                                    <View style={styles.locationsContainer}>
+                                        {checklist.locations.map(location => (
+                                            <LocationCard
+                                                key={location.id}
+                                                location={location}
+                                                checklistId={checklist.id}
+                                                checklistTitle={checklist.title}
+                                                checklistIcon={checklist.icon}
+                                                checklistFrequency={checklist.frequency}
+                                            />
+                                        ))}
+                                    </View>
+                                </Card.Content>
+                            </Card>
+                        );
+                    })
+                )}
             </ScrollView>
         </Surface>
     );
@@ -344,6 +474,17 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 60,
+    },
+    emptyText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: customTheme.colors.outline,
     },
     monthNavigator: {
         flexDirection: 'row',
@@ -390,15 +531,19 @@ const styles = StyleSheet.create({
     },
     checklistTitleRow: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: 8,
         flex: 1,
+    },
+    checklistIcon: {
+        marginTop: 2,
     },
     checklistTitle: {
         fontSize: 16,
         fontWeight: '600',
         color: customTheme.colors.onSurface,
         flex: 1,
+        lineHeight: 20,
     },
     progressBadge: {
         backgroundColor: customTheme.colors.primaryContainer,
@@ -418,22 +563,19 @@ const styles = StyleSheet.create({
         backgroundColor: customTheme.colors.surfaceVariant,
         borderRadius: 8,
         padding: 10,
+        gap: 8,
     },
-    locationContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    locationLeft: {
+    locationHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        flex: 1,
     },
     statusDot: {
         width: 8,
         height: 8,
         borderRadius: 4,
+        marginTop: 4,
+        alignSelf: 'flex-start',
     },
     locationName: {
         fontSize: 14,
@@ -441,19 +583,21 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurface,
         flex: 1,
     },
-    weekIndicators: {
+    monthIndicators: {
         flexDirection: 'row',
-        gap: 4,
+        gap: 3,
+        flexWrap: 'wrap',
+        paddingLeft: 16,
     },
-    weekBadge: {
-        width: 20,
-        height: 20,
+    monthBadge: {
+        width: 18,
+        height: 18,
         borderRadius: 4,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    weekBadgeText: {
-        fontSize: 10,
+    monthBadgeText: {
+        fontSize: 9,
         fontWeight: '600',
         color: '#FFFFFF',
     },
