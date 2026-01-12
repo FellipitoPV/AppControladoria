@@ -105,6 +105,17 @@ const QuickActionsGrid = () => {
         },
       },
       {
+        id: '6',
+        title: 'SST',
+        icon: 'shield-account', // ou 'hard-hat' ou 'medical-bag'
+        color: customTheme.colors.primary,
+        route: 'SSTScreen',
+        access: {
+          moduleId: 'sst',
+          minLevel: 1,
+        },
+      },
+      {
         id: '97',
         title: 'Reuniao',
         icon: 'presentation',

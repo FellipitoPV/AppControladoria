@@ -45,6 +45,9 @@ import {createStackNavigator} from '@react-navigation/stack';
 import {setNotificationNavigationHandler} from './src/helpers/notificationChannel';
 import CheckListScreen from './src/screens/SubScreens/Controladoria/CheckList/CheckListScreen';
 import ChecklistFormScreen from './src/screens/SubScreens/Controladoria/CheckList/components/ChecklistFormScreen';
+import {ChecklistSyncProvider} from './src/contexts/ChecklistSyncContext';
+import SSTScreen from './src/screens/SubScreens/SST/SSTScreen';
+import SSTChecklistScreen from './src/screens/SubScreens/SST/checklists/SSTChecklistScreen';
 
 // Defina os tipos das rotas para o seu navegador
 interface RootStackParamList {
@@ -283,169 +286,202 @@ export default function App() {
   return (
     <UserProvider>
       <BackgroundSyncProvider>
-        <NavigationContainer ref={navigationRef} onReady={onNavigationReady}>
-          <NetworkProvider>
-            <Stack.Navigator initialRouteName={isLoggedIn ? 'Home' : 'Login'}>
-              <Stack.Screen
-                name="Login"
-                component={LoginScreen as React.ComponentType<any>}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="Register"
-                component={RegisterScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="ForgotPass"
-                component={ForgotPasswordScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="UsersEdit"
-                component={EditUserAccessScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="Home"
-                component={HomeScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="NewP"
-                component={FormularioOcorrencia}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="List"
-                component={RelatorioOcorrenciaList}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="Profile"
-                component={ProfileScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="Acessos"
-                component={MyAccessScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="LavagemScreen"
-                component={LavagemScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="LavagemForm"
-                component={NovaLavagem}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="LavagemAgend"
-                component={AgendamentoLavagem}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="LavagemHist"
-                component={HistoricoLavagem}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="LavagemEstoq"
-                component={ControleEstoque}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="LavagemRelat"
-                component={RelatorioLavagens}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="CompostagemScreen"
-                component={CompostagemScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="CompostagemForm"
-                component={CompostagemForm}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="CompostagemHistory"
-                component={CompostagemHistory}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="CompostagemRelat"
-                component={RelatorioCompostagem}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="LogisticaScreen"
-                component={LogisticaScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="LogisticaProgram"
-                component={FormularioProgramacao}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="LogisticaHist"
-                component={HistoricoOperacoes}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="ControladoriaScreen"
-                component={ControladoriaScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="OperacaoScreen"
-                component={OperacaoScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="OperacaoProgram"
-                component={ListaProgramacoes}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="RdoForm"
-                component={RdoForm}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="RdoHist"
-                component={HistoricoRdo}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="Contatos"
-                component={ContatosScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="Reuniao"
-                component={ReuniaoComponent}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="CheckList"
-                component={CheckListScreen}
-                options={{headerShown: false}}
-              />
-              <Stack.Screen
-                name="ChecklistForm"
-                component={ChecklistFormScreen}
-                options={{headerShown: false}}
-              />
-            </Stack.Navigator>
-            <Toast config={toastConfig} position="top" />
-            <FlashMessage position="top" />
-          </NetworkProvider>
-        </NavigationContainer>
+        <ChecklistSyncProvider>
+          <NavigationContainer ref={navigationRef} onReady={onNavigationReady}>
+            <NetworkProvider>
+              <Stack.Navigator initialRouteName={isLoggedIn ? 'Home' : 'Login'}>
+                <Stack.Screen
+                  name="Login"
+                  component={LoginScreen as React.ComponentType<any>}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="Register"
+                  component={RegisterScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="ForgotPass"
+                  component={ForgotPasswordScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="UsersEdit"
+                  component={EditUserAccessScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="Home"
+                  component={HomeScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="NewP"
+                  component={FormularioOcorrencia}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="List"
+                  component={RelatorioOcorrenciaList}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="Profile"
+                  component={ProfileScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="Acessos"
+                  component={MyAccessScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="LavagemScreen"
+                  component={LavagemScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="LavagemForm"
+                  component={NovaLavagem}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="LavagemAgend"
+                  component={AgendamentoLavagem}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="LavagemHist"
+                  component={HistoricoLavagem}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="LavagemEstoq"
+                  component={ControleEstoque}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="LavagemRelat"
+                  component={RelatorioLavagens}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="CompostagemScreen"
+                  component={CompostagemScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="CompostagemForm"
+                  component={CompostagemForm}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="CompostagemHistory"
+                  component={CompostagemHistory}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="CompostagemRelat"
+                  component={RelatorioCompostagem}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="LogisticaScreen"
+                  component={LogisticaScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="LogisticaProgram"
+                  component={FormularioProgramacao}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="LogisticaHist"
+                  component={HistoricoOperacoes}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="ControladoriaScreen"
+                  component={ControladoriaScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="OperacaoScreen"
+                  component={OperacaoScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="OperacaoProgram"
+                  component={ListaProgramacoes}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="RdoForm"
+                  component={RdoForm}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="RdoHist"
+                  component={HistoricoRdo}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="Contatos"
+                  component={ContatosScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="Reuniao"
+                  component={ReuniaoComponent}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="CheckList"
+                  component={CheckListScreen}
+                  options={{headerShown: false}}
+                />
+                <Stack.Screen
+                  name="ChecklistForm"
+                  component={ChecklistFormScreen}
+                  options={{headerShown: false}}
+                />
+
+                {/* SST */}
+                <Stack.Screen
+                  name="SSTScreen"
+                  component={SSTScreen}
+                  options={{headerShown: false}}
+                />
+
+                {/* <Stack.Screen
+                  name="DDSScreen"
+                  component={DDSScreen}
+                  options={{headerShown: false}}
+                /> */}
+
+                <Stack.Screen
+                  name="SSTChecklistScreen"
+                  component={SSTChecklistScreen}
+                  options={{headerShown: false}}
+                />
+
+                {/* <Stack.Screen
+                  name="AuditoriasScreen"
+                  component={AuditoriasScreen}
+                  options={{headerShown: false}}
+                />
+
+                <Stack.Screen
+                  name="ExtintoresScreen"
+                  component={ExtintoresScreen}
+                  options={{headerShown: false}}
+                /> */}
+              </Stack.Navigator>
+              <Toast config={toastConfig} position="top" />
+              <FlashMessage position="top" />
+            </NetworkProvider>
+          </NavigationContainer>
+        </ChecklistSyncProvider>
       </BackgroundSyncProvider>
     </UserProvider>
   );

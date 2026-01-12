@@ -62,7 +62,7 @@ interface SavedChecklistData {
   };
 }
 
-export default function CheckListScreen({navigation}: any) {
+export default function SSTChecklistScreen({navigation}: any) {
   const {userInfo} = useUser();
   const {isOnline, syncStatus} = useChecklistSync();
   const [loading, setLoading] = useState(true);
@@ -94,13 +94,13 @@ export default function CheckListScreen({navigation}: any) {
     return iconMap[lucideIcon] || 'clipboard-check';
   };
 
-  // ADICIONAR função para cachear definições
+  // Função para cachear definições
   const cacheChecklistDefinitions = async (
     definitions: ChecklistDefinition[],
   ) => {
     try {
       await AsyncStorage.setItem(
-        '@checklist_definitions',
+        '@checklist_definitions_sst',
         JSON.stringify(definitions),
       );
     } catch (error) {
@@ -110,7 +110,7 @@ export default function CheckListScreen({navigation}: any) {
 
   const loadCachedDefinitions = async () => {
     try {
-      const cached = await AsyncStorage.getItem('@checklist_definitions');
+      const cached = await AsyncStorage.getItem('@checklist_definitions_sst');
       if (cached) {
         const definitions = JSON.parse(cached);
         setChecklists(definitions);
@@ -137,13 +137,13 @@ export default function CheckListScreen({navigation}: any) {
 
           const filteredChecklists = Object.values(data)
             .filter(
-              (checklist: any) => checklist.category === 'QSMS - Meio Ambiente',
+              (checklist: any) => checklist.category === 'QSMS - Geral',
             )
             .map((checklist: any) => checklist as ChecklistDefinition);
 
           setChecklists(filteredChecklists);
-          cacheChecklistDefinitions(filteredChecklists); // ← Cachear
-          console.log('Checklists carregados do Firebase');
+          cacheChecklistDefinitions(filteredChecklists);
+          console.log('Checklists SST carregados do Firebase');
         } else {
           setChecklists([]);
         }
@@ -155,7 +155,7 @@ export default function CheckListScreen({navigation}: any) {
       // Offline: usar apenas cache
       setLoadingDefinitions(false);
     }
-  }, [isOnline]); // ← Adicionar dependência
+  }, [isOnline]);
 
   // Função para converter semanas em meses (para checklists semanais)
   const getMonthFromWeek = (weekNumber: number): number => {
@@ -244,7 +244,7 @@ export default function CheckListScreen({navigation}: any) {
   const cacheSavedData = async (year: string, data: any) => {
     try {
       await AsyncStorage.setItem(
-        `@checklist_saved_${year}`,
+        `@checklist_saved_sst_${year}`,
         JSON.stringify(data),
       );
     } catch (error) {
@@ -254,7 +254,7 @@ export default function CheckListScreen({navigation}: any) {
 
   const loadCachedSavedData = async (year: string) => {
     try {
-      const cached = await AsyncStorage.getItem(`@checklist_saved_${year}`);
+      const cached = await AsyncStorage.getItem(`@checklist_saved_sst_${year}`);
       if (cached) {
         return JSON.parse(cached);
       }
@@ -264,7 +264,7 @@ export default function CheckListScreen({navigation}: any) {
     return null;
   };
 
-  // ADAPTAR useEffect dos dados salvos
+  // useEffect dos dados salvos
   useEffect(() => {
     const year = selectedMonth.getFullYear().toString();
 
@@ -283,7 +283,7 @@ export default function CheckListScreen({navigation}: any) {
         if (snapshot.exists()) {
           const data = snapshot.val();
           setSavedData(prev => ({...prev, [year]: data}));
-          cacheSavedData(year, data); // ← Cachear
+          cacheSavedData(year, data);
         } else {
           setSavedData(prev => ({...prev, [year]: {}}));
         }
@@ -294,7 +294,7 @@ export default function CheckListScreen({navigation}: any) {
     } else {
       setLoading(false);
     }
-  }, [selectedMonth, isOnline]); // ← Adicionar isOnline
+  }, [selectedMonth, isOnline]);
 
   useEffect(() => {
     if (!loadingDefinitions) {
@@ -465,8 +465,8 @@ export default function CheckListScreen({navigation}: any) {
     return (
       <Surface style={styles.container}>
         <ModernHeader
-          title="Checklist Meio Ambiente"
-          iconName="leaf"
+          title="Checklist SST"
+          iconName="shield-check"
           onBackPress={() => navigation.goBack()}
         />
         <View style={styles.loadingContainer}>
@@ -479,8 +479,8 @@ export default function CheckListScreen({navigation}: any) {
   return (
     <Surface style={styles.container}>
       <ModernHeader
-        title="Checklist Meio Ambiente"
-        iconName="leaf"
+        title="Checklist SST"
+        iconName="shield-check"
         onBackPress={() => navigation.goBack()}
       />
 
