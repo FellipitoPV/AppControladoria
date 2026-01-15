@@ -60,8 +60,8 @@ export default function SSTScreen({ navigation }: any) {
                             icon="account-group"
                             text="DDS"
                             onPress={() => navigation.navigate('DDSScreen')}
-                            disabled={true}
-                            disabledText="Chegando na próxima atualização"
+                            disabled={!canAccessDDS()}
+                            disabledText="Requer acesso à SST nível 1"
                         />
 
                         <ActionButton

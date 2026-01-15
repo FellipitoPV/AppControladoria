@@ -48,6 +48,8 @@ import ChecklistFormScreen from './src/screens/SubScreens/Controladoria/CheckLis
 import {ChecklistSyncProvider} from './src/contexts/ChecklistSyncContext';
 import SSTScreen from './src/screens/SubScreens/SST/SSTScreen';
 import SSTChecklistScreen from './src/screens/SubScreens/SST/checklists/SSTChecklistScreen';
+import DDSScreen from './src/screens/SubScreens/SST/DDS/DDSScreen';
+import DDSFormScreen from './src/screens/SubScreens/SST/DDS/DDSFormScreen';
 
 // Defina os tipos das rotas para o seu navegador
 interface RootStackParamList {
@@ -453,11 +455,17 @@ export default function App() {
                   options={{headerShown: false}}
                 />
 
-                {/* <Stack.Screen
+                <Stack.Screen
                   name="DDSScreen"
                   component={DDSScreen}
                   options={{headerShown: false}}
-                /> */}
+                />
+
+                <Stack.Screen
+                  name="DDSFormScreen"
+                  component={DDSFormScreen}
+                  options={{headerShown: false}}
+                />
 
                 <Stack.Screen
                   name="SSTChecklistScreen"

@@ -167,7 +167,7 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
 
       // Gerar o PDF
       const response = await fetch(
-        'https://gerarrelatorio-oxx6ulg2dq-uc.a.run.app/gerar-relatorio-rdo',
+        'https://geradorrdo-708827138368.europe-west1.run.app/gerar-relatorio-rdo',
         {
           method: 'POST',
           headers: {
