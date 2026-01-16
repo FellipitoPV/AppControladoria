@@ -233,7 +233,7 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
         const ops = await loadPendingOperations();
         
         if (ops.length === 0) {
-            logSync('Sync', 'Nenhuma operação pendente');
+            // logSync('Sync', 'Nenhuma operação pendente');
             return;
         }
 
@@ -285,7 +285,7 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
     useEffect(() => {
         const unsubscribe = NetInfo.addEventListener(state => {
             const connected = !!state.isConnected;
-            logSync('Network', `Conectividade: ${connected ? 'Online' : 'Offline'}`);
+            // logSync('Network', `Conectividade: ${connected ? 'Online' : 'Offline'}`);
             setIsOnline(connected);
         });
 
@@ -302,7 +302,7 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
     // Processar fila quando ficar online
     useEffect(() => {
         if (isOnline) {
-            logSync('Network', 'Ficou online, processando fila...');
+            // logSync('Network', 'Ficou online, processando fila...');
             processPendingOperations();
         }
     }, [isOnline]);
@@ -312,7 +312,7 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
         const init = async () => {
             const ops = await loadPendingOperations();
             setPendingOps(ops);
-            logSync('Init', `${ops.length} operações pendentes carregadas`);
+            // logSync('Init', `${ops.length} operações pendentes carregadas`);
         };
         init();
     }, []);

@@ -366,32 +366,6 @@ const DDSFormScreen: React.FC = () => {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Status */}
-                    <Surface style={styles.section}>
-                        <Text style={styles.sectionTitle}>Status</Text>
-                        <TouchableOpacity
-                            style={styles.statusSelector}
-                            onPress={() => !isViewMode && setShowStatusModal(true)}
-                            disabled={isViewMode}
-                        >
-                            <Chip
-                                style={[
-                                    styles.statusChip,
-                                    { backgroundColor: getStatusColor(status) },
-                                ]}
-                                textStyle={styles.statusChipText}
-                            >
-                                {status}
-                            </Chip>
-                            {!isViewMode && (
-                                <MaterialCommunityIcons
-                                    name="chevron-down"
-                                    size={24}
-                                    color={customTheme.colors.outline}
-                                />
-                            )}
-                        </TouchableOpacity>
-                    </Surface>
 
                     {/* Informações Básicas */}
                     <Surface style={styles.section}>
@@ -660,51 +634,6 @@ const DDSFormScreen: React.FC = () => {
                 />
             )}
 
-            {/* Status Modal */}
-            <Portal>
-                <Modal
-                    visible={showStatusModal}
-                    onDismiss={() => setShowStatusModal(false)}
-                    contentContainerStyle={styles.modal}
-                >
-                    <Text style={styles.modalTitle}>Selecione o Status</Text>
-                    {STATUS_OPTIONS.map((option) => (
-                        <TouchableOpacity
-                            key={option.value}
-                            style={[
-                                styles.statusOption,
-                                status === option.value && styles.statusOptionSelected,
-                            ]}
-                            onPress={() => {
-                                setStatus(option.value);
-                                setShowStatusModal(false);
-                            }}
-                        >
-                            <View
-                                style={[
-                                    styles.statusDot,
-                                    { backgroundColor: getStatusColor(option.value) },
-                                ]}
-                            />
-                            <Text
-                                style={[
-                                    styles.statusOptionText,
-                                    status === option.value && styles.statusOptionTextSelected,
-                                ]}
-                            >
-                                {option.label}
-                            </Text>
-                            {status === option.value && (
-                                <MaterialCommunityIcons
-                                    name="check"
-                                    size={24}
-                                    color={customTheme.colors.primary}
-                                />
-                            )}
-                        </TouchableOpacity>
-                    ))}
-                </Modal>
-            </Portal>
         </View>
     );
 };

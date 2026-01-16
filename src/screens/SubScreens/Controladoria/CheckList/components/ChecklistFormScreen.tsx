@@ -6,15 +6,13 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Modal,
-  Pressable,
   BackHandler,
+  InteractionManager,
 } from 'react-native';
 import {
   Surface,
   Text,
   Card,
-  RadioButton,
   ActivityIndicator,
 } from 'react-native-paper';
 import {ref, onValue, set} from 'firebase/database';
@@ -75,16 +73,13 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
   const isWeekly = checklistFrequency === 'Semanal';
   const year = selectedMonth.getFullYear();
+  const currentMonth = selectedMonth.getMonth() + 1; // Mês fixo vindo da tela anterior
 
-  const [currentMonth, setCurrentMonth] = useState(
-    selectedMonth.getMonth() + 1,
-  );
-  const [selectedPeriod, setSelectedPeriod] = useState(1);
+  const [selectedPeriod, setSelectedPeriod] = useState(isWeekly ? 1 : currentMonth);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [yearWeeks, setYearWeeks] = useState<YearWeek[]>([]);
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
 
   const maxPeriods = isWeekly ? 52 : 12;
 
@@ -93,7 +88,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   });
 
   const initialFormData = useRef<FormData>({periods: {}});
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const hasUnsavedChanges = useRef(false);
 
   // Gerar semanas do ano (igual ao web)
   const getYearWeeks = (year: number): YearWeek[] => {
@@ -183,22 +178,27 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   };
 
   useEffect(() => {
-    const init = async () => {
-      if (isWeekly) {
-        const weeks = getYearWeeks(year);
-        setYearWeeks(weeks);
+    // Aguarda a animação de navegação terminar antes de carregar dados
+    const interactionPromise = InteractionManager.runAfterInteractions(() => {
+      const init = async () => {
+        if (isWeekly) {
+          const weeks = getYearWeeks(year);
+          setYearWeeks(weeks);
 
-        const firstWeekOfMonth = weeks.find(w => w.month === currentMonth);
-        if (firstWeekOfMonth) {
-          setSelectedPeriod(firstWeekOfMonth.weekNumber);
+          const firstWeekOfMonth = weeks.find(w => w.month === currentMonth);
+          if (firstWeekOfMonth) {
+            setSelectedPeriod(firstWeekOfMonth.weekNumber);
+          }
         }
-      }
 
-      await loadQuestions();
-      await loadSavedData();
-    };
+        await loadQuestions();
+        await loadSavedData();
+      };
 
-    init();
+      init();
+    });
+
+    return () => interactionPromise.cancel();
   }, []);
 
   // ADICIONAR useEffect para recarregar quando voltar online:
@@ -209,23 +209,13 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     }
   }, [isOnline]);
 
-  // Auto-selecionar primeira semana ao mudar de mês
-  useEffect(() => {
-    if (isWeekly && yearWeeks.length > 0) {
-      const firstWeekOfMonth = yearWeeks.find(w => w.month === currentMonth);
-      if (firstWeekOfMonth) {
-        setSelectedPeriod(firstWeekOfMonth.weekNumber);
-      }
-    }
-  }, [currentMonth]);
-
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       handleBackPress,
     );
     return () => backHandler.remove();
-  }, [hasUnsavedChanges]);
+  }, []);
 
   // SUBSTITUIR loadQuestions
   const loadQuestions = async () => {
@@ -259,7 +249,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
         setFormData({periods});
         initialFormData.current = {periods};
-        setHasUnsavedChanges(false);
+        hasUnsavedChanges.current = false;
       } else {
         // Se não tem dados, limpar o formulário
         setFormData({periods: {}});
@@ -272,7 +262,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
   // SUBSTITUIR handleSave
   const handleSave = async () => {
-    setHasUnsavedChanges(false);
+    hasUnsavedChanges.current = false;
     setSaving(true);
 
     try {
@@ -374,24 +364,24 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   };
 
   const handleBackPress = () => {
-  if (hasUnsavedChanges) {
-    Alert.alert(
-      'Alterações não salvas',
-      'Deseja salvar as alterações antes de sair?',
-      [
-        {text: 'Cancelar', style: 'cancel'},
-        {text: 'Sair sem salvar', onPress: () => navigation.goBack()},
-        {text: 'Salvar', onPress: handleSave},
-      ]
-    );
-    return true;
-  }
-  navigation.goBack(); // ← Adicionar essa linha
-  return false;
-};
+    if (hasUnsavedChanges.current) {
+      Alert.alert(
+        'Alterações não salvas',
+        'Deseja salvar as alterações antes de sair?',
+        [
+          {text: 'Cancelar', style: 'cancel'},
+          {text: 'Sair sem salvar', onPress: () => navigation.goBack()},
+          {text: 'Salvar', onPress: handleSave},
+        ],
+      );
+      return true;
+    }
+    navigation.goBack();
+    return false;
+  };
 
   const handleItemChange = (questionId: string, value: ConformityStatus) => {
-    setHasUnsavedChanges(true);
+    hasUnsavedChanges.current = true;
     setFormData(prev => {
       const currentPeriod = prev.periods[selectedPeriod] || {
         items: {},
@@ -414,7 +404,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   };
 
   const handleObservacoesChange = (text: string) => {
-    setHasUnsavedChanges(true);
+    hasUnsavedChanges.current = true;
     setFormData(prev => {
       const currentPeriod = prev.periods[selectedPeriod] || {
         items: {},
@@ -434,19 +424,19 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   };
 
   const PeriodSelector = () => {
-    const monthNames = [
-      'Jan',
-      'Fev',
-      'Mar',
-      'Abr',
-      'Mai',
-      'Jun',
-      'Jul',
-      'Ago',
-      'Set',
-      'Out',
-      'Nov',
-      'Dez',
+    const monthNamesFull = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
     ];
 
     if (isWeekly) {
@@ -460,53 +450,16 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
       return (
         <View style={styles.periodSelectorContainer}>
-          <View style={styles.monthNav}>
-            <TouchableOpacity
-              style={[
-                styles.monthNavButton,
-                currentMonth === 1 && styles.monthNavButtonDisabled,
-              ]}
-              onPress={() =>
-                setCurrentMonth((prev: number) => Math.max(1, prev - 1))
-              }
-              disabled={currentMonth === 1}>
-              <MaterialCommunityIcons
-                name="chevron-left"
-                size={24}
-                color={currentMonth === 1 ? '#CCC' : customTheme.colors.primary}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.monthNameButton}
-              onPress={() => setShowMonthPicker(true)}>
-              <Text style={styles.monthNavText}>
-                {monthNames[currentMonth - 1]}
-              </Text>
-              <MaterialCommunityIcons
-                name="chevron-down"
-                size={20}
-                color={customTheme.colors.primary}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.monthNavButton,
-                currentMonth === 12 && styles.monthNavButtonDisabled,
-              ]}
-              onPress={() =>
-                setCurrentMonth((prev: number) => Math.min(12, prev + 1))
-              }
-              disabled={currentMonth === 12}>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={24}
-                color={
-                  currentMonth === 12 ? '#CCC' : customTheme.colors.primary
-                }
-              />
-            </TouchableOpacity>
+          {/* Mês/Ano fixo (apenas informativo) */}
+          <View style={styles.monthDisplay}>
+            <MaterialCommunityIcons
+              name="calendar-month"
+              size={20}
+              color={customTheme.colors.primary}
+            />
+            <Text style={styles.monthDisplayText}>
+              {monthNamesFull[currentMonth - 1]} de {year}
+            </Text>
           </View>
 
           <ScrollView
@@ -530,7 +483,6 @@ export default function ChecklistFormScreen({route, navigation}: any) {
                 );
 
                 const startDateStr = formatDate(week.startDate);
-                const endDateStr = formatDate(week.endDate);
 
                 return (
                   <TouchableOpacity
@@ -569,97 +521,57 @@ export default function ChecklistFormScreen({route, navigation}: any) {
       );
     }
 
-    // Mensal
+    // Mensal - apenas mostra o mês/ano atual sem navegação
     return (
       <View style={styles.periodSelectorContainer}>
-        <View style={styles.monthNav}>
-          <TouchableOpacity
-            style={[
-              styles.monthNavButton,
-              selectedPeriod === 1 && styles.monthNavButtonDisabled,
-            ]}
-            onPress={() =>
-              setSelectedPeriod((prev: number) => Math.max(1, prev - 1))
-            }
-            disabled={selectedPeriod === 1}>
-            <MaterialCommunityIcons
-              name="chevron-left"
-              size={24}
-              color={selectedPeriod === 1 ? '#CCC' : customTheme.colors.primary}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.monthNameButton}
-            onPress={() => setShowMonthPicker(true)}>
-            <Text style={styles.monthNavText}>
-              {monthNames[selectedPeriod - 1]}
-            </Text>
-            <MaterialCommunityIcons
-              name="chevron-down"
-              size={20}
-              color={customTheme.colors.primary}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.monthNavButton,
-              selectedPeriod === 12 && styles.monthNavButtonDisabled,
-            ]}
-            onPress={() =>
-              setSelectedPeriod((prev: number) => Math.min(12, prev + 1))
-            }
-            disabled={selectedPeriod === 12}>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={24}
-              color={
-                selectedPeriod === 12 ? '#CCC' : customTheme.colors.primary
-              }
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.monthStatusIndicator}>
-          {monthNames.map((month, index) => {
-            const period = index + 1;
-            const periodData = formData.periods[period] || {
-              items: {},
-              observacoes: '',
-            };
-            const monthStatus = calculatePeriodStatus(periodData);
-            const statusColor = getStatusColor(
-              monthStatus === 'Concluído'
-                ? 'C'
-                : monthStatus === 'Concluído com NC'
-                ? 'NC'
-                : '',
-            );
-
-            return (
-              <View key={period} style={styles.monthIndicatorItem}>
-                <View
-                  style={[
-                    styles.monthIndicatorDot,
-                    {backgroundColor: statusColor},
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.monthIndicatorText,
-                    selectedPeriod === period &&
-                      styles.monthIndicatorTextSelected,
-                  ]}>
-                  {month}
-                </Text>
-              </View>
-            );
-          })}
+        <View style={styles.monthDisplay}>
+          <MaterialCommunityIcons
+            name="calendar-month"
+            size={20}
+            color={customTheme.colors.primary}
+          />
+          <Text style={styles.monthDisplayText}>
+            {monthNamesFull[currentMonth - 1]} de {year}
+          </Text>
         </View>
       </View>
     );
   };
+
+  // Botão de opção customizado (muito mais leve que RadioButton)
+  const OptionButton = ({
+    selected,
+    color,
+    label,
+    onPress,
+  }: {
+    selected: boolean;
+    color: string;
+    label: string;
+    onPress: () => void;
+  }) => (
+    <TouchableOpacity
+      style={styles.radioOption}
+      onPress={onPress}
+      activeOpacity={0.6}>
+      <View
+        style={[
+          styles.customRadio,
+          {borderColor: selected ? color : '#BDBDBD'},
+        ]}>
+        {selected && (
+          <View style={[styles.customRadioInner, {backgroundColor: color}]} />
+        )}
+      </View>
+      <Text
+        style={[
+          styles.radioLabel,
+          selected && {color: color, fontWeight: '600'},
+        ]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
 
   const QuestionCard = ({question}: {question: Question}) => {
     const currentPeriod = formData.periods[selectedPeriod] || {
@@ -696,65 +608,24 @@ export default function ChecklistFormScreen({route, navigation}: any) {
           )}
 
           <View style={styles.radioGroup}>
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => handleItemChange(question.id, 'C')}>
-              <RadioButton
-                value="C"
-                status={currentValue === 'C' ? 'checked' : 'unchecked'}
-                onPress={() => handleItemChange(question.id, 'C')}
-                color="#4CAF50"
-              />
-              <Text
-                style={[
-                  styles.radioLabel,
-                  currentValue === 'C' && {color: '#4CAF50', fontWeight: '600'},
-                ]}>
-                Conforme
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => handleItemChange(question.id, 'NC')}>
-              <RadioButton
-                value="NC"
-                status={currentValue === 'NC' ? 'checked' : 'unchecked'}
-                onPress={() => handleItemChange(question.id, 'NC')}
-                color="#F44336"
-              />
-              <Text
-                style={[
-                  styles.radioLabel,
-                  currentValue === 'NC' && {
-                    color: '#F44336',
-                    fontWeight: '600',
-                  },
-                ]}>
-                Não Conforme
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => handleItemChange(question.id, 'NA')}>
-              <RadioButton
-                value="NA"
-                status={currentValue === 'NA' ? 'checked' : 'unchecked'}
-                onPress={() => handleItemChange(question.id, 'NA')}
-                color="#9E9E9E"
-              />
-              <Text
-                style={[
-                  styles.radioLabel,
-                  currentValue === 'NA' && {
-                    color: '#9E9E9E',
-                    fontWeight: '600',
-                  },
-                ]}>
-                N/A
-              </Text>
-            </TouchableOpacity>
+            <OptionButton
+              selected={currentValue === 'C'}
+              color="#4CAF50"
+              label="Conforme"
+              onPress={() => handleItemChange(question.id, 'C')}
+            />
+            <OptionButton
+              selected={currentValue === 'NC'}
+              color="#F44336"
+              label="Não Conforme"
+              onPress={() => handleItemChange(question.id, 'NC')}
+            />
+            <OptionButton
+              selected={currentValue === 'NA'}
+              color="#9E9E9E"
+              label="N/A"
+              onPress={() => handleItemChange(question.id, 'NA')}
+            />
           </View>
         </View>
       </Card>
@@ -786,81 +657,9 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     observacoes: '',
   };
   const hasNonConforming = Object.values(currentPeriod.items).includes('NC');
-  const monthNames = [
-    'Janeiro',
-    'Fevereiro',
-    'Março',
-    'Abril',
-    'Maio',
-    'Junho',
-    'Julho',
-    'Agosto',
-    'Setembro',
-    'Outubro',
-    'Novembro',
-    'Dezembro',
-  ];
 
   return (
     <Surface style={styles.container}>
-      <Modal
-        visible={showMonthPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowMonthPicker(false)}>
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowMonthPicker(false)}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Selecione o Mês</Text>
-            <ScrollView style={styles.monthList}>
-              {monthNames.map((month, index) => {
-                const monthNumber = index + 1;
-                const periodData = formData.periods[monthNumber] || {
-                  items: {},
-                  observacoes: '',
-                };
-                const monthStatus = calculatePeriodStatus(periodData);
-                const statusColor = getStatusColor(
-                  monthStatus === 'Concluído'
-                    ? 'C'
-                    : monthStatus === 'Concluído com NC'
-                    ? 'NC'
-                    : '',
-                );
-
-                return (
-                  <TouchableOpacity
-                    key={monthNumber}
-                    style={styles.monthPickerItem}
-                    onPress={() => {
-                      if (isWeekly) {
-                        setCurrentMonth(monthNumber);
-                      } else {
-                        setSelectedPeriod(monthNumber);
-                      }
-                      setShowMonthPicker(false);
-                    }}>
-                    <View
-                      style={[
-                        styles.monthPickerDot,
-                        {backgroundColor: statusColor},
-                      ]}
-                    />
-                    <Text style={styles.monthPickerText}>{month}</Text>
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={20}
-                      color={customTheme.colors.onSurfaceVariant}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
-
       <ModernHeader
         title={checklistTitle}
         iconName="clipboard-check"
@@ -1003,37 +802,19 @@ const styles = StyleSheet.create({
     backgroundColor: customTheme.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: customTheme.colors.outline,
-    paddingVertical: 12,
+    paddingVertical: 6,
   },
-  monthNav: {
+  monthDisplay: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  monthNavButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: customTheme.colors.surfaceVariant,
-  },
-  monthNavButtonDisabled: {
-    opacity: 0.3,
-  },
-  monthNameButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: customTheme.colors.surfaceVariant,
+    paddingVertical: 2,
+    marginBottom: 4,
   },
-  monthNavText: {
-    fontSize: 16,
+  monthDisplayText: {
+    fontSize: 14,
     fontWeight: '600',
     color: customTheme.colors.onSurface,
   },
@@ -1043,11 +824,6 @@ const styles = StyleSheet.create({
   weekButtons: {
     flexDirection: 'row',
     gap: 8,
-  },
-  monthButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 12,
   },
   periodButton: {
     paddingHorizontal: 16,
@@ -1097,71 +873,6 @@ const styles = StyleSheet.create({
   periodDateTextSelected: {
     color: customTheme.colors.primary,
   },
-  monthStatusIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingTop: 8,
-  },
-  monthIndicatorItem: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  monthIndicatorDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  monthIndicatorText: {
-    fontSize: 10,
-    color: customTheme.colors.onSurfaceVariant,
-  },
-  monthIndicatorTextSelected: {
-    fontWeight: '600',
-    color: customTheme.colors.primary,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    width: '80%',
-    maxHeight: '70%',
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: customTheme.colors.onSurface,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: customTheme.colors.outline,
-  },
-  monthList: {
-    maxHeight: 400,
-  },
-  monthPickerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  monthPickerDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  monthPickerText: {
-    flex: 1,
-    fontSize: 16,
-    color: customTheme.colors.onSurface,
-  },
   content: {
     flex: 1,
     padding: 12,
@@ -1208,7 +919,21 @@ const styles = StyleSheet.create({
   radioOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
+    paddingVertical: 4,
+  },
+  customRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   radioLabel: {
     fontSize: 13,

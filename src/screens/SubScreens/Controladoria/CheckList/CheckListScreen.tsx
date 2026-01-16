@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {View, ScrollView, StyleSheet, TouchableOpacity} from 'react-native';
+import {View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform} from 'react-native';
 import {Surface, Text, Card, ActivityIndicator} from 'react-native-paper';
 import {ref, onValue} from 'firebase/database';
 import {dbRealTime} from '../../../../../firebase';
@@ -9,6 +9,11 @@ import {customTheme} from '../../../../theme/theme';
 import {useUser} from '../../../../contexts/userContext';
 import {useChecklistSync} from '../../../../contexts/ChecklistSyncContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ReportGeneratorModal from '../../SST/checklists/ReportGeneratorModal';
+import RNFS from 'react-native-fs';
+import Share from 'react-native-share';
+
+const CLOUD_RUN_URL = 'https://relatorio-checklist-708827138368.europe-west1.run.app';
 
 type ChecklistStatus =
   | 'Pendente'
@@ -62,6 +67,14 @@ interface SavedChecklistData {
   };
 }
 
+interface ReportModalData {
+  checklistId: string;
+  checklistTitle: string;
+  locationId: string;
+  locationName: string;
+  questions: Array<{id: string; label: string}>;
+}
+
 export default function CheckListScreen({navigation}: any) {
   const {userInfo} = useUser();
   const {isOnline, syncStatus} = useChecklistSync();
@@ -70,6 +83,13 @@ export default function CheckListScreen({navigation}: any) {
   const [savedData, setSavedData] = useState<SavedChecklistData>({});
   const [checklists, setChecklists] = useState<ChecklistDefinition[]>([]);
   const [loadingDefinitions, setLoadingDefinitions] = useState(true);
+
+  // Estados do modal de relatório
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportModalData, setReportModalData] = useState<ReportModalData | null>(
+    null,
+  );
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   // Mapear ícones Lucide para MaterialCommunityIcons
   const getIconName = (lucideIcon: string): string => {
@@ -316,6 +336,155 @@ export default function CheckListScreen({navigation}: any) {
     }
   };
 
+  const getCardBackgroundColor = (status: ChecklistStatus) => {
+    switch (status) {
+      case 'Concluído':
+        return '#E8F5E9'; // Verde claro
+      case 'Concluído com NC':
+        return '#FFF3E0'; // Laranja claro
+      case 'Em Andamento':
+        return '#E3F2FD'; // Azul claro
+      case 'Pendente':
+      default:
+        return customTheme.colors.surfaceVariant;
+    }
+  };
+
+  const handleOpenReportModal = (
+    checklistId: string,
+    checklistTitle: string,
+    locationId: string,
+    locationName: string,
+    questions: Array<{id: string; label: string}>,
+  ) => {
+    setReportModalData({
+      checklistId,
+      checklistTitle,
+      locationId,
+      locationName,
+      questions,
+    });
+    setReportModalVisible(true);
+  };
+
+  const handleGenerateReport = async (data: any) => {
+    console.log('Gerando relatório com dados:', data);
+    setGeneratingReport(true);
+
+    try {
+      // Preparar os itens do checklist com seus resultados
+      const year = selectedMonth.getFullYear().toString();
+      const month = selectedMonth.getMonth() + 1;
+
+      const checklistSavedData =
+        savedData[year]?.[reportModalData?.checklistId || '']?.[
+          reportModalData?.locationId || ''
+        ]?.monthlyFormData?.[month];
+
+      const itensComResultado = (reportModalData?.questions || []).map(q => {
+        const resultado = checklistSavedData?.items?.[q.id];
+        return {
+          id: q.id,
+          label: q.label,
+          resultado: resultado || 'NA',
+        };
+      });
+
+      const requestData = {
+        checklist: {
+          ...data,
+          itens: itensComResultado,
+          dataChecklist: selectedMonth.toISOString(),
+        },
+      };
+
+      console.log('Enviando para Cloud Run:', requestData);
+
+      // Fazer requisição para o Cloud Run
+      const response = await fetch(`${CLOUD_RUN_URL}/generate-file`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao gerar relatório');
+      }
+
+      const result = await response.json();
+
+      if (!result.success || !result.fileBase64) {
+        throw new Error('Resposta inválida do servidor');
+      }
+
+      // Salvar o PDF no dispositivo
+      const fileName = result.fileName || `Relatorio_Checklist_${Date.now()}.pdf`;
+      const filePath = `${
+        Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath
+      }/${fileName}`;
+
+      await RNFS.writeFile(filePath, result.fileBase64, 'base64');
+      console.log('PDF salvo em:', filePath);
+
+      setReportModalVisible(false);
+
+      // Perguntar se quer compartilhar
+      Alert.alert(
+        'Relatório Gerado',
+        `O relatório foi salvo em:\n${fileName}`,
+        [
+          {text: 'OK', style: 'cancel'},
+          {
+            text: 'Compartilhar',
+            onPress: async () => {
+              try {
+                await Share.open({
+                  url: `file://${filePath}`,
+                  type: 'application/pdf',
+                  title: 'Compartilhar Relatório',
+                });
+              } catch (shareError) {
+                console.log('Compartilhamento cancelado ou erro:', shareError);
+              }
+            },
+          },
+        ],
+      );
+    } catch (error: any) {
+      console.error('Erro ao gerar relatório:', error);
+      Alert.alert(
+        'Erro',
+        error.message || 'Não foi possível gerar o relatório. Tente novamente.',
+        [{text: 'OK'}],
+      );
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  const getMonthYearLabel = () => {
+    const months = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
+    ];
+    return `${months[selectedMonth.getMonth()]}/${selectedMonth.getFullYear()}`;
+  };
+
   const MonthNavigator = () => {
     const months = [
       'Janeiro',
@@ -381,83 +550,75 @@ export default function CheckListScreen({navigation}: any) {
     );
   };
 
-  const MonthIndicators = ({
-    monthlyStatus,
-  }: {
-    monthlyStatus?: Record<number, ChecklistStatus>;
-  }) => {
-    const monthsShort = [
-      'J',
-      'F',
-      'M',
-      'A',
-      'M',
-      'J',
-      'J',
-      'A',
-      'S',
-      'O',
-      'N',
-      'D',
-    ];
-
-    return (
-      <View style={styles.monthIndicators}>
-        {monthsShort.map((monthLetter, index) => {
-          const month = index + 1;
-          const status = monthlyStatus?.[month] || 'Pendente';
-          const color = getStatusColor(status);
-
-          return (
-            <View
-              key={month}
-              style={[styles.monthBadge, {backgroundColor: color}]}>
-              <Text style={styles.monthBadgeText}>{monthLetter}</Text>
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-
   const LocationCard = ({
     location,
     checklistId,
     checklistTitle,
     checklistIcon,
     checklistFrequency,
+    questions,
   }: {
     location: ChecklistLocation;
     checklistId: string;
     checklistTitle: string;
     checklistIcon: string;
     checklistFrequency: string;
+    questions: Array<{id: string; label: string}>;
   }) => {
-    const statusColor = getStatusColor(location.status);
+    // Pegar o status do mês atualmente selecionado
+    const currentMonth = selectedMonth.getMonth() + 1;
+    const currentMonthStatus =
+      location.monthlyStatus?.[currentMonth] || 'Pendente';
+    const statusColor = getStatusColor(currentMonthStatus);
+    const cardBackground = getCardBackgroundColor(currentMonthStatus);
+    const canGenerateReport =
+      currentMonthStatus === 'Concluído' ||
+      currentMonthStatus === 'Concluído com NC';
 
     return (
-      <TouchableOpacity
-        style={styles.locationCard}
-        activeOpacity={0.7}
-        onPress={() => {
-          navigation.navigate('ChecklistForm', {
-            checklistId,
-            checklistTitle,
-            checklistIcon,
-            checklistFrequency,
-            location,
-            selectedMonth,
-          });
-        }}>
-        <View style={styles.locationHeader}>
+      <View style={[styles.locationCard, {backgroundColor: cardBackground}]}>
+        <TouchableOpacity
+          style={styles.locationContent}
+          activeOpacity={0.7}
+          onPress={() => {
+            navigation.navigate('ChecklistForm', {
+              checklistId,
+              checklistTitle,
+              checklistIcon,
+              checklistFrequency,
+              location,
+              selectedMonth,
+            });
+          }}>
           <View style={[styles.statusDot, {backgroundColor: statusColor}]} />
           <Text style={styles.locationName} numberOfLines={2}>
             {location.name}
           </Text>
-        </View>
+        </TouchableOpacity>
 
-        <MonthIndicators monthlyStatus={location.monthlyStatus} />
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.reportButton,
+            !canGenerateReport && styles.reportButtonDisabled,
+          ]}
+          activeOpacity={0.7}
+          disabled={!canGenerateReport}
+          onPress={() =>
+            handleOpenReportModal(
+              checklistId,
+              checklistTitle,
+              location.id,
+              location.name,
+              questions,
+            )
+          }>
+          <MaterialCommunityIcons
+            name="file-pdf-box"
+            size={22}
+            color={canGenerateReport ? '#D32F2F' : '#BDBDBD'}
+          />
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -547,6 +708,7 @@ export default function CheckListScreen({navigation}: any) {
                         checklistTitle={checklist.title}
                         checklistIcon={checklist.icon}
                         checklistFrequency={checklist.frequency}
+                        questions={checklist.questions}
                       />
                     ))}
                   </View>
@@ -556,6 +718,24 @@ export default function CheckListScreen({navigation}: any) {
           })
         )}
       </ScrollView>
+
+      {/* Modal de Geração de Relatório */}
+      {reportModalData && (
+        <ReportGeneratorModal
+          visible={reportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+          onGenerate={handleGenerateReport}
+          checklistTitle={reportModalData.checklistTitle}
+          locationName={reportModalData.locationName}
+          itens={reportModalData.questions.map(q => ({
+            id: q.id,
+            label: q.label,
+            resultado: undefined,
+          }))}
+          mesAno={getMonthYearLabel()}
+          loading={generatingReport}
+        />
+      )}
     </Surface>
   );
 }
@@ -673,12 +853,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   locationCard: {
-    backgroundColor: customTheme.colors.surfaceVariant,
     borderRadius: 8,
     padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  locationHeader: {
+  locationContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -696,22 +878,15 @@ const styles = StyleSheet.create({
     color: customTheme.colors.onSurface,
     flex: 1,
   },
-  monthIndicators: {
-    flexDirection: 'row',
-    gap: 3,
-    flexWrap: 'wrap',
-    paddingLeft: 16,
-  },
-  monthBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
+  reportButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(211, 47, 47, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  monthBadgeText: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  reportButtonDisabled: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
 });

@@ -163,7 +163,7 @@ export default function SSTChecklistScreen({navigation}: any) {
 
           setChecklists(filteredChecklists);
           cacheChecklistDefinitions(filteredChecklists);
-          console.log('Checklists SST carregados do Firebase');
+          // console.log('Checklists SST carregados do Firebase');
         } else {
           setChecklists([]);
         }

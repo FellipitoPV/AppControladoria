@@ -193,7 +193,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth(), async user => {
       if (user) {
-        console.log('Usuário já autenticado:', user.uid);
+        // console.log('Usuário já autenticado:', user.uid);
         setIsLoggedIn(true);
         await AsyncStorage.setItem('isLoggedIn', 'true');
         setIsReady(true);
@@ -230,7 +230,7 @@ export default function App() {
   }, [isLoggedIn]);
 
   const onNavigationReady = () => {
-    console.log('🚀 NavigationContainer is ready');
+    // console.log('🚀 NavigationContainer is ready');
     isNavigationReady.current = true;
 
     setNotificationNavigationHandler((screenName, params) => {
