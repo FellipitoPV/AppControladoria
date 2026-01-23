@@ -603,7 +603,7 @@ export default function SSTChecklistScreen({navigation}: any) {
             !canGenerateReport && styles.reportButtonDisabled,
           ]}
           activeOpacity={0.7}
-          disabled={!canGenerateReport}
+          // disabled={!canGenerateReport}
           onPress={() =>
             handleOpenReportModal(
               checklistId,
@@ -735,6 +735,7 @@ export default function SSTChecklistScreen({navigation}: any) {
           }))}
           mesAno={getMonthYearLabel()}
           loading={generatingReport}
+          variant="sst"
         />
       )}
     </Surface>

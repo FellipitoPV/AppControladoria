@@ -21,6 +21,7 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {customTheme} from '../../../../theme/theme';
 import SignatureCapture from '../../../../components/SignatureCapture';
+import {useUser} from '../../../../contexts/userContext';
 
 interface ChecklistItem {
   id: string;
@@ -42,6 +43,8 @@ interface ReportData {
   assinaturaBase64?: string;
 }
 
+type ReportVariant = 'meioAmbiente' | 'sst';
+
 interface ReportGeneratorModalProps {
   visible: boolean;
   onClose: () => void;
@@ -51,6 +54,7 @@ interface ReportGeneratorModalProps {
   itens: ChecklistItem[];
   mesAno: string;
   loading?: boolean;
+  variant?: ReportVariant;
 }
 
 export default function ReportGeneratorModal({
@@ -62,7 +66,11 @@ export default function ReportGeneratorModal({
   itens,
   mesAno,
   loading = false,
+  variant = 'meioAmbiente',
 }: ReportGeneratorModalProps) {
+  const {userInfo} = useUser();
+  const isSST = variant === 'sst';
+
   const [lider, setLider] = useState('');
   const [matricula, setMatricula] = useState('');
   const [atividade, setAtividade] = useState('');
@@ -92,21 +100,34 @@ export default function ReportGeneratorModal({
       if (!temPendencias) {
         setResultadoOpcao(1);
       }
+      // Pré-preenche o nome do responsável com o usuário logado
+      if (userInfo?.user) {
+        setResponsavelVerificacao(userInfo.user);
+      }
     } else {
-      // Limpa a assinatura quando fecha o modal
+      // Limpa os campos quando fecha o modal
       setAssinaturaBase64(null);
+      setLider('');
+      setMatricula('');
+      setAtividade('');
+      setTipoInspecao('Rotineira');
+      setResultadoOpcao(1);
+      setResponsavelVerificacao('');
+      setLocalResponsavel('');
     }
-  }, [visible, temPendencias]);
+  }, [visible, temPendencias, userInfo]);
 
   const handleGenerate = () => {
-    if (!lider.trim()) {
-      return;
-    }
-    if (!responsavelVerificacao.trim()) {
-      return;
-    }
-    if (!assinaturaBase64) {
-      return;
+    // Para SST, só precisa do responsável e assinatura
+    // Para Meio Ambiente, precisa também do líder
+    if (isSST) {
+      if (!responsavelVerificacao.trim() || !assinaturaBase64) {
+        return;
+      }
+    } else {
+      if (!lider.trim() || !responsavelVerificacao.trim() || !assinaturaBase64) {
+        return;
+      }
     }
 
     const data: ReportData = {
@@ -149,8 +170,9 @@ export default function ReportGeneratorModal({
     }
   };
 
-  const canGenerate =
-    lider.trim() && responsavelVerificacao.trim() && assinaturaBase64 && !loading;
+  const canGenerate = isSST
+    ? responsavelVerificacao.trim() && assinaturaBase64 && !loading
+    : lider.trim() && responsavelVerificacao.trim() && assinaturaBase64 && !loading;
 
   return (
     <>
@@ -187,125 +209,129 @@ export default function ReportGeneratorModal({
             <ScrollView
               style={styles.content}
               showsVerticalScrollIndicator={false}>
-              {/* Seção: Informações do Líder */}
-              <Text style={styles.sectionTitle}>Informações do Líder</Text>
+              {/* Seção: Informações do Líder - Apenas para Meio Ambiente */}
+              {!isSST && (
+                <>
+                  <Text style={styles.sectionTitle}>Informações do Líder</Text>
 
-              <TextInput
-                label="Nome do Líder *"
-                value={lider}
-                onChangeText={setLider}
-                mode="outlined"
-                style={styles.input}
-              />
-
-              <TextInput
-                label="Matrícula"
-                value={matricula}
-                onChangeText={setMatricula}
-                mode="outlined"
-                style={styles.input}
-              />
-
-              <Divider style={styles.divider} />
-
-              {/* Seção: Informações da Inspeção */}
-              <Text style={styles.sectionTitle}>Informações da Inspeção</Text>
-
-              <TextInput
-                label="Atividade"
-                value={atividade}
-                onChangeText={setAtividade}
-                mode="outlined"
-                style={styles.input}
-              />
-
-              <Text style={styles.fieldLabel}>Tipo de Inspeção</Text>
-              <RadioButton.Group
-                value={tipoInspecao}
-                onValueChange={value =>
-                  setTipoInspecao(
-                    value as 'Rotineira' | 'Programada' | 'Ocasional',
-                  )
-                }>
-                <View style={styles.radioRow}>
-                  <TouchableOpacity
-                    style={styles.radioOption}
-                    onPress={() => setTipoInspecao('Rotineira')}>
-                    <RadioButton value="Rotineira" />
-                    <Text>Rotineira</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.radioOption}
-                    onPress={() => setTipoInspecao('Programada')}>
-                    <RadioButton value="Programada" />
-                    <Text>Programada</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.radioOption}
-                    onPress={() => setTipoInspecao('Ocasional')}>
-                    <RadioButton value="Ocasional" />
-                    <Text>Ocasional</Text>
-                  </TouchableOpacity>
-                </View>
-              </RadioButton.Group>
-
-              <Divider style={styles.divider} />
-
-              {/* Seção: Resultado */}
-              <Text style={styles.sectionTitle}>Resultado da Inspeção</Text>
-
-              {temPendencias && (
-                <View style={styles.warningBox}>
-                  <MaterialCommunityIcons
-                    name="alert-circle"
-                    size={20}
-                    color="#FF9800"
+                  <TextInput
+                    label="Nome do Líder *"
+                    value={lider}
+                    onChangeText={setLider}
+                    mode="outlined"
+                    style={styles.input}
                   />
-                  <Text style={styles.warningText}>
-                    Itens com pendência: {numerosPendentes}
-                  </Text>
-                </View>
+
+                  <TextInput
+                    label="Matrícula"
+                    value={matricula}
+                    onChangeText={setMatricula}
+                    mode="outlined"
+                    style={styles.input}
+                  />
+
+                  <Divider style={styles.divider} />
+
+                  {/* Seção: Informações da Inspeção */}
+                  <Text style={styles.sectionTitle}>Informações da Inspeção</Text>
+
+                  <TextInput
+                    label="Atividade"
+                    value={atividade}
+                    onChangeText={setAtividade}
+                    mode="outlined"
+                    style={styles.input}
+                  />
+
+                  <Text style={styles.fieldLabel}>Tipo de Inspeção</Text>
+                  <RadioButton.Group
+                    value={tipoInspecao}
+                    onValueChange={value =>
+                      setTipoInspecao(
+                        value as 'Rotineira' | 'Programada' | 'Ocasional',
+                      )
+                    }>
+                    <View style={styles.radioRow}>
+                      <TouchableOpacity
+                        style={styles.radioOption}
+                        onPress={() => setTipoInspecao('Rotineira')}>
+                        <RadioButton value="Rotineira" />
+                        <Text>Rotineira</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.radioOption}
+                        onPress={() => setTipoInspecao('Programada')}>
+                        <RadioButton value="Programada" />
+                        <Text>Programada</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.radioOption}
+                        onPress={() => setTipoInspecao('Ocasional')}>
+                        <RadioButton value="Ocasional" />
+                        <Text>Ocasional</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </RadioButton.Group>
+
+                  <Divider style={styles.divider} />
+
+                  {/* Seção: Resultado */}
+                  <Text style={styles.sectionTitle}>Resultado da Inspeção</Text>
+
+                  {temPendencias && (
+                    <View style={styles.warningBox}>
+                      <MaterialCommunityIcons
+                        name="alert-circle"
+                        size={20}
+                        color="#FF9800"
+                      />
+                      <Text style={styles.warningText}>
+                        Itens com pendência: {numerosPendentes}
+                      </Text>
+                    </View>
+                  )}
+
+                  <RadioButton.Group
+                    value={String(resultadoOpcao)}
+                    onValueChange={value =>
+                      setResultadoOpcao(Number(value) as 1 | 2 | 3 | 4)
+                    }>
+                    <TouchableOpacity
+                      style={styles.resultOption}
+                      onPress={() => setResultadoOpcao(1)}>
+                      <RadioButton value="1" />
+                      <Text style={styles.resultText}>{getResultadoLabel(1)}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.resultOption}
+                      onPress={() => setResultadoOpcao(2)}>
+                      <RadioButton value="2" />
+                      <Text style={styles.resultText}>{getResultadoLabel(2)}</Text>
+                    </TouchableOpacity>
+
+                    {temPendencias && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.resultOption}
+                          onPress={() => setResultadoOpcao(3)}>
+                          <RadioButton value="3" />
+                          <Text style={styles.resultText}>{getResultadoLabel(3)}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.resultOption}
+                          onPress={() => setResultadoOpcao(4)}>
+                          <RadioButton value="4" />
+                          <Text style={styles.resultText}>{getResultadoLabel(4)}</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </RadioButton.Group>
+
+                  <Divider style={styles.divider} />
+                </>
               )}
-
-              <RadioButton.Group
-                value={String(resultadoOpcao)}
-                onValueChange={value =>
-                  setResultadoOpcao(Number(value) as 1 | 2 | 3 | 4)
-                }>
-                <TouchableOpacity
-                  style={styles.resultOption}
-                  onPress={() => setResultadoOpcao(1)}>
-                  <RadioButton value="1" />
-                  <Text style={styles.resultText}>{getResultadoLabel(1)}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.resultOption}
-                  onPress={() => setResultadoOpcao(2)}>
-                  <RadioButton value="2" />
-                  <Text style={styles.resultText}>{getResultadoLabel(2)}</Text>
-                </TouchableOpacity>
-
-                {temPendencias && (
-                  <>
-                    <TouchableOpacity
-                      style={styles.resultOption}
-                      onPress={() => setResultadoOpcao(3)}>
-                      <RadioButton value="3" />
-                      <Text style={styles.resultText}>{getResultadoLabel(3)}</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.resultOption}
-                      onPress={() => setResultadoOpcao(4)}>
-                      <RadioButton value="4" />
-                      <Text style={styles.resultText}>{getResultadoLabel(4)}</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </RadioButton.Group>
-
-              <Divider style={styles.divider} />
 
               {/* Seção: Verificação */}
               <Text style={styles.sectionTitle}>Verificado por</Text>
@@ -318,14 +344,17 @@ export default function ReportGeneratorModal({
                 style={styles.input}
               />
 
-              <TextInput
-                label="Setor/Área"
-                value={localResponsavel}
-                onChangeText={setLocalResponsavel}
-                mode="outlined"
-                placeholder="Ex: QSMS, Engenharia..."
-                style={styles.input}
-              />
+              {/* Campo Setor/Área - Apenas para Meio Ambiente */}
+              {!isSST && (
+                <TextInput
+                  label="Setor/Área"
+                  value={localResponsavel}
+                  onChangeText={setLocalResponsavel}
+                  mode="outlined"
+                  placeholder="Ex: QSMS, Engenharia..."
+                  style={styles.input}
+                />
+              )}
 
               {/* Campo de assinatura */}
               <Text style={styles.fieldLabel}>Assinatura *</Text>

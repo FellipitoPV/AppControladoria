@@ -734,6 +734,7 @@ export default function CheckListScreen({navigation}: any) {
           }))}
           mesAno={getMonthYearLabel()}
           loading={generatingReport}
+          
         />
       )}
     </Surface>
