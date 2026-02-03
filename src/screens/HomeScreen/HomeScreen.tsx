@@ -11,7 +11,6 @@ import {
     View
 } from 'react-native';
 import {
-    Card,
     Surface,
     Text,
 } from 'react-native-paper';
@@ -305,39 +304,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         fetchCarouselImages();
     }, []);
 
-    const DevelopmentAlert = () => (
-        <Card style={styles.developmentCard}>
-            <View style={styles.developmentContent}>
-                <View style={styles.iconContainer}>
-                    <Icon
-                        name="tools"
-                        size={32}
-                        color={customTheme.colors.onPrimary}
-                    />
-                </View>
-
-                <Text style={styles.developmentTitle}>
-                    Em Desenvolvimento
-                </Text>
-
-                <Text style={styles.developmentText}>
-                    Novas funcionalidades serão adicionadas em breve!
-                </Text>
-
-                <View style={styles.buildingContainer}>
-                    <Icon
-                        name="clock-outline"
-                        size={16}
-                        color={customTheme.colors.onPrimary}
-                    />
-                    <Text style={styles.buildingText}>
-                        Recursos em construção
-                    </Text>
-                </View>
-            </View>
-        </Card>
-    );
-
     return (
         <SafeAreaView style={styles.safeArea}>
             <Surface style={styles.container}>
@@ -402,8 +368,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 <ScrollView style={styles.content}>
                     {renderCarouselContent()}
                     <QuickActionsGrid />
-                    <DevelopmentAlert />
-                    {/* Resto do conteúdo ... */}
                 </ScrollView>
 
                 {userInfo && (
@@ -583,54 +547,6 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: 16,
         color: customTheme.colors.onSurfaceVariant,
-    },
-    developmentCard: {
-        marginHorizontal: 16,
-        marginTop: 16,
-        marginBottom: 24,
-        borderRadius: 16,
-        backgroundColor: customTheme.colors.surfaceVariant,
-        overflow: 'hidden',
-    },
-    developmentContent: {
-        padding: 20,
-        alignItems: 'center',
-    },
-    iconContainer: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: customTheme.colors.primary,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    developmentTitle: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: customTheme.colors.onSurface,
-        marginBottom: 8,
-    },
-    developmentText: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-        textAlign: 'center',
-        lineHeight: 20,
-        marginBottom: 16,
-    },
-    buildingContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: customTheme.colors.primary,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        gap: 6,
-    },
-    buildingText: {
-        fontSize: 12,
-        color: customTheme.colors.onPrimary,
-        fontWeight: '500',
     },
     avatarContainer: {
         width: 40,

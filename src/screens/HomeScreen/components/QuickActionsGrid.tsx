@@ -1,8 +1,6 @@
 // QuickActionsGrid.js
 
 import {
-  Dimensions,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -12,7 +10,7 @@ import {
   ParamListBase,
   useNavigation,
 } from '@react-navigation/native';
-import React, {useCallback, useState} from 'react';
+import React, {useCallback} from 'react';
 
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {Text} from 'react-native-paper';
@@ -32,10 +30,8 @@ interface QuickAction {
 }
 
 const QuickActionsGrid = () => {
-  const [currentPage, setCurrentPage] = useState(0);
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const {userInfo} = useUser();
-  const {width} = Dimensions.get('window');
 
   // Função auxiliar para verificar nível de acesso
   const getUserAccessLevel = (moduleId: string): number => {
@@ -106,10 +102,10 @@ const QuickActionsGrid = () => {
       },
       {
         id: '6',
-        title: 'SST',
-        icon: 'shield-account', // ou 'hard-hat' ou 'medical-bag'
+        title: 'QSMS',
+        icon: 'shield-check',
         color: customTheme.colors.primary,
-        route: 'SSTScreen',
+        route: 'QSMSScreen',
         access: {
           moduleId: 'sst',
           minLevel: 1,
@@ -165,25 +161,6 @@ const QuickActionsGrid = () => {
       }));
   }, [quickActions, userInfo]);
 
-  // Agora use filteredActions para criar as páginas
-  // Criar páginas com as ações filtradas
-  const pages = React.useMemo(() => {
-    return filteredActions.reduce((acc, item, index) => {
-      const pageIndex = Math.floor(index / 4); // Mudou de 4 para 9
-      if (!acc[pageIndex]) {
-        acc[pageIndex] = [];
-      }
-      acc[pageIndex].push(item);
-      return acc;
-    }, [] as (QuickAction & {adminView?: boolean})[][]);
-  }, [filteredActions]);
-
-  const handleScroll = (event: any) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const page = Math.round(offsetX / width);
-    setCurrentPage(page);
-  };
-
   const handleNavigation = useCallback(
     (route: string) => {
       try {
@@ -199,79 +176,44 @@ const QuickActionsGrid = () => {
     <View style={styles.container}>
       {filteredActions.length > 0 ? (
         <>
-          <View style={styles.header}>
-            <Text style={styles.sectionTitle}>Atalhos</Text>
-            <Text style={styles.pageIndicator}>
-              {currentPage + 1}/{pages.length}
-            </Text>
-          </View>
-
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={handleScroll}
-            decelerationRate="fast"
-            snapToInterval={width}>
-            {pages.map((page, pageIndex) => (
-              <View key={`page-${pageIndex}`} style={[styles.page, {width}]}>
-                <View style={styles.gridContainer}>
-                  {page.map((action: QuickAction & {adminView?: boolean}) => (
-                    <TouchableOpacity
-                      key={action.id}
-                      style={styles.actionButton}
-                      onPress={() => handleNavigation(action.route)}>
-                      <View style={styles.iconWrapper}>
-                        <View
-                          style={[
-                            styles.iconContainer,
-                            {backgroundColor: `${action.color}20`},
-                          ]}>
-                          <Icon
-                            name={action.icon}
-                            size={28}
-                            color={action.color}
-                          />
-                        </View>
-                        {action.adminView && (
-                          <View style={styles.adminBadge}>
-                            <Icon
-                              name="shield-crown"
-                              size={12}
-                              color={customTheme.colors.primary}
-                            />
-                          </View>
-                        )}
-                      </View>
-                      <Text
-                        style={[
-                          styles.actionText,
-                          action.adminView && styles.adminText,
-                        ]}
-                        numberOfLines={2}>
-                        {action.title}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+          <Text style={styles.sectionTitle}>Módulos</Text>
+          <View style={styles.gridContainer}>
+            {filteredActions.map((action: QuickAction & {adminView?: boolean}) => (
+              <TouchableOpacity
+                key={action.id}
+                style={styles.actionButton}
+                onPress={() => handleNavigation(action.route)}>
+                <View style={styles.iconWrapper}>
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      {backgroundColor: `${action.color}15`},
+                    ]}>
+                    <Icon
+                      name={action.icon}
+                      size={28}
+                      color={action.color}
+                    />
+                  </View>
+                  {action.adminView && (
+                    <View style={styles.adminBadge}>
+                      <Icon
+                        name="shield-crown"
+                        size={12}
+                        color={customTheme.colors.primary}
+                      />
+                    </View>
+                  )}
                 </View>
-              </View>
-            ))}
-          </ScrollView>
-
-          <View style={styles.paginationDots}>
-            {pages.map((_, index) => (
-              <View
-                key={`dot-${index}`}
-                style={[
-                  styles.dot,
-                  {
-                    backgroundColor:
-                      currentPage === index
-                        ? customTheme.colors.primary
-                        : customTheme.colors.surfaceVariant,
-                  },
-                ]}
-              />
+                <Text
+                  style={[
+                    styles.actionText,
+                    action.adminView && styles.adminText,
+                  ]}
+                  numberOfLines={2}>
+                  {action.title}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
         </>
@@ -281,41 +223,50 @@ const QuickActionsGrid = () => {
 };
 
 const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: customTheme.colors.onBackground,
+    marginBottom: 16,
+  },
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-evenly', // Mudou de center
-    gap: 12, // Reduzi um pouco o gap
-    paddingHorizontal: 16,
-    width: '100%',
+    justifyContent: 'flex-start',
   },
   actionButton: {
-    width: '20%', // Define largura proporcional para 3 colunas
+    width: '25%', // 4 colunas
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
+  },
+  iconWrapper: {
+    position: 'relative',
   },
   iconContainer: {
-    width: 64,
-    height: 64,
+    width: 56,
+    height: 56,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   actionText: {
-    fontSize: 11, // Reduzi ligeiramente
+    fontSize: 11,
     color: customTheme.colors.onSurface,
     textAlign: 'center',
     lineHeight: 14,
-  },
-  iconWrapper: {
-    position: 'relative',
+    paddingHorizontal: 4,
   },
   adminBadge: {
     position: 'absolute',
-    right: 0,
+    right: -2,
+    top: -2,
     backgroundColor: customTheme.colors.primaryContainer,
-    borderRadius: 12,
+    borderRadius: 10,
     width: 18,
     height: 18,
     justifyContent: 'center',
@@ -326,41 +277,6 @@ const styles = StyleSheet.create({
   adminText: {
     color: customTheme.colors.primary,
     fontWeight: '500',
-  },
-  container: {
-    marginVertical: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: customTheme.colors.onBackground,
-  },
-  pageIndicator: {
-    fontSize: 14,
-    color: customTheme.colors.onSurfaceVariant,
-  },
-  page: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  paginationDots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
-    gap: 8,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
 });
 

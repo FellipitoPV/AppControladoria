@@ -60,8 +60,9 @@ export default function LavagemScreen({ navigation }: any) {
 
     const getStartOfWeek = () => {
         const date = new Date();
-        const day = date.getDay(); // 0-6
-        const diff = date.getDate() - day;
+        const day = date.getDay(); // 0 = domingo, 1 = segunda, ..., 6 = sábado
+        // Ajusta para semana começando na segunda-feira
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
         date.setDate(diff);
         date.setHours(0, 0, 0, 0);
         return date;

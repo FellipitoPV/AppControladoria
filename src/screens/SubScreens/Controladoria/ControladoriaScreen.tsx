@@ -320,12 +320,6 @@ export default function ControladoriaScreen({ navigation }: any) {
                             onPress={() => navigation.navigate('RdoHist')}
                         />
 
-                        <ActionButton
-                            icon="list-status"
-                            text="Check-List"
-                            onPress={() => navigation.navigate('CheckList')}
-                        />
-
                     </View>
                 </View>
 

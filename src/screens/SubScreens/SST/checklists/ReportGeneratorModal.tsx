@@ -41,9 +41,18 @@ interface ReportData {
   responsavelVerificacao: string;
   localResponsavel: string;
   assinaturaBase64?: string;
+  variant?: ReportVariant;
+  // Campos para variante Qualidade
+  dataAuditoria?: string;
+  empresaAuditada?: string;
+  escopoAtividade?: string;
+  responsavelEmpresa?: string;
+  gestorContrato?: string;
+  acompanhantesAuditoria?: string;
+  auditor?: string;
 }
 
-type ReportVariant = 'meioAmbiente' | 'sst';
+type ReportVariant = 'meioAmbiente' | 'sst' | 'qualidade';
 
 interface ReportGeneratorModalProps {
   visible: boolean;
@@ -70,6 +79,7 @@ export default function ReportGeneratorModal({
 }: ReportGeneratorModalProps) {
   const {userInfo} = useUser();
   const isSST = variant === 'sst';
+  const isQualidade = variant === 'qualidade';
 
   const [lider, setLider] = useState('');
   const [matricula, setMatricula] = useState('');
@@ -84,6 +94,15 @@ export default function ReportGeneratorModal({
   // Estados da assinatura
   const [signatureModalVisible, setSignatureModalVisible] = useState(false);
   const [assinaturaBase64, setAssinaturaBase64] = useState<string | null>(null);
+
+  // Estados para variante Qualidade
+  const [dataAuditoria, setDataAuditoria] = useState('');
+  const [empresaAuditada, setEmpresaAuditada] = useState('');
+  const [escopoAtividade, setEscopoAtividade] = useState('');
+  const [responsavelEmpresa, setResponsavelEmpresa] = useState('');
+  const [gestorContrato, setGestorContrato] = useState('');
+  const [acompanhantesAuditoria, setAcompanhantesAuditoria] = useState('');
+  const [auditor, setAuditor] = useState('');
 
   // Identifica itens com pendência
   const itensPendentes = itens
@@ -114,13 +133,24 @@ export default function ReportGeneratorModal({
       setResultadoOpcao(1);
       setResponsavelVerificacao('');
       setLocalResponsavel('');
+      // Reset campos de qualidade
+      setDataAuditoria('');
+      setEmpresaAuditada('');
+      setEscopoAtividade('');
+      setResponsavelEmpresa('');
+      setGestorContrato('');
+      setAcompanhantesAuditoria('');
+      setAuditor('');
     }
   }, [visible, temPendencias, userInfo]);
 
   const handleGenerate = () => {
-    // Para SST, só precisa do responsável e assinatura
-    // Para Meio Ambiente, precisa também do líder
-    if (isSST) {
+    // Validação por variante
+    if (isQualidade) {
+      if (!dataAuditoria.trim() || !empresaAuditada.trim() || !auditor.trim()) {
+        return;
+      }
+    } else if (isSST) {
       if (!responsavelVerificacao.trim() || !assinaturaBase64) {
         return;
       }
@@ -141,7 +171,18 @@ export default function ReportGeneratorModal({
       resultadoOpcao,
       responsavelVerificacao: responsavelVerificacao.trim(),
       localResponsavel: localResponsavel.trim(),
-      assinaturaBase64,
+      assinaturaBase64: assinaturaBase64 || undefined,
+      variant,
+      // Dados de qualidade
+      ...(isQualidade && {
+        dataAuditoria: dataAuditoria.trim(),
+        empresaAuditada: empresaAuditada.trim(),
+        escopoAtividade: escopoAtividade.trim(),
+        responsavelEmpresa: responsavelEmpresa.trim(),
+        gestorContrato: gestorContrato.trim(),
+        acompanhantesAuditoria: acompanhantesAuditoria.trim(),
+        auditor: auditor.trim(),
+      }),
     };
 
     onGenerate(data);
@@ -170,9 +211,11 @@ export default function ReportGeneratorModal({
     }
   };
 
-  const canGenerate = isSST
-    ? responsavelVerificacao.trim() && assinaturaBase64 && !loading
-    : lider.trim() && responsavelVerificacao.trim() && assinaturaBase64 && !loading;
+  const canGenerate = isQualidade
+    ? dataAuditoria.trim() && empresaAuditada.trim() && auditor.trim() && !loading
+    : isSST
+      ? responsavelVerificacao.trim() && assinaturaBase64 && !loading
+      : lider.trim() && responsavelVerificacao.trim() && assinaturaBase64 && !loading;
 
   return (
     <>
@@ -209,8 +252,81 @@ export default function ReportGeneratorModal({
             <ScrollView
               style={styles.content}
               showsVerticalScrollIndicator={false}>
+              {/* Seção: Informações da Auditoria - Apenas para Qualidade */}
+              {isQualidade && (
+                <>
+                  <Text style={styles.sectionTitle}>Informações da Auditoria</Text>
+
+                  <TextInput
+                    label="Data *"
+                    value={dataAuditoria}
+                    onChangeText={setDataAuditoria}
+                    mode="outlined"
+                    placeholder="DD/MM/AAAA"
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    label="Empresa Auditada *"
+                    value={empresaAuditada}
+                    onChangeText={setEmpresaAuditada}
+                    mode="outlined"
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    label="Escopo Resumido da Atividade"
+                    value={escopoAtividade}
+                    onChangeText={setEscopoAtividade}
+                    mode="outlined"
+                    multiline
+                    numberOfLines={2}
+                    style={styles.input}
+                  />
+
+                  <Divider style={styles.divider} />
+
+                  <Text style={styles.sectionTitle}>Responsáveis</Text>
+
+                  <TextInput
+                    label="Responsável pela Empresa Auditada"
+                    value={responsavelEmpresa}
+                    onChangeText={setResponsavelEmpresa}
+                    mode="outlined"
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    label="Gestor do Contrato"
+                    value={gestorContrato}
+                    onChangeText={setGestorContrato}
+                    mode="outlined"
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    label="Acompanhantes da Auditoria"
+                    value={acompanhantesAuditoria}
+                    onChangeText={setAcompanhantesAuditoria}
+                    mode="outlined"
+                    placeholder="Separe os nomes por vírgula"
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    label="Auditor *"
+                    value={auditor}
+                    onChangeText={setAuditor}
+                    mode="outlined"
+                    style={styles.input}
+                  />
+
+                  <Divider style={styles.divider} />
+                </>
+              )}
+
               {/* Seção: Informações do Líder - Apenas para Meio Ambiente */}
-              {!isSST && (
+              {!isSST && !isQualidade && (
                 <>
                   <Text style={styles.sectionTitle}>Informações do Líder</Text>
 
@@ -333,76 +449,80 @@ export default function ReportGeneratorModal({
                 </>
               )}
 
-              {/* Seção: Verificação */}
-              <Text style={styles.sectionTitle}>Verificado por</Text>
+              {/* Seção: Verificação - Não aparece para Qualidade */}
+              {!isQualidade && (
+                <>
+                  <Text style={styles.sectionTitle}>Verificado por</Text>
 
-              <TextInput
-                label="Nome do Responsável *"
-                value={responsavelVerificacao}
-                onChangeText={setResponsavelVerificacao}
-                mode="outlined"
-                style={styles.input}
-              />
-
-              {/* Campo Setor/Área - Apenas para Meio Ambiente */}
-              {!isSST && (
-                <TextInput
-                  label="Setor/Área"
-                  value={localResponsavel}
-                  onChangeText={setLocalResponsavel}
-                  mode="outlined"
-                  placeholder="Ex: QSMS, Engenharia..."
-                  style={styles.input}
-                />
-              )}
-
-              {/* Campo de assinatura */}
-              <Text style={styles.fieldLabel}>Assinatura *</Text>
-              {assinaturaBase64 ? (
-                <View style={styles.signaturePreviewContainer}>
-                  <Image
-                    source={{uri: assinaturaBase64}}
-                    style={styles.signaturePreview}
-                    resizeMode="contain"
+                  <TextInput
+                    label="Nome do Responsável *"
+                    value={responsavelVerificacao}
+                    onChangeText={setResponsavelVerificacao}
+                    mode="outlined"
+                    style={styles.input}
                   />
-                  <View style={styles.signatureActions}>
+
+                  {/* Campo Setor/Área - Apenas para Meio Ambiente */}
+                  {!isSST && (
+                    <TextInput
+                      label="Setor/Área"
+                      value={localResponsavel}
+                      onChangeText={setLocalResponsavel}
+                      mode="outlined"
+                      placeholder="Ex: QSMS, Engenharia..."
+                      style={styles.input}
+                    />
+                  )}
+
+                  {/* Campo de assinatura */}
+                  <Text style={styles.fieldLabel}>Assinatura *</Text>
+                  {assinaturaBase64 ? (
+                    <View style={styles.signaturePreviewContainer}>
+                      <Image
+                        source={{uri: assinaturaBase64}}
+                        style={styles.signaturePreview}
+                        resizeMode="contain"
+                      />
+                      <View style={styles.signatureActions}>
+                        <TouchableOpacity
+                          style={styles.signatureActionButton}
+                          onPress={() => setSignatureModalVisible(true)}>
+                          <MaterialCommunityIcons
+                            name="pencil"
+                            size={20}
+                            color={customTheme.colors.primary}
+                          />
+                          <Text style={styles.signatureActionText}>Editar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.signatureActionButton}
+                          onPress={handleClearSignature}>
+                          <MaterialCommunityIcons
+                            name="delete"
+                            size={20}
+                            color="#D32F2F"
+                          />
+                          <Text style={[styles.signatureActionText, {color: '#D32F2F'}]}>
+                            Remover
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
                     <TouchableOpacity
-                      style={styles.signatureActionButton}
+                      style={styles.signatureBox}
                       onPress={() => setSignatureModalVisible(true)}>
                       <MaterialCommunityIcons
-                        name="pencil"
-                        size={20}
+                        name="draw"
+                        size={32}
                         color={customTheme.colors.primary}
                       />
-                      <Text style={styles.signatureActionText}>Editar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.signatureActionButton}
-                      onPress={handleClearSignature}>
-                      <MaterialCommunityIcons
-                        name="delete"
-                        size={20}
-                        color="#D32F2F"
-                      />
-                      <Text style={[styles.signatureActionText, {color: '#D32F2F'}]}>
-                        Remover
+                      <Text style={styles.signatureText}>
+                        Toque para adicionar assinatura
                       </Text>
                     </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.signatureBox}
-                  onPress={() => setSignatureModalVisible(true)}>
-                  <MaterialCommunityIcons
-                    name="draw"
-                    size={32}
-                    color={customTheme.colors.primary}
-                  />
-                  <Text style={styles.signatureText}>
-                    Toque para adicionar assinatura
-                  </Text>
-                </TouchableOpacity>
+                  )}
+                </>
               )}
             </ScrollView>
 

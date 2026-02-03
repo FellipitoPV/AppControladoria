@@ -205,21 +205,18 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
             // Combinar dados dos dois formatos
             const todosDados = [...dadosNovos, ...dadosAntigos];
 
-            // Ordenar por data de criação (do mais novo para o mais velho)
+            // Ordenar pela data da lavagem (do mais novo para o mais velho)
             const dadosOrdenados = todosDados.sort((a, b) => {
                 let dataA: Date = new Date(0); // Data padrão para casos inválidos
                 let dataB: Date = new Date(0);
 
-                if (a.createdAt instanceof Timestamp && !isNaN(a.createdAt.seconds)) {
-                    dataA = a.createdAt.toDate();
-                } else if (typeof a.createdAt === 'string' && a.createdAt.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*Z$/)) {
-                    dataA = new Date(a.createdAt);
+                // Usar o campo 'data' (data da lavagem) para ordenação
+                if (a.data instanceof Timestamp && !isNaN(a.data.seconds)) {
+                    dataA = a.data.toDate();
                 }
 
-                if (b.createdAt instanceof Timestamp && !isNaN(b.createdAt.seconds)) {
-                    dataB = b.createdAt.toDate();
-                } else if (typeof b.createdAt === 'string' && b.createdAt.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*Z$/)) {
-                    dataB = new Date(b.createdAt);
+                if (b.data instanceof Timestamp && !isNaN(b.data.seconds)) {
+                    dataB = b.data.toDate();
                 }
 
                 // Ordenar do mais recente (maior timestamp) para o mais antigo (menor timestamp)

@@ -27,6 +27,13 @@ interface ChecklistLocation {
   status: ChecklistStatus;
   lastUpdate?: string;
   monthlyStatus?: Record<number, ChecklistStatus>;
+  useCustomQuestions?: boolean;
+  questions?: Array<{
+    id: string;
+    label: string;
+    quantidade?: string;
+    sectionTitle?: string;
+  }>;
 }
 
 interface ChecklistDefinition {
@@ -40,6 +47,7 @@ interface ChecklistDefinition {
     id: string;
     label: string;
     quantidade?: string;
+    sectionTitle?: string; // Título da seção
   }>;
   locations: ChecklistLocation[];
 }
@@ -72,10 +80,43 @@ interface ReportModalData {
   checklistTitle: string;
   locationId: string;
   locationName: string;
-  questions: Array<{id: string; label: string}>;
+  questions: Array<{id: string; label: string; sectionTitle?: string}>;
 }
 
-export default function SSTChecklistScreen({navigation}: any) {
+export interface ChecklistScreenProps {
+  navigation: any;
+  route?: {
+    params?: {
+      /**
+       * Nome exato da categoria no Firebase.
+       * Ex: "QSMS - Geral", "QSMS - Meio Ambiente", "QSMS - Qualidade"
+       */
+      category?: string;
+      /**
+       * Título exibido no header da tela
+       */
+      title?: string;
+      /**
+       * Nome do ícone (MaterialCommunityIcons)
+       */
+      headerIcon?: string;
+      /**
+       * Variante do relatório: 'sst', 'meioAmbiente' ou 'qualidade'
+       */
+      reportVariant?: 'sst' | 'meioAmbiente' | 'qualidade';
+    };
+  };
+}
+
+export default function SSTChecklistScreen({navigation, route}: ChecklistScreenProps) {
+  // Props com valores padrão
+  const category = route?.params?.category || 'QSMS - Geral';
+  const screenTitle = route?.params?.title || 'Checklist SST';
+  const headerIcon = route?.params?.headerIcon || 'shield-check';
+  const reportVariant = route?.params?.reportVariant || 'sst';
+
+  // Gerar chave de cache única baseada na categoria
+  const cacheKey = category.replace(/\s+/g, '_').toLowerCase();
   const {userInfo} = useUser();
   const {isOnline, syncStatus} = useChecklistSync();
   const [loading, setLoading] = useState(true);
@@ -114,13 +155,13 @@ export default function SSTChecklistScreen({navigation}: any) {
     return iconMap[lucideIcon] || 'clipboard-check';
   };
 
-  // Função para cachear definições
+  // Função para cachear definições (usa cacheKey dinâmica)
   const cacheChecklistDefinitions = async (
     definitions: ChecklistDefinition[],
   ) => {
     try {
       await AsyncStorage.setItem(
-        '@checklist_definitions_sst',
+        `@checklist_definitions_${cacheKey}`,
         JSON.stringify(definitions),
       );
     } catch (error) {
@@ -130,7 +171,7 @@ export default function SSTChecklistScreen({navigation}: any) {
 
   const loadCachedDefinitions = async () => {
     try {
-      const cached = await AsyncStorage.getItem('@checklist_definitions_sst');
+      const cached = await AsyncStorage.getItem(`@checklist_definitions_${cacheKey}`);
       if (cached) {
         const definitions = JSON.parse(cached);
         setChecklists(definitions);
@@ -155,15 +196,16 @@ export default function SSTChecklistScreen({navigation}: any) {
         if (snapshot.exists()) {
           const data = snapshot.val();
 
+          // Filtrar pela categoria passada como parâmetro
           const filteredChecklists = Object.values(data)
             .filter(
-              (checklist: any) => checklist.category === 'QSMS - Geral',
+              (checklist: any) => checklist.category === category,
             )
             .map((checklist: any) => checklist as ChecklistDefinition);
 
           setChecklists(filteredChecklists);
           cacheChecklistDefinitions(filteredChecklists);
-          // console.log('Checklists SST carregados do Firebase');
+          console.log(`Checklists ${category} carregados do Firebase`);
         } else {
           setChecklists([]);
         }
@@ -260,11 +302,11 @@ export default function SSTChecklistScreen({navigation}: any) {
     setChecklists(updatedChecklists);
   };
 
-  // Cachear dados salvos
+  // Cachear dados salvos (usa cacheKey dinâmica)
   const cacheSavedData = async (year: string, data: any) => {
     try {
       await AsyncStorage.setItem(
-        `@checklist_saved_sst_${year}`,
+        `@checklist_saved_${cacheKey}_${year}`,
         JSON.stringify(data),
       );
     } catch (error) {
@@ -274,7 +316,7 @@ export default function SSTChecklistScreen({navigation}: any) {
 
   const loadCachedSavedData = async (year: string) => {
     try {
-      const cached = await AsyncStorage.getItem(`@checklist_saved_sst_${year}`);
+      const cached = await AsyncStorage.getItem(`@checklist_saved_${cacheKey}_${year}`);
       if (cached) {
         return JSON.parse(cached);
       }
@@ -453,6 +495,7 @@ export default function SSTChecklistScreen({navigation}: any) {
           id: q.id,
           label: q.label,
           resultado: resultado || 'NA',
+          sectionTitle: q.sectionTitle || '',
         };
       });
 
@@ -564,7 +607,7 @@ export default function SSTChecklistScreen({navigation}: any) {
     checklistTitle: string;
     checklistIcon: string;
     checklistFrequency: string;
-    questions: Array<{id: string; label: string}>;
+    questions: Array<{id: string; label: string; sectionTitle?: string}>;
   }) => {
     // Pegar o status do mês atualmente selecionado
     const currentMonth = selectedMonth.getMonth() + 1;
@@ -577,25 +620,25 @@ export default function SSTChecklistScreen({navigation}: any) {
       currentMonthStatus === 'Concluído com NC';
 
     return (
-      <View style={[styles.locationCard, {backgroundColor: cardBackground}]}>
-        <TouchableOpacity
-          style={styles.locationContent}
-          activeOpacity={0.7}
-          onPress={() => {
-            navigation.navigate('ChecklistForm', {
-              checklistId,
-              checklistTitle,
-              checklistIcon,
-              checklistFrequency,
-              location,
-              selectedMonth,
-            });
-          }}>
+      <TouchableOpacity
+        style={[styles.locationCard, {backgroundColor: cardBackground}]}
+        activeOpacity={0.7}
+        onPress={() => {
+          navigation.navigate('ChecklistForm', {
+            checklistId,
+            checklistTitle,
+            checklistIcon,
+            checklistFrequency,
+            location,
+            selectedMonth,
+          });
+        }}>
+        <View style={styles.locationContent}>
           <View style={[styles.statusDot, {backgroundColor: statusColor}]} />
           <Text style={styles.locationName} numberOfLines={2}>
             {location.name}
           </Text>
-        </TouchableOpacity>
+        </View>
 
         <TouchableOpacity
           style={[
@@ -603,23 +646,23 @@ export default function SSTChecklistScreen({navigation}: any) {
             !canGenerateReport && styles.reportButtonDisabled,
           ]}
           activeOpacity={0.7}
-          // disabled={!canGenerateReport}
-          onPress={() =>
+          onPress={(e) => {
+            e.stopPropagation();
             handleOpenReportModal(
               checklistId,
               checklistTitle,
               location.id,
               location.name,
               questions,
-            )
-          }>
+            );
+          }}>
           <MaterialCommunityIcons
             name="file-pdf-box"
             size={22}
             color={canGenerateReport ? '#D32F2F' : '#BDBDBD'}
           />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -627,8 +670,8 @@ export default function SSTChecklistScreen({navigation}: any) {
     return (
       <Surface style={styles.container}>
         <ModernHeader
-          title="Checklist SST"
-          iconName="shield-check"
+          title={screenTitle}
+          iconName={headerIcon}
           onBackPress={() => navigation.goBack()}
         />
         <View style={styles.loadingContainer}>
@@ -641,8 +684,8 @@ export default function SSTChecklistScreen({navigation}: any) {
   return (
     <Surface style={styles.container}>
       <ModernHeader
-        title="Checklist SST"
-        iconName="shield-check"
+        title={screenTitle}
+        iconName={headerIcon}
         onBackPress={() => navigation.goBack()}
       />
 
@@ -709,7 +752,11 @@ export default function SSTChecklistScreen({navigation}: any) {
                         checklistTitle={checklist.title}
                         checklistIcon={checklist.icon}
                         checklistFrequency={checklist.frequency}
-                        questions={checklist.questions}
+                        questions={
+                          location.useCustomQuestions && location.questions?.length > 0
+                            ? location.questions
+                            : checklist.questions
+                        }
                       />
                     ))}
                   </View>
@@ -735,7 +782,7 @@ export default function SSTChecklistScreen({navigation}: any) {
           }))}
           mesAno={getMonthYearLabel()}
           loading={generatingReport}
-          variant="sst"
+          variant={reportVariant}
         />
       )}
     </Surface>

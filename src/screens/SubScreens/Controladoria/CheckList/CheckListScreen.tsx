@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform} from 'react-native';
+import {View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform, Modal, Dimensions} from 'react-native';
 import {Surface, Text, Card, ActivityIndicator} from 'react-native-paper';
 import {ref, onValue} from 'firebase/database';
 import {dbRealTime} from '../../../../../firebase';
@@ -90,6 +90,9 @@ export default function CheckListScreen({navigation}: any) {
     null,
   );
   const [generatingReport, setGeneratingReport] = useState(false);
+
+  // Estado do modal de seleção de mês/ano
+  const [monthPickerVisible, setMonthPickerVisible] = useState(false);
 
   // Mapear ícones Lucide para MaterialCommunityIcons
   const getIconName = (lucideIcon: string): string => {
@@ -485,23 +488,119 @@ export default function CheckListScreen({navigation}: any) {
     return `${months[selectedMonth.getMonth()]}/${selectedMonth.getFullYear()}`;
   };
 
-  const MonthNavigator = () => {
-    const months = [
-      'Janeiro',
-      'Fevereiro',
-      'Março',
-      'Abril',
-      'Maio',
-      'Junho',
-      'Julho',
-      'Agosto',
-      'Setembro',
-      'Outubro',
-      'Novembro',
-      'Dezembro',
-    ];
+  const MONTHS = [
+    'Janeiro',
+    'Fevereiro',
+    'Março',
+    'Abril',
+    'Maio',
+    'Junho',
+    'Julho',
+    'Agosto',
+    'Setembro',
+    'Outubro',
+    'Novembro',
+    'Dezembro',
+  ];
 
-    const monthName = months[selectedMonth.getMonth()];
+  const MonthYearPickerModal = () => {
+    const [tempYear, setTempYear] = useState(selectedMonth.getFullYear());
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({length: 10}, (_, i) => currentYear - 5 + i);
+
+    const handleSelectMonth = (monthIndex: number) => {
+      const newDate = new Date(tempYear, monthIndex, 1);
+      setSelectedMonth(newDate);
+      setMonthPickerVisible(false);
+    };
+
+    return (
+      <Modal
+        visible={monthPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMonthPickerVisible(false)}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setMonthPickerVisible(false)}>
+          <View style={styles.monthPickerContainer}>
+            <TouchableOpacity activeOpacity={1}>
+              {/* Header do modal */}
+              <View style={styles.monthPickerHeader}>
+                <Text style={styles.monthPickerTitle}>Selecionar Período</Text>
+                <TouchableOpacity onPress={() => setMonthPickerVisible(false)}>
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={24}
+                    color={customTheme.colors.onSurface}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Seletor de ano */}
+              <View style={styles.yearSelector}>
+                <TouchableOpacity
+                  style={styles.yearNavButton}
+                  onPress={() => setTempYear(prev => prev - 1)}>
+                  <MaterialCommunityIcons
+                    name="chevron-left"
+                    size={28}
+                    color={customTheme.colors.primary}
+                  />
+                </TouchableOpacity>
+                <Text style={styles.yearText}>{tempYear}</Text>
+                <TouchableOpacity
+                  style={styles.yearNavButton}
+                  onPress={() => setTempYear(prev => prev + 1)}>
+                  <MaterialCommunityIcons
+                    name="chevron-right"
+                    size={28}
+                    color={customTheme.colors.primary}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Grid de meses */}
+              <View style={styles.monthsGrid}>
+                {MONTHS.map((month, index) => {
+                  const isSelected =
+                    selectedMonth.getMonth() === index &&
+                    selectedMonth.getFullYear() === tempYear;
+                  const isCurrentMonth =
+                    new Date().getMonth() === index &&
+                    new Date().getFullYear() === tempYear;
+
+                  return (
+                    <TouchableOpacity
+                      key={month}
+                      style={[
+                        styles.monthItem,
+                        isSelected && styles.monthItemSelected,
+                        isCurrentMonth && !isSelected && styles.monthItemCurrent,
+                      ]}
+                      onPress={() => handleSelectMonth(index)}>
+                      <Text
+                        style={[
+                          styles.monthItemText,
+                          isSelected && styles.monthItemTextSelected,
+                          isCurrentMonth && !isSelected && styles.monthItemTextCurrent,
+                        ]}>
+                        {month.substring(0, 3)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
+
+  const MonthNavigator = () => {
+    const monthName = MONTHS[selectedMonth.getMonth()];
     const year = selectedMonth.getFullYear();
 
     const goToPreviousMonth = () => {
@@ -528,7 +627,10 @@ export default function CheckListScreen({navigation}: any) {
           />
         </TouchableOpacity>
 
-        <View style={styles.monthDisplay}>
+        <TouchableOpacity
+          style={styles.monthDisplay}
+          onPress={() => setMonthPickerVisible(true)}
+          activeOpacity={0.7}>
           <MaterialCommunityIcons
             name="calendar-month"
             size={20}
@@ -537,7 +639,12 @@ export default function CheckListScreen({navigation}: any) {
           <Text style={styles.monthDisplayText}>
             {monthName} de {year}
           </Text>
-        </View>
+          <MaterialCommunityIcons
+            name="chevron-down"
+            size={18}
+            color={customTheme.colors.primary}
+          />
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.monthNavButton} onPress={goToNextMonth}>
           <MaterialCommunityIcons
@@ -576,25 +683,25 @@ export default function CheckListScreen({navigation}: any) {
       currentMonthStatus === 'Concluído com NC';
 
     return (
-      <View style={[styles.locationCard, {backgroundColor: cardBackground}]}>
-        <TouchableOpacity
-          style={styles.locationContent}
-          activeOpacity={0.7}
-          onPress={() => {
-            navigation.navigate('ChecklistForm', {
-              checklistId,
-              checklistTitle,
-              checklistIcon,
-              checklistFrequency,
-              location,
-              selectedMonth,
-            });
-          }}>
+      <TouchableOpacity
+        style={[styles.locationCard, {backgroundColor: cardBackground}]}
+        activeOpacity={0.7}
+        onPress={() => {
+          navigation.navigate('ChecklistForm', {
+            checklistId,
+            checklistTitle,
+            checklistIcon,
+            checklistFrequency,
+            location,
+            selectedMonth,
+          });
+        }}>
+        <View style={styles.locationContent}>
           <View style={[styles.statusDot, {backgroundColor: statusColor}]} />
           <Text style={styles.locationName} numberOfLines={2}>
             {location.name}
           </Text>
-        </TouchableOpacity>
+        </View>
 
         <TouchableOpacity
           style={[
@@ -603,22 +710,23 @@ export default function CheckListScreen({navigation}: any) {
           ]}
           activeOpacity={0.7}
           disabled={!canGenerateReport}
-          onPress={() =>
+          onPress={(e) => {
+            e.stopPropagation();
             handleOpenReportModal(
               checklistId,
               checklistTitle,
               location.id,
               location.name,
               questions,
-            )
-          }>
+            );
+          }}>
           <MaterialCommunityIcons
             name="file-pdf-box"
             size={22}
             color={canGenerateReport ? '#D32F2F' : '#BDBDBD'}
           />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -718,6 +826,9 @@ export default function CheckListScreen({navigation}: any) {
           })
         )}
       </ScrollView>
+
+      {/* Modal de Seleção de Mês/Ano */}
+      <MonthYearPickerModal />
 
       {/* Modal de Geração de Relatório */}
       {reportModalData && (
@@ -855,10 +966,11 @@ const styles = StyleSheet.create({
   },
   locationCard: {
     borderRadius: 8,
-    padding: 10,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    minHeight: 48,
   },
   locationContent: {
     flex: 1,
@@ -889,5 +1001,93 @@ const styles = StyleSheet.create({
   },
   reportButtonDisabled: {
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  // Estilos do Modal de Seleção de Mês/Ano
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthPickerContainer: {
+    backgroundColor: customTheme.colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    width: Dimensions.get('window').width - 48,
+    maxWidth: 360,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  monthPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: customTheme.colors.outline,
+  },
+  monthPickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: customTheme.colors.onSurface,
+  },
+  yearSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    gap: 16,
+  },
+  yearNavButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: customTheme.colors.surfaceVariant,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  yearText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: customTheme.colors.primary,
+    minWidth: 80,
+    textAlign: 'center',
+  },
+  monthsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  monthItem: {
+    width: '30%',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: customTheme.colors.surfaceVariant,
+  },
+  monthItemSelected: {
+    backgroundColor: customTheme.colors.primary,
+  },
+  monthItemCurrent: {
+    borderWidth: 2,
+    borderColor: customTheme.colors.primary,
+  },
+  monthItemText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: customTheme.colors.onSurface,
+  },
+  monthItemTextSelected: {
+    color: customTheme.colors.onPrimary,
+    fontWeight: '600',
+  },
+  monthItemTextCurrent: {
+    color: customTheme.colors.primary,
+    fontWeight: '600',
   },
 });

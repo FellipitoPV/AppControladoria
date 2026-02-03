@@ -29,6 +29,7 @@ interface Question {
   id: string;
   label: string;
   quantidade?: string;
+  sectionTitle?: string; // Título da seção (ex: "Documentos Legais", "Gestão de SSO")
 }
 
 interface PeriodData {
@@ -220,8 +221,15 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   // SUBSTITUIR loadQuestions
   const loadQuestions = async () => {
     try {
-      const questions = await loadQuestionsSync(checklistId);
-      setQuestions(questions);
+      // Verifica se a location tem questões personalizadas
+      if (location.useCustomQuestions && location.questions?.length > 0) {
+        console.log('Usando questões personalizadas da location');
+        setQuestions(location.questions);
+      } else {
+        // Usa as questões padrão do checklist
+        const questions = await loadQuestionsSync(checklistId);
+        setQuestions(questions);
+      }
       setLoading(false);
     } catch (error) {
       console.error('Erro ao carregar perguntas:', error);
@@ -377,7 +385,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
       return true;
     }
     navigation.goBack();
-    return false;
+    return true; // Retorna true para indicar que o evento foi tratado
   };
 
   const handleItemChange = (questionId: string, value: ConformityStatus) => {
@@ -573,7 +581,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     </TouchableOpacity>
   );
 
-  const QuestionCard = ({question}: {question: Question}) => {
+  const QuestionCard = ({question, showSectionTitle}: {question: Question; showSectionTitle?: boolean}) => {
     const currentPeriod = formData.periods[selectedPeriod] || {
       items: {},
       observacoes: '',
@@ -582,53 +590,64 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     const statusColor = getStatusColor(currentValue);
 
     return (
-      <Card style={[styles.questionCard, {borderColor: statusColor}]}>
-        <View style={styles.questionContent}>
-          <View style={styles.questionHeader}>
-            <MaterialCommunityIcons
-              name={
-                currentValue === 'C'
-                  ? 'check-circle'
-                  : currentValue === 'NC'
-                  ? 'close-circle'
-                  : currentValue === 'NA'
-                  ? 'minus-circle'
-                  : 'circle-outline'
-              }
-              size={20}
-              color={statusColor}
-            />
-            <Text style={styles.questionText}>{question.label}</Text>
+      <>
+        {/* Título da seção se existir */}
+        {question.sectionTitle && (
+          <View style={styles.sectionTitleContainer}>
+            <View style={styles.sectionTitleBar} />
+            <Text style={styles.sectionTitleText}>{question.sectionTitle}</Text>
           </View>
+        )}
 
-          {question.quantidade && (
-            <Text style={styles.quantidadeText}>
-              Qtd: {question.quantidade}
-            </Text>
-          )}
+        <Card style={[styles.questionCard, {borderColor: statusColor}]}>
+          <View style={styles.questionContent}>
+            <View style={styles.questionHeader}>
+              <MaterialCommunityIcons
+                name={
+                  currentValue === 'C'
+                    ? 'check-circle'
+                    : currentValue === 'NC'
+                    ? 'close-circle'
+                    : currentValue === 'NA'
+                    ? 'minus-circle'
+                    : 'circle-outline'
+                }
+                size={20}
+                color={statusColor}
+              />
+              {/* Texto com suporte a quebras de linha */}
+              <Text style={styles.questionText}>{question.label}</Text>
+            </View>
 
-          <View style={styles.radioGroup}>
-            <OptionButton
-              selected={currentValue === 'C'}
-              color="#4CAF50"
-              label="Conforme"
-              onPress={() => handleItemChange(question.id, 'C')}
-            />
-            <OptionButton
-              selected={currentValue === 'NC'}
-              color="#F44336"
-              label="Não Conforme"
-              onPress={() => handleItemChange(question.id, 'NC')}
-            />
-            <OptionButton
-              selected={currentValue === 'NA'}
-              color="#9E9E9E"
-              label="N/A"
-              onPress={() => handleItemChange(question.id, 'NA')}
-            />
+            {question.quantidade && (
+              <Text style={styles.quantidadeText}>
+                Qtd: {question.quantidade}
+              </Text>
+            )}
+
+            <View style={styles.radioGroup}>
+              <OptionButton
+                selected={currentValue === 'C'}
+                color="#4CAF50"
+                label="Conforme"
+                onPress={() => handleItemChange(question.id, 'C')}
+              />
+              <OptionButton
+                selected={currentValue === 'NC'}
+                color="#F44336"
+                label="Não Conforme"
+                onPress={() => handleItemChange(question.id, 'NC')}
+              />
+              <OptionButton
+                selected={currentValue === 'NA'}
+                color="#9E9E9E"
+                label="N/A"
+                onPress={() => handleItemChange(question.id, 'NA')}
+              />
+            </View>
           </View>
-        </View>
-      </Card>
+        </Card>
+      </>
     );
   };
 
@@ -883,6 +902,28 @@ const styles = StyleSheet.create({
     color: customTheme.colors.onSurface,
     marginBottom: 12,
     marginTop: 8,
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: customTheme.colors.primaryContainer,
+  },
+  sectionTitleBar: {
+    width: 4,
+    height: 20,
+    backgroundColor: customTheme.colors.primary,
+    borderRadius: 2,
+    marginRight: 8,
+  },
+  sectionTitleText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: customTheme.colors.primary,
+    flex: 1,
   },
   questionCard: {
     marginBottom: 12,

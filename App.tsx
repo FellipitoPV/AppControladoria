@@ -46,7 +46,7 @@ import {setNotificationNavigationHandler} from './src/helpers/notificationChanne
 import CheckListScreen from './src/screens/SubScreens/Controladoria/CheckList/CheckListScreen';
 import ChecklistFormScreen from './src/screens/SubScreens/Controladoria/CheckList/components/ChecklistFormScreen';
 import {ChecklistSyncProvider} from './src/contexts/ChecklistSyncContext';
-import SSTScreen from './src/screens/SubScreens/SST/SSTScreen';
+import QSMSScreen from './src/screens/SubScreens/SST/SSTScreen';
 import SSTChecklistScreen from './src/screens/SubScreens/SST/checklists/SSTChecklistScreen';
 import DDSScreen from './src/screens/SubScreens/SST/DDS/DDSScreen';
 import DDSFormScreen from './src/screens/SubScreens/SST/DDS/DDSFormScreen';
@@ -448,10 +448,10 @@ export default function App() {
                   options={{headerShown: false}}
                 />
 
-                {/* SST */}
+                {/* QSMS */}
                 <Stack.Screen
-                  name="SSTScreen"
-                  component={SSTScreen}
+                  name="QSMSScreen"
+                  component={QSMSScreen}
                   options={{headerShown: false}}
                 />
 
