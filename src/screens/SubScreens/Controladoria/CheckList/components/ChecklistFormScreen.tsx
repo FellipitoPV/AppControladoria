@@ -8,6 +8,7 @@ import {
   Alert,
   BackHandler,
   InteractionManager,
+  Image,
 } from 'react-native';
 import {
   Surface,
@@ -15,13 +16,16 @@ import {
   Card,
   ActivityIndicator,
 } from 'react-native-paper';
-import {ref, onValue, set} from 'firebase/database';
+import {ref, get, set, onValue, off} from 'firebase/database';
 import {dbRealTime} from '../../../../../../firebase';
+import storage from '@react-native-firebase/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
+import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import ModernHeader from '../../../../../assets/components/ModernHeader';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {customTheme} from '../../../../../theme/theme';
 import {useUser} from '../../../../../contexts/userContext';
-import {useChecklistSync} from '../../../../../contexts/ChecklistSyncContext';
 
 type ConformityStatus = 'C' | 'NC' | 'NA' | '';
 
@@ -32,9 +36,15 @@ interface Question {
   sectionTitle?: string; // Título da seção (ex: "Documentos Legais", "Gestão de SSO")
 }
 
+interface NCProofData {
+  photos?: string[];
+  description?: string;
+}
+
 interface PeriodData {
   items: Record<string, ConformityStatus>;
   observacoes: string;
+  ncProofs?: Record<string, NCProofData>;
 }
 
 interface FormData {
@@ -62,15 +72,6 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     selectedMonth,
   } = route.params;
   const {userInfo} = useUser();
-  const {
-    isOnline,
-    saveChecklist,
-    loadChecklist,
-    loadQuestions: loadQuestionsSync,
-    pendingOperations,
-    syncStatus,
-    forceSync,
-  } = useChecklistSync();
 
   const isWeekly = checklistFrequency === 'Semanal';
   const year = selectedMonth.getFullYear();
@@ -81,6 +82,12 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   const [saving, setSaving] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [yearWeeks, setYearWeeks] = useState<YearWeek[]>([]);
+  const [isOnline, setIsOnline] = useState(true);
+
+  // Estados para comprovação de NC
+  const [requiresProofOnNC, setRequiresProofOnNC] = useState<'none' | 'photo' | 'description' | 'both'>('none');
+  const [ncProofs, setNcProofs] = useState<Record<number, Record<string, NCProofData>>>({});
+  const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null);
 
   const maxPeriods = isWeekly ? 52 : 12;
 
@@ -90,6 +97,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
   const initialFormData = useRef<FormData>({periods: {}});
   const hasUnsavedChanges = useRef(false);
+  const firebaseListenerRef = useRef<any>(null);
 
   // Gerar semanas do ano (igual ao web)
   const getYearWeeks = (year: number): YearWeek[] => {
@@ -178,6 +186,15 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     return weeks;
   };
 
+  // Monitorar conectividade
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOnline(!!state.isConnected);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     // Aguarda a animação de navegação terminar antes de carregar dados
     const interactionPromise = InteractionManager.runAfterInteractions(() => {
@@ -193,22 +210,22 @@ export default function ChecklistFormScreen({route, navigation}: any) {
         }
 
         await loadQuestions();
-        await loadSavedData();
+        await setupRealtimeListener();
       };
 
       init();
     });
 
-    return () => interactionPromise.cancel();
+    // Cleanup: remover listener do Firebase quando sair da tela
+    return () => {
+      interactionPromise.cancel();
+      if (firebaseListenerRef.current) {
+        const path = `checklists/${year}/${checklistId}/${location.id}`;
+        off(ref(dbRealTime(), path));
+        firebaseListenerRef.current = null;
+      }
+    };
   }, []);
-
-  // ADICIONAR useEffect para recarregar quando voltar online:
-  useEffect(() => {
-    if (isOnline) {
-      // Recarrega dados do Firebase quando volta online
-      loadSavedData();
-    }
-  }, [isOnline]);
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
@@ -218,7 +235,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     return () => backHandler.remove();
   }, []);
 
-  // SUBSTITUIR loadQuestions
+  // Carregar perguntas do checklist
   const loadQuestions = async () => {
     try {
       // Verifica se a location tem questões personalizadas
@@ -226,55 +243,154 @@ export default function ChecklistFormScreen({route, navigation}: any) {
         console.log('Usando questões personalizadas da location');
         setQuestions(location.questions);
       } else {
-        // Usa as questões padrão do checklist
-        const questions = await loadQuestionsSync(checklistId);
-        setQuestions(questions);
+        // Buscar questões do Firebase
+        const cacheKey = `@checklist_questions_${checklistId}`;
+
+        try {
+          const questionsRef = ref(dbRealTime(), `checklists-config/${checklistId}/questions`);
+          const snapshot = await get(questionsRef);
+
+          if (snapshot.exists()) {
+            const questionsData = snapshot.val();
+            setQuestions(questionsData);
+            // Salvar no cache
+            await AsyncStorage.setItem(cacheKey, JSON.stringify(questionsData));
+          } else {
+            // Tentar carregar do cache
+            const cached = await AsyncStorage.getItem(cacheKey);
+            if (cached) {
+              setQuestions(JSON.parse(cached));
+            }
+          }
+        } catch (error) {
+          // Se falhar, tentar cache
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            setQuestions(JSON.parse(cached));
+          }
+        }
       }
-      setLoading(false);
+
+      // Carregar configuração de requiresProofOnNC
+      await loadProofConfig();
     } catch (error) {
       console.error('Erro ao carregar perguntas:', error);
-      setLoading(false);
     }
   };
 
-  // SUBSTITUIR loadSavedData
-  const loadSavedData = async () => {
+  // Carregar configuração de comprovação de NC
+  const loadProofConfig = async () => {
     try {
-      const yearStr = year.toString();
-      const data = await loadChecklist(yearStr, checklistId, location.id);
+      const checklistRef = ref(dbRealTime(), `checklists-config/${checklistId}`);
+      const snapshot = await get(checklistRef);
 
-      if (data?.monthlyFormData) {
-        const periods: Record<number, PeriodData> = {};
+      if (snapshot.exists()) {
+        const checklistData = snapshot.val();
 
-        Object.entries(data.monthlyFormData).forEach(
-          ([period, periodData]: [string, any]) => {
-            periods[parseInt(period)] = {
-              items: periodData.items || {},
-              observacoes: periodData.observacoes || '',
-            };
-          },
-        );
+        // Prioridade: location > checklist
+        let proofConfig: 'none' | 'photo' | 'description' | 'both' = 'none';
 
-        setFormData({periods});
-        initialFormData.current = {periods};
-        hasUnsavedChanges.current = false;
-      } else {
-        // Se não tem dados, limpar o formulário
-        setFormData({periods: {}});
+        if (checklistData.requiresProofOnNC && checklistData.requiresProofOnNC !== 'none') {
+          proofConfig = checklistData.requiresProofOnNC;
+        }
+
+        // Verificar se a location tem configuração específica
+        if (checklistData.locations && location?.id) {
+          const locationData = checklistData.locations.find((loc: any) => loc.id === location.id);
+          if (locationData?.requiresProofOnNC && locationData.requiresProofOnNC !== '') {
+            proofConfig = locationData.requiresProofOnNC;
+          }
+        }
+
+        setRequiresProofOnNC(proofConfig);
+        console.log('requiresProofOnNC:', proofConfig);
       }
     } catch (error) {
-      console.error('Erro ao carregar dados salvos:', error);
-      setFormData({periods: {}});
+      console.error('Erro ao carregar configuração de prova:', error);
     }
   };
 
-  // SUBSTITUIR handleSave
+  // Configurar listener em tempo real do Firebase
+  const setupRealtimeListener = async () => {
+    const path = `checklists/${year}/${checklistId}/${location.id}`;
+    const cacheKey = `@checklist_cache_${year}_${checklistId}_${location.id}`;
+
+    // Primeiro, tentar carregar do cache para mostrar algo rápido
+    try {
+      const cached = await AsyncStorage.getItem(cacheKey);
+      if (cached) {
+        const data = JSON.parse(cached);
+        applyDataToForm(data);
+      }
+    } catch (e) {
+      console.log('Sem cache disponível');
+    }
+
+    // Configurar listener em tempo real
+    const dataRef = ref(dbRealTime(), path);
+    firebaseListenerRef.current = onValue(dataRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        console.log('Dados recebidos do Firebase em tempo real');
+
+        // Salvar no cache para uso offline
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (e) {
+          console.error('Erro ao salvar cache:', e);
+        }
+
+        // Só aplicar se não houver mudanças locais não salvas
+        if (!hasUnsavedChanges.current) {
+          applyDataToForm(data);
+        }
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error('Erro no listener Firebase:', error);
+      setLoading(false);
+    });
+  };
+
+  // Aplicar dados ao formulário
+  const applyDataToForm = (data: any) => {
+    if (data?.monthlyFormData) {
+      const periods: Record<number, PeriodData> = {};
+      const loadedNcProofs: Record<number, Record<string, NCProofData>> = {};
+
+      Object.entries(data.monthlyFormData).forEach(
+        ([period, periodData]: [string, any]) => {
+          periods[parseInt(period)] = {
+            items: periodData.items || {},
+            observacoes: periodData.observacoes || '',
+          };
+
+          // Carregar ncProofs se existirem
+          if (periodData.ncProofs) {
+            loadedNcProofs[parseInt(period)] = periodData.ncProofs;
+          }
+        },
+      );
+
+      setFormData({periods});
+      setNcProofs(loadedNcProofs);
+      initialFormData.current = {periods};
+      hasUnsavedChanges.current = false;
+    } else {
+      setFormData({periods: {}});
+      setNcProofs({});
+    }
+  };
+
+  // Salvar checklist
   const handleSave = async () => {
     hasUnsavedChanges.current = false;
     setSaving(true);
 
     try {
       const yearStr = year.toString();
+      const path = `checklists/${yearStr}/${checklistId}/${location.id}`;
+      const cacheKey = `@checklist_cache_${yearStr}_${checklistId}_${location.id}`;
 
       const allPeriodsData: Record<number, any> = {};
       const periodStatus: Record<number, string> = {};
@@ -286,12 +402,14 @@ export default function ChecklistFormScreen({route, navigation}: any) {
         };
 
         const status = calculatePeriodStatus(periodData);
+        const periodNcProofs = ncProofs[period] || {};
 
         allPeriodsData[period] = {
           items: periodData.items,
           observacoes: periodData.observacoes,
           status: status,
           responsavel: userInfo?.user || 'Desconhecido',
+          ...(Object.keys(periodNcProofs).length > 0 && {ncProofs: periodNcProofs}),
         };
 
         periodStatus[period] = status;
@@ -314,15 +432,25 @@ export default function ChecklistFormScreen({route, navigation}: any) {
         responsavel: userInfo?.user || 'Desconhecido',
       };
 
-      // USA O SYNC CONTEXT
-      await saveChecklist(yearStr, checklistId, location.id, saveData);
+      // Sempre salvar no cache primeiro
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(saveData));
 
-      //   Alert.alert(
-      //     'Sucesso',
-      //     isOnline
-      //       ? 'Checklist salvo com sucesso!'
-      //       : 'Checklist salvo offline! Será sincronizado quando houver conexão.',
-      //   );
+      // Verificar conectividade e salvar no Firebase
+      const netState = await NetInfo.fetch();
+      if (netState.isConnected) {
+        const dataRef = ref(dbRealTime(), path);
+        await set(dataRef, saveData);
+        console.log('Checklist salvo no Firebase');
+      } else {
+        // Salvar na fila de pendentes para sincronizar depois
+        const pendingKey = '@checklist_pending_saves';
+        const pendingStr = await AsyncStorage.getItem(pendingKey);
+        const pending = pendingStr ? JSON.parse(pendingStr) : [];
+        pending.push({path, data: saveData, timestamp: Date.now()});
+        await AsyncStorage.setItem(pendingKey, JSON.stringify(pending));
+        console.log('Checklist salvo offline, aguardando sincronização');
+      }
+
       navigation.goBack();
     } catch (error) {
       Alert.alert('Erro', 'Falha ao salvar checklist');
@@ -425,6 +553,162 @@ export default function ChecklistFormScreen({route, navigation}: any) {
           [selectedPeriod]: {
             ...currentPeriod,
             observacoes: text,
+          },
+        },
+      };
+    });
+  };
+
+  // Funções para comprovação de NC
+  const needsProofPhoto = requiresProofOnNC === 'photo' || requiresProofOnNC === 'both';
+  const needsProofDescription = requiresProofOnNC === 'description' || requiresProofOnNC === 'both';
+
+  const getQuestionNcProof = (questionId: string): NCProofData => {
+    return ncProofs[selectedPeriod]?.[questionId] || {photos: [], description: ''};
+  };
+
+  const handleSelectPhoto = (questionId: string) => {
+    Alert.alert('Adicionar Foto', 'Escolha uma opção:', [
+      {
+        text: 'Câmera',
+        onPress: () => handleTakePhoto(questionId),
+      },
+      {
+        text: 'Galeria',
+        onPress: () => handlePickFromGallery(questionId),
+      },
+      {
+        text: 'Cancelar',
+        style: 'cancel',
+      },
+    ]);
+  };
+
+  const handleTakePhoto = async (questionId: string) => {
+    try {
+      const result = await launchCamera({
+        mediaType: 'photo',
+        quality: 0.7,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      });
+
+      if (result.assets && result.assets[0]?.uri) {
+        await uploadPhoto(questionId, result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Erro ao tirar foto:', error);
+      Alert.alert('Erro', 'Não foi possível tirar a foto');
+    }
+  };
+
+  const handlePickFromGallery = async (questionId: string) => {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.7,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      });
+
+      if (result.assets && result.assets[0]?.uri) {
+        await uploadPhoto(questionId, result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Erro ao selecionar foto:', error);
+      Alert.alert('Erro', 'Não foi possível selecionar a foto');
+    }
+  };
+
+  const uploadPhoto = async (questionId: string, uri: string) => {
+    setUploadingPhoto(questionId);
+    hasUnsavedChanges.current = true;
+
+    try {
+      const timestamp = Date.now();
+      const fileName = `${timestamp}.jpg`;
+      const storagePath = `Checklist_Photos/${checklistId}/${location.id}/${selectedPeriod}/${questionId}/${fileName}`;
+
+      // Verificar conectividade
+      const netState = await NetInfo.fetch();
+      let photoUrl: string;
+
+      if (netState.isConnected) {
+        // Online: fazer upload direto
+        const reference = storage().ref(storagePath);
+        await reference.putFile(uri);
+        photoUrl = await reference.getDownloadURL();
+        console.log('Foto enviada:', photoUrl);
+      } else {
+        // Offline: salvar localmente para upload posterior
+        const pendingPhotosKey = '@checklist_pending_photos';
+        const pendingStr = await AsyncStorage.getItem(pendingPhotosKey);
+        const pending = pendingStr ? JSON.parse(pendingStr) : [];
+        const tempId = `temp_${timestamp}`;
+        pending.push({storagePath, localUri: uri, tempId, timestamp});
+        await AsyncStorage.setItem(pendingPhotosKey, JSON.stringify(pending));
+        photoUrl = tempId; // ID temporário que será substituído depois
+        Alert.alert('Foto salva', 'A foto será enviada quando houver conexão.');
+      }
+
+      setNcProofs(prev => {
+        const currentProof = prev[selectedPeriod]?.[questionId] || {photos: [], description: ''};
+        return {
+          ...prev,
+          [selectedPeriod]: {
+            ...prev[selectedPeriod],
+            [questionId]: {
+              ...currentProof,
+              photos: [...(currentProof.photos || []), photoUrl],
+            },
+          },
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao fazer upload:', error);
+      Alert.alert('Erro', 'Não foi possível enviar a foto');
+    } finally {
+      setUploadingPhoto(null);
+    }
+  };
+
+  const handleRemovePhoto = (questionId: string, photoUrl: string) => {
+    Alert.alert('Remover Foto', 'Deseja remover esta foto?', [
+      {text: 'Cancelar', style: 'cancel'},
+      {
+        text: 'Remover',
+        style: 'destructive',
+        onPress: () => {
+          hasUnsavedChanges.current = true;
+          setNcProofs(prev => {
+            const currentProof = prev[selectedPeriod]?.[questionId] || {photos: [], description: ''};
+            return {
+              ...prev,
+              [selectedPeriod]: {
+                ...prev[selectedPeriod],
+                [questionId]: {
+                  ...currentProof,
+                  photos: (currentProof.photos || []).filter(url => url !== photoUrl),
+                },
+              },
+            };
+          });
+        },
+      },
+    ]);
+  };
+
+  const handleNcDescriptionChange = (questionId: string, description: string) => {
+    hasUnsavedChanges.current = true;
+    setNcProofs(prev => {
+      const currentProof = prev[selectedPeriod]?.[questionId] || {photos: [], description: ''};
+      return {
+        ...prev,
+        [selectedPeriod]: {
+          ...prev[selectedPeriod],
+          [questionId]: {
+            ...currentProof,
+            description,
           },
         },
       };
@@ -588,6 +872,8 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     };
     const currentValue = currentPeriod.items[question.id] || '';
     const statusColor = getStatusColor(currentValue);
+    const questionProof = getQuestionNcProof(question.id);
+    const showProofSection = currentValue === 'NC' && requiresProofOnNC !== 'none';
 
     return (
       <>
@@ -645,6 +931,72 @@ export default function ChecklistFormScreen({route, navigation}: any) {
                 onPress={() => handleItemChange(question.id, 'NA')}
               />
             </View>
+
+            {/* Área de comprovação para NC */}
+            {showProofSection && (
+              <View style={styles.ncProofContainer}>
+                <View style={styles.ncProofHeader}>
+                  <MaterialCommunityIcons name="alert-circle" size={16} color="#F44336" />
+                  <Text style={styles.ncProofTitle}>Comprovação da NC</Text>
+                </View>
+
+                {/* Upload de Fotos */}
+                {needsProofPhoto && (
+                  <View style={styles.ncProofSection}>
+                    <Text style={styles.ncProofLabel}>Anexar foto(s):</Text>
+                    <View style={styles.photosContainer}>
+                      {/* Fotos já enviadas */}
+                      {questionProof.photos?.map((photoUrl, idx) => (
+                        <TouchableOpacity
+                          key={idx}
+                          style={styles.photoThumbnail}
+                          onPress={() => handleRemovePhoto(question.id, photoUrl)}>
+                          <Image source={{uri: photoUrl}} style={styles.photoImage} />
+                          <View style={styles.photoRemoveIcon}>
+                            <MaterialCommunityIcons name="close" size={12} color="#FFF" />
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+
+                      {/* Botão de adicionar foto */}
+                      <TouchableOpacity
+                        style={styles.addPhotoButton}
+                        onPress={() => handleSelectPhoto(question.id)}
+                        disabled={uploadingPhoto === question.id}>
+                        {uploadingPhoto === question.id ? (
+                          <ActivityIndicator size="small" color={customTheme.colors.primary} />
+                        ) : (
+                          <>
+                            <MaterialCommunityIcons
+                              name="camera-plus"
+                              size={24}
+                              color={customTheme.colors.primary}
+                            />
+                            <Text style={styles.addPhotoText}>Adicionar</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Campo de Descrição */}
+                {needsProofDescription && (
+                  <View style={styles.ncProofSection}>
+                    <Text style={styles.ncProofLabel}>Descreva a NC:</Text>
+                    <TextInput
+                      style={styles.ncDescriptionInput}
+                      multiline
+                      numberOfLines={2}
+                      placeholder="Descreva a não conformidade..."
+                      value={questionProof.description || ''}
+                      onChangeText={text => handleNcDescriptionChange(question.id, text)}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </Card>
       </>
@@ -659,9 +1011,9 @@ export default function ChecklistFormScreen({route, navigation}: any) {
           iconName="clipboard-check"
           onBackPress={handleBackPress}
           rightButton={{
-            icon: pendingOperations > 0 ? 'cloud-sync' : 'content-save',
-            onPress: pendingOperations > 0 && isOnline ? forceSync : handleSave,
-            loading: saving || syncStatus === 'syncing',
+            icon: 'content-save',
+            onPress: handleSave,
+            loading: saving,
           }}
         />
         <View style={styles.loadingContainer}>
@@ -700,18 +1052,18 @@ export default function ChecklistFormScreen({route, navigation}: any) {
           />
           <Text style={styles.offlineText}>
             Modo Offline{' '}
-            {pendingOperations > 0 && `- ${pendingOperations} pendente(s)`}
+            {/* {pendingOperations > 0 && `- ${pendingOperations} pendente(s)`} */}
           </Text>
         </View>
       )}
 
       {/* Banner de sincronização */}
-      {syncStatus === 'syncing' && (
+      {/* {syncStatus === 'syncing' && (
         <View style={styles.syncBanner}>
           <ActivityIndicator size="small" color={customTheme.colors.primary} />
           <Text style={styles.syncText}>Sincronizando...</Text>
         </View>
-      )}
+      )} */}
 
       <View style={styles.locationBanner}>
         <MaterialCommunityIcons
@@ -1006,5 +1358,85 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     color: '#F57C00',
+  },
+  // Estilos para comprovação de NC
+  ncProofContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#FFCDD2',
+    borderStyle: 'dashed',
+  },
+  ncProofHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  ncProofTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#F44336',
+  },
+  ncProofSection: {
+    marginBottom: 10,
+  },
+  ncProofLabel: {
+    fontSize: 12,
+    color: customTheme.colors.onSurfaceVariant,
+    marginBottom: 6,
+  },
+  photosContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  photoThumbnail: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoRemoveIcon: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    backgroundColor: 'rgba(244, 67, 54, 0.9)',
+    borderRadius: 10,
+    width: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addPhotoButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: customTheme.colors.primary,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(33, 150, 243, 0.05)',
+  },
+  addPhotoText: {
+    fontSize: 9,
+    color: customTheme.colors.primary,
+    marginTop: 2,
+  },
+  ncDescriptionInput: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    minHeight: 60,
+    backgroundColor: '#FAFAFA',
+    color: customTheme.colors.onSurface,
   },
 });

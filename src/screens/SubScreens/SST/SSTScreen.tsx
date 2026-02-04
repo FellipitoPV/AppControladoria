@@ -59,7 +59,7 @@ export default function QSMSScreen({ navigation }: any) {
     const { userInfo } = useUser();
 
     // Estado para controlar qual card está expandido (apenas um por vez)
-    const [expandedCard, setExpandedCard] = useState<string | null>('sst');
+    const [expandedCard, setExpandedCard] = useState<string | null>();
 
     const toggleCard = (cardId: string) => {
         setExpandedCard(prev => prev === cardId ? null : cardId);
@@ -95,7 +95,7 @@ export default function QSMSScreen({ navigation }: any) {
             >
                 {/* Card SST - Segurança e Saúde no Trabalho */}
                 <CategoryCard
-                    title="SST - Segurança e Saúde"
+                    title="Saúde e Segurança do Trabalho"
                     icon="shield-account"
                     color="#E53935"
                     expanded={expandedCard === 'sst'}
