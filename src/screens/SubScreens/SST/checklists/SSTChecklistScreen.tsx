@@ -58,6 +58,7 @@ interface SavedChecklistData {
       [locationId: string]: {
         monthlyFormData: {
           [periodNumber: number]: {
+            ncProofs: any;
             items: Record<string, string>;
             observacoes: string;
             status: ChecklistStatus;
@@ -491,11 +492,13 @@ export default function SSTChecklistScreen({navigation, route}: ChecklistScreenP
 
       const itensComResultado = (reportModalData?.questions || []).map(q => {
         const resultado = checklistSavedData?.items?.[q.id];
+        const ncProof = checklistSavedData?.ncProofs?.[q.id];
         return {
           id: q.id,
           label: q.label,
           resultado: resultado || 'NA',
           sectionTitle: q.sectionTitle || '',
+          ...(ncProof && {ncProof}),
         };
       });
 
@@ -523,21 +526,36 @@ export default function SSTChecklistScreen({navigation, route}: ChecklistScreenP
         throw new Error(errorData.error || 'Erro ao gerar relatório');
       }
 
-      const result = await response.json();
+      // Backend retorna PDF binário diretamente
+      const blob = await response.blob();
 
-      if (!result.success || !result.fileBase64) {
+      if (!blob || blob.size === 0) {
         throw new Error('Resposta inválida do servidor');
       }
 
-      // Salvar o PDF no dispositivo
-      const fileName = result.fileName || `Relatorio_Checklist_${Date.now()}.pdf`;
+      // Converter blob para base64 para salvar com RNFS
+      const base64Data: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      // Extrair nome do arquivo do header Content-Disposition ou usar fallback
+      const disposition = response.headers.get('Content-Disposition');
+      const fileNameMatch = disposition?.match(/filename="?(.+?)"?$/);
+      const fileName = fileNameMatch?.[1] || `Relatorio_Checklist_${Date.now()}.pdf`;
       const filePath = `${
         Platform.OS === 'android'
           ? RNFS.DownloadDirectoryPath
           : RNFS.DocumentDirectoryPath
       }/${fileName}`;
 
-      await RNFS.writeFile(filePath, result.fileBase64, 'base64');
+      await RNFS.writeFile(filePath, base64Data, 'base64');
       console.log('PDF salvo em:', filePath);
 
       setReportModalVisible(false);
@@ -753,8 +771,12 @@ export default function SSTChecklistScreen({navigation, route}: ChecklistScreenP
                         checklistIcon={checklist.icon}
                         checklistFrequency={checklist.frequency}
                         questions={
-                          location.useCustomQuestions && location.questions?.length > 0
-                            ? location.questions
+                          location.useCustomQuestions && location.questions && location.questions.length > 0
+                            ? location.questions.map(q => ({
+                                id: q.id,
+                                label: q.label,
+                                sectionTitle: q.sectionTitle,
+                              }))
                             : checklist.questions
                         }
                       />

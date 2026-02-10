@@ -386,10 +386,12 @@ export default function CheckListScreen({navigation}: any) {
 
       const itensComResultado = (reportModalData?.questions || []).map(q => {
         const resultado = checklistSavedData?.items?.[q.id];
+        const ncProof = checklistSavedData?.ncProofs?.[q.id];
         return {
           id: q.id,
           label: q.label,
           resultado: resultado || 'NA',
+          ...(ncProof && {ncProof}),
         };
       });
 
