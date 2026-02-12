@@ -43,13 +43,14 @@ import {UserProvider} from './src/contexts/userContext';
 import {auth} from './firebase';
 import {createStackNavigator} from '@react-navigation/stack';
 import {setNotificationNavigationHandler} from './src/helpers/notificationChannel';
-import CheckListScreen from './src/screens/SubScreens/Controladoria/CheckList/CheckListScreen';
-import ChecklistFormScreen from './src/screens/SubScreens/Controladoria/CheckList/components/ChecklistFormScreen';
+import CheckListScreen from './src/components/CheckList/CheckListScreen';
+import ChecklistFormScreen from './src/components/CheckList/components/ChecklistFormScreen';
 import {ChecklistSyncProvider} from './src/contexts/ChecklistSyncContext';
 import QSMSScreen from './src/screens/SubScreens/SST/SSTScreen';
-import SSTChecklistScreen from './src/screens/SubScreens/SST/checklists/SSTChecklistScreen';
 import DDSScreen from './src/screens/SubScreens/SST/DDS/DDSScreen';
 import DDSFormScreen from './src/screens/SubScreens/SST/DDS/DDSFormScreen';
+import SSTChecklistScreen from './src/components/CheckList/SSTChecklistScreen';
+import ContaminadosScreen from './src/screens/Contaminados/ContaminadosScreen';
 
 // Defina os tipos das rotas para o seu navegador
 interface RootStackParamList {
@@ -470,6 +471,12 @@ export default function App() {
                 <Stack.Screen
                   name="SSTChecklistScreen"
                   component={SSTChecklistScreen}
+                  options={{headerShown: false}}
+                />
+
+                <Stack.Screen
+                  name="ContaminadosScreen"
+                  component={ContaminadosScreen}
                   options={{headerShown: false}}
                 />
 

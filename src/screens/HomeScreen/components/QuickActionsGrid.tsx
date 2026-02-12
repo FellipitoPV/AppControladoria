@@ -112,6 +112,17 @@ const QuickActionsGrid = () => {
         },
       },
       {
+        id: '7',
+        title: 'Contaminados',
+        icon: 'biohazard',
+        color: customTheme.colors.primary,
+        route: 'ContaminadosScreen',
+        access: {
+          moduleId: 'contaminados',
+          minLevel: 1,
+        },
+      },
+      {
         id: '97',
         title: 'Reuniao',
         icon: 'presentation',

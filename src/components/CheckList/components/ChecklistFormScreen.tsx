@@ -17,15 +17,15 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import {ref, get, set, onValue, off} from 'firebase/database';
-import {dbRealTime} from '../../../../../../firebase';
+import {dbRealTime} from '../../../../firebase';
 import storage from '@react-native-firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
-import ModernHeader from '../../../../../assets/components/ModernHeader';
+import ModernHeader from '../../../assets/components/ModernHeader';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {customTheme} from '../../../../../theme/theme';
-import {useUser} from '../../../../../contexts/userContext';
+import {customTheme} from '../../../theme/theme';
+import {useUser} from '../../../contexts/userContext';
 
 type ConformityStatus = 'C' | 'NC' | 'NA' | '';
 

@@ -2,14 +2,14 @@ import React, {useEffect, useState} from 'react';
 import {View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform, Modal, Dimensions} from 'react-native';
 import {Surface, Text, Card, ActivityIndicator} from 'react-native-paper';
 import {ref, onValue} from 'firebase/database';
-import {dbRealTime} from '../../../../../firebase';
-import ModernHeader from '../../../../assets/components/ModernHeader';
+import {dbRealTime} from '../../../firebase';
+import ModernHeader from '../../assets/components/ModernHeader';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {customTheme} from '../../../../theme/theme';
-import {useUser} from '../../../../contexts/userContext';
-import {useChecklistSync} from '../../../../contexts/ChecklistSyncContext';
+import {customTheme} from '../../theme/theme';
+import {useUser} from '../../contexts/userContext';
+import {useChecklistSync} from '../../contexts/ChecklistSyncContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import ReportGeneratorModal from '../../SST/checklists/ReportGeneratorModal';
+import ReportGeneratorModal from './ReportGeneratorModal';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 
@@ -36,6 +36,7 @@ interface ChecklistDefinition {
   icon: string;
   category: string;
   frequency: string;
+  requisitos?: string;
   questions: Array<{
     id: string;
     label: string;
@@ -50,6 +51,7 @@ interface SavedChecklistData {
       [locationId: string]: {
         monthlyFormData: {
           [periodNumber: number]: {
+            ncProofs: any;
             items: Record<string, string>;
             observacoes: string;
             status: ChecklistStatus;
@@ -73,6 +75,7 @@ interface ReportModalData {
   locationId: string;
   locationName: string;
   questions: Array<{id: string; label: string}>;
+  requisitos?: string;
 }
 
 export default function CheckListScreen({navigation}: any) {
@@ -359,6 +362,7 @@ export default function CheckListScreen({navigation}: any) {
     locationId: string,
     locationName: string,
     questions: Array<{id: string; label: string}>,
+    requisitos?: string,
   ) => {
     setReportModalData({
       checklistId,
@@ -366,6 +370,7 @@ export default function CheckListScreen({navigation}: any) {
       locationId,
       locationName,
       questions,
+      requisitos,
     });
     setReportModalVisible(true);
   };
@@ -666,6 +671,7 @@ export default function CheckListScreen({navigation}: any) {
     checklistIcon,
     checklistFrequency,
     questions,
+    requisitos,
   }: {
     location: ChecklistLocation;
     checklistId: string;
@@ -673,6 +679,7 @@ export default function CheckListScreen({navigation}: any) {
     checklistIcon: string;
     checklistFrequency: string;
     questions: Array<{id: string; label: string}>;
+    requisitos?: string;
   }) => {
     // Pegar o status do mês atualmente selecionado
     const currentMonth = selectedMonth.getMonth() + 1;
@@ -720,6 +727,7 @@ export default function CheckListScreen({navigation}: any) {
               location.id,
               location.name,
               questions,
+              requisitos,
             );
           }}>
           <MaterialCommunityIcons
@@ -819,6 +827,7 @@ export default function CheckListScreen({navigation}: any) {
                         checklistIcon={checklist.icon}
                         checklistFrequency={checklist.frequency}
                         questions={checklist.questions}
+                        requisitos={checklist.requisitos}
                       />
                     ))}
                   </View>
@@ -847,7 +856,7 @@ export default function CheckListScreen({navigation}: any) {
           }))}
           mesAno={getMonthYearLabel()}
           loading={generatingReport}
-          
+          requisitos={reportModalData.requisitos}
         />
       )}
     </Surface>

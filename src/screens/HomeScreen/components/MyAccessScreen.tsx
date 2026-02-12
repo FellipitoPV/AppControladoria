@@ -9,107 +9,39 @@ import { Text } from 'react-native-paper';
 import MaterialIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useUser } from '../../../contexts/userContext';
 import { customTheme } from '../../../theme/theme';
-import { AcessoInterface, AcessosType, UserAccess } from '../../Adm/types/admTypes';
+import { UserAccess, getLevelLabel } from '../../Adm/types/admTypes';
 import ModernHeader from '../../../assets/components/ModernHeader';
-import { NavigationProp, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 
-// Primeiro, atualize a interface AccessItemProps
-interface AccessItemProps {
-    access: AcessoInterface;
-    level: number;
-}
-
-// Componente AccessItem atualizado
-const AccessItem: React.FC<AccessItemProps> = ({ access, level }) => {
-    // Encontra o tipo de acesso completo no AcessosType
-    const fullAccessInfo = AcessosType.find(a => a.id === access.id);
-
-    // Encontra as informações do nível atual
-    const levelInfo = fullAccessInfo?.levels.find(l => l.level === level);
-
-    // Função para obter o label do nível
-    const getLevelLabel = (level: number) => {
-        switch (level) {
-            case 3: return "Administrador";
-            case 2: return "Avançado";
-            case 1: return "Básico";
-            default: return "Sem acesso";
-        }
-    };
-
-    // Divide as capabilities em duas colunas
-    const splitCapabilities = (capabilities: string[] = []) => {
-        const mid = Math.ceil(capabilities.length / 2);
-        return {
-            col1: capabilities.slice(0, mid),
-            col2: capabilities.slice(mid)
-        };
-    };
-
-    const { col1, col2 } = splitCapabilities(levelInfo?.capabilities);
+const AccessItem: React.FC<{ access: UserAccess }> = ({ access }) => {
+    const levelLabel = getLevelLabel(access.level);
 
     return (
         <View style={styles.accessItem}>
             <View style={styles.accessHeader}>
                 <View style={styles.iconContainer}>
                     <MaterialIcons
-                        name={access.icon}
+                        name="key-variant"
                         size={24}
                         color={customTheme.colors.primary}
                     />
                 </View>
                 <View style={styles.accessTitleContainer}>
-                    <Text style={styles.accessName}>{access.label}</Text>
+                    <Text style={styles.accessName}>{access.moduleId}</Text>
                     <View style={[
                         styles.levelBadge,
-                        { backgroundColor: level === 3 ? customTheme.colors.primary: level === 2 ? customTheme.colors.secondary : customTheme.colors.tertiary }
+                        { backgroundColor: access.level === 3 ? customTheme.colors.primary : access.level === 2 ? customTheme.colors.secondary : customTheme.colors.tertiary }
                     ]}>
-                        <Text style={styles.levelText}>{getLevelLabel(level)}</Text>
+                        <Text style={styles.levelText}>
+                            Nível {access.level} - {levelLabel}
+                        </Text>
                     </View>
                 </View>
             </View>
-
-            <Text style={styles.accessDescription}>{access.description}</Text>
-
-            {levelInfo && (
-                <View style={styles.levelInfoContainer}>
-                    <Text style={styles.levelTitle}>{levelInfo.title}</Text>
-                    <Text style={styles.levelDescription}>{levelInfo.description}</Text>
-
-                    <Text style={styles.capabilitiesTitle}>O que você pode fazer:</Text>
-                    <View style={styles.capabilitiesContainer}>
-                        <View style={styles.capabilitiesColumn}>
-                            {col1.map((capability, index) => (
-                                <View key={index} style={styles.capabilityItem}>
-                                    <MaterialIcons
-                                        name="check-circle"
-                                        size={16}
-                                        color={customTheme.colors.primary}
-                                    />
-                                    <Text style={styles.capabilityText}>{capability}</Text>
-                                </View>
-                            ))}
-                        </View>
-                        <View style={styles.capabilitiesColumn}>
-                            {col2.map((capability, index) => (
-                                <View key={index} style={styles.capabilityItem}>
-                                    <MaterialIcons
-                                        name="check-circle"
-                                        size={16}
-                                        color={customTheme.colors.primary}
-                                    />
-                                    <Text style={styles.capabilityText}>{capability}</Text>
-                                </View>
-                            ))}
-                        </View>
-                    </View>
-                </View>
-            )}
         </View>
     );
 };
 
-// Primeiro, vamos criar um componente especial para a mensagem de admin
 const AdminAccessMessage: React.FC = () => {
     return (
         <View style={styles.adminContainer}>
@@ -119,23 +51,15 @@ const AdminAccessMessage: React.FC = () => {
                 <MaterialIcons name="key-variant" size={32} color="#4CAF50" />
             </View>
 
-            <Text style={styles.adminTitle}>🎉 Modo Super Admin Ativado! 🎉</Text>
+            <Text style={styles.adminTitle}>Modo Super Admin Ativado!</Text>
 
             <Text style={styles.adminDescription}>
-                Uau! Você é um Administrador!
-                Com grandes poderes vêm grandes... ah, você já conhece o resto! 😎
+                Você é um Administrador com acesso total a todos os módulos.
             </Text>
 
             <View style={styles.adminBadgeContainer}>
                 <MaterialIcons name="security" size={24} color="#FFD700" />
                 <Text style={styles.adminBadgeText}>Passe Livre em Todas as Áreas</Text>
-            </View>
-
-            <View style={styles.adminIconGrid}>
-                <MaterialIcons name="database-lock" size={24} color="#FF5722" />
-                <MaterialIcons name="shield-check" size={24} color="#2196F3" />
-                <MaterialIcons name="cog" size={24} color="#9C27B0" />
-                <MaterialIcons name="lightning-bolt" size={24} color="#FF9800" />
             </View>
         </View>
     );
@@ -145,25 +69,6 @@ export default function MyAccessScreen() {
     const { userInfo } = useUser();
     const navigation = useNavigation();
 
-    // Função para encontrar as informações completas do acesso
-    const getAccessInfo = (userAccess: UserAccess): { accessInfo: AcessoInterface; level: number } => {
-        const accessInfo = AcessosType.find(access => access.id === userAccess.moduleId);
-        if (!accessInfo) {
-            return {
-                accessInfo: {
-                    id: userAccess.moduleId,
-                    label: userAccess.moduleId.charAt(0).toUpperCase() + userAccess.moduleId.slice(1),
-                    icon: 'lock',
-                    description: `Acesso ao módulo ${userAccess.moduleId}`,
-                    levels: [] // Add an appropriate value for levels
-                },
-                level: userAccess.level
-            };
-        }
-        return { accessInfo, level: userAccess.level };
-    };
-
-    // Atualize o resumo para mostrar informações por nível
     const getAccessSummary = () => {
         if (userInfo?.cargo === 'Administrador') {
             return { total: 'Acesso Total', description: 'Você tem permissões administrativas completas' };
@@ -175,7 +80,7 @@ export default function MyAccessScreen() {
         const acessosNivel1 = userInfo?.acesso?.filter(a => a.level === 1).length || 0;
 
         return {
-            total: `${totalAcessos} módulos de acesso`,
+            total: `${totalAcessos} ${totalAcessos === 1 ? 'módulo' : 'módulos'} de acesso`,
             description: `${acessosNivel3} admin, ${acessosNivel2} avançado, ${acessosNivel1} básico`
         };
     };
@@ -208,16 +113,12 @@ export default function MyAccessScreen() {
             </View>
 
             <View style={styles.accessContainer}>
-                {userInfo?.acesso?.map((userAccess) => {
-                    const { accessInfo, level } = getAccessInfo(userAccess);
-                    return (
-                        <AccessItem
-                            key={accessInfo.id}
-                            access={accessInfo}
-                            level={level}
-                        />
-                    );
-                })}
+                {userInfo?.acesso?.map((userAccess) => (
+                    <AccessItem
+                        key={userAccess.moduleId}
+                        access={userAccess}
+                    />
+                ))}
                 {(!userInfo?.acesso || userInfo.acesso.length === 0) && (
                     <View style={styles.noAccessContainer}>
                         <MaterialIcons
@@ -247,7 +148,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-        marginBottom: 8,
     },
     iconContainer: {
         width: 40,
@@ -266,12 +166,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#333',
     },
-    accessDescription: {
-        fontSize: 14,
-        color: '#666',
-        marginLeft: 52,
-        marginBottom: 16,
-    },
     levelBadge: {
         paddingHorizontal: 8,
         paddingVertical: 2,
@@ -282,47 +176,6 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 12,
         fontWeight: '500',
-    },
-    levelInfoContainer: {
-        marginTop: 8,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(0, 0, 0, 0.05)',
-    },
-    levelTitle: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 4,
-    },
-    levelDescription: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: 16,
-    },
-    capabilitiesTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 12,
-    },
-    capabilitiesContainer: {
-        flexDirection: 'row',
-        gap: 16,
-    },
-    capabilitiesColumn: {
-        flex: 1,
-        gap: 8,
-    },
-    capabilityItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    capabilityText: {
-        flex: 1,
-        fontSize: 13,
-        color: '#666',
     },
     adminContainer: {
         margin: 20,
@@ -365,18 +218,11 @@ const styles = StyleSheet.create({
         padding: 12,
         borderRadius: 12,
         gap: 8,
-        marginBottom: 16,
     },
     adminBadgeText: {
         fontSize: 16,
         color: customTheme.colors.primary,
         fontWeight: '600',
-    },
-    adminIconGrid: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        paddingTop: 8,
     },
     container: {
         flex: 1,

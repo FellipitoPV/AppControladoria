@@ -19,9 +19,9 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {customTheme} from '../../../../theme/theme';
-import SignatureCapture from '../../../../components/SignatureCapture';
-import {useUser} from '../../../../contexts/userContext';
+import {customTheme} from '../../theme/theme';
+import SignatureCapture from '../SignatureCapture';
+import {useUser} from '../../contexts/userContext';
 
 interface ChecklistItem {
   id: string;
@@ -42,6 +42,7 @@ interface ReportData {
   localResponsavel: string;
   assinaturaBase64?: string;
   variant?: ReportVariant;
+  requisitos?: string;
   // Campos para variante Qualidade
   dataAuditoria?: string;
   empresaAuditada?: string;
@@ -64,6 +65,7 @@ interface ReportGeneratorModalProps {
   mesAno: string;
   loading?: boolean;
   variant?: ReportVariant;
+  requisitos?: string;
 }
 
 export default function ReportGeneratorModal({
@@ -76,6 +78,7 @@ export default function ReportGeneratorModal({
   mesAno,
   loading = false,
   variant = 'meioAmbiente',
+  requisitos = '',
 }: ReportGeneratorModalProps) {
   const {userInfo} = useUser();
   const isSST = variant === 'sst';
@@ -160,6 +163,8 @@ export default function ReportGeneratorModal({
       }
     }
 
+    const forcarVariante = "meioAmbiente";
+
     const data: ReportData = {
       titulo: checklistTitle,
       local: locationName,
@@ -172,7 +177,8 @@ export default function ReportGeneratorModal({
       responsavelVerificacao: responsavelVerificacao.trim(),
       localResponsavel: localResponsavel.trim(),
       assinaturaBase64: assinaturaBase64 || undefined,
-      variant,
+      variant:"meioAmbiente",
+      requisitos: requisitos || undefined,
       // Dados de qualidade
       ...(isQualidade && {
         dataAuditoria: dataAuditoria.trim(),

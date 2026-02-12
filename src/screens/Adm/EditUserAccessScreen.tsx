@@ -1,6 +1,6 @@
-import { AcessoInterface, AcessosType, User, UserAccess } from './types/admTypes';
+import { User, UserAccess, getLevelLabel } from './types/admTypes';
 import {
-    ActivityIndicator,
+    Alert,
     BackHandler,
     Image,
     ScrollView,
@@ -8,8 +8,8 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { Dialog, Portal, Text, TextInput } from 'react-native-paper';
-import { EnhancedSearchContainer, ModernSearchBar } from './components/ModernSearchBar';
+import { Text, TextInput } from 'react-native-paper';
+import { EnhancedSearchContainer } from './components/ModernSearchBar';
 import { NavigationProp, ParamListBase, useFocusEffect, useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
 import { collection, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
@@ -21,47 +21,43 @@ import { customTheme } from '../../theme/theme';
 import { db } from '../../../firebase';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 
-interface AccessItemProps {
-    item: AcessoInterface;
-    selectedLevel: number | null;
-    onLevelSelect: (moduleId: string, level: number | null) => void;
-}
+// ==================== ACCESS ITEM ====================
 
-const AccessItem: React.FC<AccessItemProps> = ({ item, selectedLevel, onLevelSelect }) => {
-    const levels = [
-        { level: 1, label: "Básico" },
-        { level: 2, label: "Avançado" },
-        { level: 3, label: "Administrador" }
-    ];
+const AccessItem: React.FC<{
+    access: UserAccess;
+    onLevelChange: (moduleId: string, level: number) => void;
+    onRemove: (moduleId: string) => void;
+}> = ({ access, onLevelChange, onRemove }) => {
+    const levels = [1, 2, 3];
 
     return (
         <View style={styles.accessItem}>
             <View style={styles.accessItemHeader}>
                 <View style={styles.accessItemContent}>
                     <View style={styles.iconContainer}>
-                        <Icon name={item.icon} size={18} color={selectedLevel ? customTheme.colors.primary : '#666'} />
+                        <Icon name="key-variant" size={18} color={customTheme.colors.primary} />
                     </View>
                     <View style={styles.accessItemText}>
-                        <Text style={styles.accessItemLabel}>{item.label}</Text>
-                        <Text numberOfLines={1} style={styles.accessItemDescription}>{item.description}</Text>
+                        <Text style={styles.accessItemLabel}>{access.moduleId}</Text>
+                        <Text style={styles.accessItemDescription}>
+                            Nível {access.level} - {getLevelLabel(access.level)}
+                        </Text>
                     </View>
                 </View>
-                {selectedLevel !== null && (
-                    <TouchableOpacity onPress={() => onLevelSelect(item.id, null)} style={styles.removeButton}>
-                        <Icon name="close-circle" size={22} color={customTheme.colors.error} />
-                    </TouchableOpacity>
-                )}
+                <TouchableOpacity onPress={() => onRemove(access.moduleId)} style={styles.removeButton}>
+                    <Icon name="close-circle" size={22} color={customTheme.colors.error} />
+                </TouchableOpacity>
             </View>
 
             <View style={styles.levelSelector}>
-                {levels.map((levelOption) => (
+                {levels.map((level) => (
                     <TouchableOpacity
-                        key={levelOption.level}
-                        style={[styles.levelButton, selectedLevel === levelOption.level && styles.levelButtonSelected]}
-                        onPress={() => onLevelSelect(item.id, levelOption.level)}
+                        key={level}
+                        style={[styles.levelButton, access.level === level && styles.levelButtonSelected]}
+                        onPress={() => onLevelChange(access.moduleId, level)}
                     >
-                        <Text style={[styles.levelButtonText, selectedLevel === levelOption.level && styles.levelButtonTextSelected]}>
-                            {levelOption.label}
+                        <Text style={[styles.levelButtonText, access.level === level && styles.levelButtonTextSelected]}>
+                            {level} - {getLevelLabel(level)}
                         </Text>
                     </TouchableOpacity>
                 ))}
@@ -69,6 +65,8 @@ const AccessItem: React.FC<AccessItemProps> = ({ item, selectedLevel, onLevelSel
         </View>
     );
 };
+
+// ==================== USER SEARCH ITEM ====================
 
 const UserSearchItem: React.FC<{
     user: User;
@@ -90,12 +88,18 @@ const UserSearchItem: React.FC<{
             <View style={styles.userInfo}>
                 <Text style={styles.userName}>{user.user}</Text>
                 <Text style={styles.userEmail}>{user.email}</Text>
-                <Text style={styles.userCargo}>{user.cargo}</Text>
+                {user.acesso && user.acesso.length > 0 && (
+                    <Text style={styles.userAccessList} numberOfLines={2}>
+                        {user.acesso.map(a => `${a.moduleId}:${a.level}`).join(', ')}
+                    </Text>
+                )}
             </View>
             <Icon name="chevron-right" size={24} color="#666" />
         </TouchableOpacity>
     );
 };
+
+// ==================== MAIN SCREEN ====================
 
 export default function EditUserAccessScreen() {
     const navigation = useNavigation<NavigationProp<ParamListBase>>();
@@ -105,32 +109,30 @@ export default function EditUserAccessScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [selectedAccess, setSelectedAccess] = useState<UserAccess[]>([]);
-
     const [confirmDialogVisible, setConfirmDialogVisible] = useState(false);
+
+    const [newModuleId, setNewModuleId] = useState('');
+    const [originalAccess, setOriginalAccess] = useState<UserAccess[]>([]);
 
     useEffect(() => {
         loadUsers();
     }, []);
 
-    // Controle do botão voltar
     useFocusEffect(
         React.useCallback(() => {
             const onBackPress = () => {
                 if (selectedUser) {
-                    handleBack();
-                    return true; // Previne a navegação padrão
+                    tryBack();
+                    return true;
                 }
-                return false; // Permite a navegação padrão
+                return false;
             };
 
             BackHandler.addEventListener('hardwareBackPress', onBackPress);
-
-            return () =>
-                BackHandler.removeEventListener('hardwareBackPress', onBackPress);
-        }, [selectedUser])
+            return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+        }, [selectedUser, selectedAccess, originalAccess])
     );
 
-    // Atualizar loadUsers
     const loadUsers = async () => {
         try {
             const usersQuery = query(
@@ -139,134 +141,151 @@ export default function EditUserAccessScreen() {
             );
             const snapshot = await getDocs(usersQuery);
 
-            const listaUsuarios: User[] = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                user: doc.data().user,
-                email: doc.data().email,
-                telefone: doc.data().telefone,
-                cargo: doc.data().cargo,
-                ramal: doc.data().ramal || '',
-                area: doc.data().area || '',
-                acesso: doc.data().acesso || [],
-                photoURL: doc.data().photoURL || ''
+            const listaUsuarios: User[] = snapshot.docs.map((docSnap) => ({
+                id: docSnap.id,
+                user: docSnap.data().user,
+                email: docSnap.data().email,
+                telefone: docSnap.data().telefone,
+                cargo: docSnap.data().cargo,
+                ramal: docSnap.data().ramal || '',
+                area: docSnap.data().area || '',
+                acesso: docSnap.data().acesso || [],
+                photoURL: docSnap.data().photoURL || ''
             }));
 
             setUsers(listaUsuarios);
         } catch (error) {
             console.error('Erro ao acessar a coleção "users":', error);
-            showGlobalToast(
-                'error',
-                'Erro',
-                'Não foi possível carregar os usuários',
-                3000
-            );
+            showGlobalToast('error', 'Erro', 'Não foi possível carregar os usuários', 3000);
         }
     };
 
-    // Função de seleção de usuário atualizada
     const handleUserSelect = (user: User) => {
+        const acesso = user.acesso || [];
         setSelectedUser(user);
+        setSelectedAccess(acesso);
+        setOriginalAccess(acesso);
+        setNewModuleId('');
+    };
 
-        if (user.acesso) {
-            // Se já tem acessos definidos, usa eles
-            setSelectedAccess(user.acesso);
-        } else {
-            // Se não tem nenhum acesso ainda
-            setSelectedAccess([]);
-        }
+    const hasChanges = (): boolean => {
+        if (selectedAccess.length !== originalAccess.length) return true;
+        return selectedAccess.some(a => {
+            const orig = originalAccess.find(o => o.moduleId === a.moduleId);
+            return !orig || orig.level !== a.level;
+        });
     };
 
     const handleBack = () => {
         setSelectedUser(null);
         setSelectedAccess([]);
+        setOriginalAccess([]);
+        setNewModuleId('');
     };
 
-    // Função para manipular seleção de nível
-    const handleLevelSelect = (moduleId: string, level: number | null) => {
-        setSelectedAccess(prev => {
-            if (level === null) {
-                // Remove o acesso se level for null
-                return prev.filter(access => access.moduleId !== moduleId);
-            }
-
-            const existing = prev.find(access => access.moduleId === moduleId);
-            if (existing) {
-                return prev.map(access =>
-                    access.moduleId === moduleId
-                        ? { ...access, level }
-                        : access
-                );
-            }
-            return [...prev, { moduleId, level }];
-        });
+    const tryBack = () => {
+        if (hasChanges()) {
+            Alert.alert(
+                'Alterações não salvas',
+                'Você fez alterações que não foram salvas. Deseja salvar antes de sair?',
+                [
+                    { text: 'Descartar', style: 'destructive', onPress: handleBack },
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Salvar', onPress: handleSaveAccess },
+                ],
+            );
+        } else {
+            handleBack();
+        }
     };
+
+    // ==================== ACCESS MANAGEMENT ====================
+
+    const handleAddModule = () => {
+        const id = newModuleId.trim().toLowerCase();
+        if (!id) {
+            showGlobalToast('error', 'ID vazio', 'Informe o ID do módulo', 3000);
+            return;
+        }
+        if (selectedAccess.find(a => a.moduleId === id)) {
+            showGlobalToast('info', 'Já existe', `O módulo "${id}" já está na lista`, 3000);
+            return;
+        }
+
+        setSelectedAccess(prev => [...prev, { moduleId: id, level: 1 }]);
+        setNewModuleId('');
+    };
+
+    const handleLevelChange = (moduleId: string, level: number) => {
+        setSelectedAccess(prev =>
+            prev.map(a => a.moduleId === moduleId ? { ...a, level } : a)
+        );
+    };
+
+    const handleRemove = (moduleId: string) => {
+        setSelectedAccess(prev => prev.filter(a => a.moduleId !== moduleId));
+    };
+
+    // ==================== SAVE ====================
 
     const handleSaveAccess = () => {
-        setConfirmDialogVisible(true); // Abrir modal antes de salvar
+        setConfirmDialogVisible(true);
     };
 
-    // Atualizar saveAccess
     const saveAccess = async () => {
         if (!selectedUser?.id) return;
 
         setLoading(true);
         try {
             await updateDoc(doc(db(), 'users', selectedUser.id), {
-                acesso: selectedAccess // Salva diretamente o array de UserAccess
+                acesso: selectedAccess
             });
 
-            showGlobalToast(
-                'success',
-                'Sucesso',
-                'Acessos atualizados com sucesso!',
-                3000
-            );
+            showGlobalToast('success', 'Sucesso', 'Acessos atualizados com sucesso!', 3000);
             setConfirmDialogVisible(false);
             loadUsers();
             handleBack();
         } catch (error) {
             console.error('Erro ao atualizar acessos:', error);
-            showGlobalToast(
-                'error',
-                'Erro',
-                'Não foi possível atualizar os acessos',
-                3000
-            );
+            showGlobalToast('error', 'Erro', 'Não foi possível atualizar os acessos', 3000);
         } finally {
             setLoading(false);
         }
     };
 
-    // Função para remover acentos para melhorar a busca
+    // ==================== SEARCH ====================
+
     const removeAccents = (str: string) => {
         return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     };
 
-    // Filtra usuários baseado na busca
     const filteredUsers = users.filter(user => {
         const searchTermNormalized = removeAccents(searchQuery.toLowerCase());
-        const userNameNormalized = removeAccents(user.user.toLowerCase());
-        const userEmailNormalized = removeAccents(user.email.toLowerCase());
-        const userCargoNormalized = removeAccents(user.cargo.toLowerCase());
+        const userNameNormalized = removeAccents((user.user || '').toLowerCase());
+        const userEmailNormalized = removeAccents((user.email || '').toLowerCase());
+        const userCargoNormalized = removeAccents((user.cargo || '').toLowerCase());
+        const userAccessString = user.acesso
+            ?.map(a => (a.moduleId || '').toLowerCase())
+            .join(' ') || '';
 
         return userNameNormalized.includes(searchTermNormalized) ||
             userEmailNormalized.includes(searchTermNormalized) ||
-            userCargoNormalized.includes(searchTermNormalized);
+            userCargoNormalized.includes(searchTermNormalized) ||
+            userAccessString.includes(searchTermNormalized);
     });
 
-    // Função auxiliar para extrair primeiro e último nome
     const getShortName = (fullName: string) => {
         const parts = fullName.trim().split(' ');
         if (parts.length === 1) return parts[0];
         return `${parts[0]} ${parts[parts.length - 1]}`;
     };
 
+    // ==================== RENDER ====================
+
     return (
         <View style={styles.container}>
             {!selectedUser ? (
-                // Tela de busca de usuários
                 <>
-                    {/* Header */}
                     <ModernHeader
                         title="Gerenciar Acessos"
                         iconName="account-cog"
@@ -290,30 +309,61 @@ export default function EditUserAccessScreen() {
                     </ScrollView>
                 </>
             ) : (
-                // Tela de edição de acessos
                 <>
                     <ModernHeader
                         title={getShortName(selectedUser.user)}
                         iconName="account-edit"
                         rightIcon='content-save'
                         rightAction={handleSaveAccess}
-                        onBackPress={() => setSelectedUser(null)}
+                        onBackPress={tryBack}
                     />
 
-                    <View style={styles.accessList}>
-                        {AcessosType.map((access) => (
-                            <AccessItem
-                                key={access.id}
-                                item={access}
-                                selectedLevel={selectedAccess.find(a => a.moduleId === access.id)?.level || null}
-                                onLevelSelect={handleLevelSelect}
+                    <ScrollView style={styles.accessList}>
+                        {/* Add new module */}
+                        <View style={styles.addModuleRow}>
+                            <TextInput
+                                label="ID do módulo"
+                                value={newModuleId}
+                                onChangeText={setNewModuleId}
+                                mode="outlined"
+                                style={styles.addModuleInput}
+                                placeholder="ex: sst, contaminados..."
+                                autoCapitalize="none"
+                                outlineColor={customTheme.colors.onSurfaceVariant}
+                                activeOutlineColor={customTheme.colors.primary}
+                                dense
                             />
-                        ))}
-                    </View>
+                            <TouchableOpacity
+                                style={styles.addButton}
+                                onPress={handleAddModule}
+                            >
+                                <Icon name="plus-circle" size={40} color={customTheme.colors.primary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Current access list */}
+                        {selectedAccess.length === 0 ? (
+                            <View style={styles.emptyContainer}>
+                                <Icon name="shield-off-outline" size={48} color={customTheme.colors.onSurfaceVariant} />
+                                <Text style={styles.emptyText}>Nenhum acesso configurado</Text>
+                                <Text style={styles.emptySubtext}>
+                                    Adicione um ID de módulo acima para começar
+                                </Text>
+                            </View>
+                        ) : (
+                            selectedAccess.map((access) => (
+                                <AccessItem
+                                    key={access.moduleId}
+                                    access={access}
+                                    onLevelChange={handleLevelChange}
+                                    onRemove={handleRemove}
+                                />
+                            ))
+                        )}
+                    </ScrollView>
                 </>
             )}
 
-            {/* Dialog de Confirmação */}
             <ConfirmationModal
                 visible={confirmDialogVisible}
                 title="Confirmar Alterações"
@@ -323,77 +373,13 @@ export default function EditUserAccessScreen() {
                 loading={loading}
                 confirmText="Salvar"
                 iconName="content-save"
-                colorScheme="primary" // Novo parâmetro para definir o esquema de cores
+                colorScheme="primary"
             />
-
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    accessItem: {
-        padding: 12, // Reduzido de 16
-        backgroundColor: 'white',
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: '#e5e5e5',
-        marginBottom: 8, // Reduzido de 12
-    },
-    iconContainer: {
-        width: 36, // Reduzido de 42
-        height: 36, // Reduzido de 42
-        borderRadius: 18,
-        backgroundColor: `${customTheme.colors.primary}15`,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    levelSelector: {
-        flexDirection: 'row',
-        gap: 6, // Reduzido de 8
-        marginTop: 6, // Reduzido de 8
-    },
-    accessList: {
-        padding: 16, // Reduzido de 20
-        gap: 8, // Reduzido de 12
-    },
-    accessItemHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    removeButton: {
-        padding: 0,
-        right: 15,
-    },
-    levelButton: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-        backgroundColor: '#f0f0f0',
-        borderWidth: 1,
-        borderColor: '#ddd',
-    },
-    levelButtonSelected: {
-        backgroundColor: customTheme.colors.primary,
-        borderColor: customTheme.colors.primary,
-    },
-    levelButtonText: {
-        fontSize: 12,
-        color: '#666',
-    },
-    levelButtonTextSelected: {
-        color: 'white',
-    },
-    accessItemContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    accessItemDescription: {
-        fontSize: 12,
-        color: '#666',
-        marginTop: 2,
-    },
     container: {
         flex: 1,
         backgroundColor: '#ffffff',
@@ -441,10 +427,73 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#666',
     },
-    userCargo: {
-        fontSize: 12,
-        color: customTheme.colors.primary,
+    userAccessList: {
+        fontSize: 11,
+        color: '#999',
         marginTop: 4,
+    },
+
+    // Access editing
+    accessList: {
+        padding: 16,
+    },
+    addModuleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+        gap: 8,
+    },
+    addModuleInput: {
+        flex: 1,
+        backgroundColor: '#fff',
+    },
+    addButton: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        paddingVertical: 40,
+        gap: 8,
+    },
+    emptyText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#666',
+    },
+    emptySubtext: {
+        fontSize: 13,
+        color: '#999',
+    },
+
+    // Access item
+    accessItem: {
+        padding: 12,
+        backgroundColor: 'white',
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
+        marginBottom: 8,
+    },
+    accessItemHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    accessItemContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        flex: 1,
+    },
+    iconContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: `${customTheme.colors.primary}15`,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     accessItemText: {
         flex: 1,
@@ -454,4 +503,38 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: '#333',
     },
-})
+    accessItemDescription: {
+        fontSize: 12,
+        color: '#666',
+        marginTop: 2,
+    },
+    removeButton: {
+        padding: 4,
+    },
+    levelSelector: {
+        flexDirection: 'row',
+        gap: 6,
+        marginTop: 8,
+    },
+    levelButton: {
+        flex: 1,
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backgroundColor: '#f0f0f0',
+        borderWidth: 1,
+        borderColor: '#ddd',
+        alignItems: 'center',
+    },
+    levelButtonSelected: {
+        backgroundColor: customTheme.colors.primary,
+        borderColor: customTheme.colors.primary,
+    },
+    levelButtonText: {
+        fontSize: 11,
+        color: '#666',
+    },
+    levelButtonTextSelected: {
+        color: 'white',
+    },
+});
