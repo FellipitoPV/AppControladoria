@@ -81,7 +81,6 @@ export default function ReportGeneratorModal({
   requisitos = '',
 }: ReportGeneratorModalProps) {
   const {userInfo} = useUser();
-  const isSST = variant === 'sst';
   const isQualidade = variant === 'qualidade';
 
   const [lider, setLider] = useState('');
@@ -153,10 +152,6 @@ export default function ReportGeneratorModal({
       if (!dataAuditoria.trim() || !empresaAuditada.trim() || !auditor.trim()) {
         return;
       }
-    } else if (isSST) {
-      if (!responsavelVerificacao.trim() || !assinaturaBase64) {
-        return;
-      }
     } else {
       if (!lider.trim() || !responsavelVerificacao.trim() || !assinaturaBase64) {
         return;
@@ -219,9 +214,7 @@ export default function ReportGeneratorModal({
 
   const canGenerate = isQualidade
     ? dataAuditoria.trim() && empresaAuditada.trim() && auditor.trim() && !loading
-    : isSST
-      ? responsavelVerificacao.trim() && assinaturaBase64 && !loading
-      : lider.trim() && responsavelVerificacao.trim() && assinaturaBase64 && !loading;
+    : lider.trim() && responsavelVerificacao.trim() && assinaturaBase64 && !loading;
 
   return (
     <>
@@ -332,7 +325,7 @@ export default function ReportGeneratorModal({
               )}
 
               {/* Seção: Informações do Líder - Apenas para Meio Ambiente */}
-              {!isSST && !isQualidade && (
+              {!isQualidade && (
                 <>
                   <Text style={styles.sectionTitle}>Informações do Líder</Text>
 
@@ -468,17 +461,14 @@ export default function ReportGeneratorModal({
                     style={styles.input}
                   />
 
-                  {/* Campo Setor/Área - Apenas para Meio Ambiente */}
-                  {!isSST && (
-                    <TextInput
-                      label="Setor/Área"
-                      value={localResponsavel}
-                      onChangeText={setLocalResponsavel}
-                      mode="outlined"
-                      placeholder="Ex: QSMS, Engenharia..."
-                      style={styles.input}
-                    />
-                  )}
+                  <TextInput
+                    label="Setor/Área"
+                    value={localResponsavel}
+                    onChangeText={setLocalResponsavel}
+                    mode="outlined"
+                    placeholder="Ex: QSMS, Engenharia..."
+                    style={styles.input}
+                  />
 
                   {/* Campo de assinatura */}
                   <Text style={styles.fieldLabel}>Assinatura *</Text>
@@ -530,6 +520,8 @@ export default function ReportGeneratorModal({
                   )}
                 </>
               )}
+
+              <View style={{height: 40}} />
             </ScrollView>
 
             {/* Footer com botões */}

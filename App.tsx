@@ -51,6 +51,8 @@ import DDSScreen from './src/screens/SubScreens/SST/DDS/DDSScreen';
 import DDSFormScreen from './src/screens/SubScreens/SST/DDS/DDSFormScreen';
 import SSTChecklistScreen from './src/components/CheckList/SSTChecklistScreen';
 import ContaminadosScreen from './src/screens/Contaminados/ContaminadosScreen';
+import ToxicologicoScreen from './src/screens/SubScreens/SST/Toxicologico/ToxicologicoScreen';
+import ToxicologicoFormScreen from './src/screens/SubScreens/SST/Toxicologico/ToxicologicoFormScreen';
 
 // Defina os tipos das rotas para o seu navegador
 interface RootStackParamList {
@@ -477,6 +479,18 @@ export default function App() {
                 <Stack.Screen
                   name="ContaminadosScreen"
                   component={ContaminadosScreen}
+                  options={{headerShown: false}}
+                />
+
+                <Stack.Screen
+                  name="ToxicologicoScreen"
+                  component={ToxicologicoScreen}
+                  options={{headerShown: false}}
+                />
+
+                <Stack.Screen
+                  name="ToxicologicoFormScreen"
+                  component={ToxicologicoFormScreen}
                   options={{headerShown: false}}
                 />
 

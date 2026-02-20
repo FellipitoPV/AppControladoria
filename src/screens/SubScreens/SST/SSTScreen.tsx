@@ -116,11 +116,11 @@ export default function QSMSScreen({ navigation }: any) {
                         disabledText="Requer acesso à SST nível 1"
                     />
                     <ActionButton
-                        icon="file-search-outline"
-                        text="Auditorias"
-                        onPress={() => navigation.navigate('AuditoriasScreen')}
-                        disabled={true}
-                        disabledText="Chegando na próxima atualização"
+                        icon="flask-outline"
+                        text="Toxicológico"
+                        onPress={() => navigation.navigate('ToxicologicoScreen')}
+                        disabled={!canAccessSST()}
+                        disabledText="Requer acesso à SST nível 1"
                     />
                     <ActionButton
                         icon="fire-extinguisher"
