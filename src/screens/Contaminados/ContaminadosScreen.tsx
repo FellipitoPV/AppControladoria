@@ -35,7 +35,11 @@ import {useNetwork} from '../../contexts/NetworkContext';
 import {useUser} from '../../contexts/userContext';
 import {customTheme} from '../../theme/theme';
 import {db, dbStorage} from '../../../firebase';
-import {Contaminado, ContaminadoStatus} from './types/contaminadoTypes';
+import {
+  Contaminado,
+  ContaminadoStatus,
+  getItemPhotos,
+} from './types/contaminadoTypes';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 
@@ -62,7 +66,7 @@ const ContaminadosScreen = () => {
 
   // New modal
   const [newModalVisible, setNewModalVisible] = useState(false);
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [empresa, setEmpresa] = useState('');
   const [data, setData] = useState('');
   const [mtr, setMtr] = useState('');
@@ -77,8 +81,13 @@ const ContaminadosScreen = () => {
   const [editPesagem, setEditPesagem] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [editPhotoUri, setEditPhotoUri] = useState<string | null>(null);
+  const [newEditPhotoUris, setNewEditPhotoUris] = useState<string[]>([]);
   const detailSlideAnim = useRef(new Animated.Value(500)).current;
+
+  // Photo viewer
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerPhotos, setViewerPhotos] = useState<string[]>([]);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   // Real-time listener
   useEffect(() => {
@@ -92,10 +101,7 @@ const ContaminadosScreen = () => {
       snapshot => {
         const items: Contaminado[] = [];
         snapshot.forEach(docSnap => {
-          items.push({
-            id: docSnap.id,
-            ...docSnap.data(),
-          } as Contaminado);
+          items.push({id: docSnap.id, ...docSnap.data()} as Contaminado);
         });
         setContaminados(items);
         setLoading(false);
@@ -157,7 +163,7 @@ const ContaminadosScreen = () => {
   };
 
   const resetNewForm = () => {
-    setPhotoUri(null);
+    setPhotoUris([]);
     setEmpresa('');
     setData('');
     setMtr('');
@@ -166,7 +172,6 @@ const ContaminadosScreen = () => {
 
   const openNewModal = () => {
     resetNewForm();
-    // Default date to today
     const today = new Date();
     const dd = String(today.getDate()).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -202,7 +207,7 @@ const ContaminadosScreen = () => {
     setTimeout(() => {
       setDetailModalVisible(false);
       setSelectedItem(null);
-      setEditPhotoUri(null);
+      setNewEditPhotoUris([]);
     }, 150);
   };
 
@@ -210,14 +215,22 @@ const ContaminadosScreen = () => {
     setSelectedItem(item);
     setEditMtr(item.mtr || '');
     setEditPesagem(item.pesagem || '');
-    setEditPhotoUri(null);
+    setNewEditPhotoUris([]);
     setDetailModalVisible(true);
+  };
+
+  // ==================== PHOTO VIEWER ====================
+
+  const openViewer = (photos: string[], startIndex: number) => {
+    setViewerPhotos(photos);
+    setViewerIndex(startIndex);
+    setViewerVisible(true);
   };
 
   // ==================== IMAGE PICKER ====================
 
-  const showImagePicker = (onSelect: (uri: string) => void) => {
-    Alert.alert('Selecionar Foto', 'Escolha uma opção', [
+  const showImagePickerMulti = (onSelect: (uris: string[]) => void) => {
+    Alert.alert('Adicionar Foto', 'Escolha uma opção', [
       {
         text: 'Câmera',
         onPress: () => {
@@ -227,7 +240,7 @@ const ContaminadosScreen = () => {
               !response.errorCode &&
               response.assets?.[0]?.uri
             ) {
-              onSelect(response.assets[0].uri);
+              onSelect([response.assets[0].uri]);
             }
           });
         },
@@ -235,15 +248,21 @@ const ContaminadosScreen = () => {
       {
         text: 'Galeria',
         onPress: () => {
-          launchImageLibrary({mediaType: 'photo', quality: 0.7}, response => {
-            if (
-              !response.didCancel &&
-              !response.errorCode &&
-              response.assets?.[0]?.uri
-            ) {
-              onSelect(response.assets[0].uri);
-            }
-          });
+          launchImageLibrary(
+            {mediaType: 'photo', quality: 0.7, selectionLimit: 0},
+            response => {
+              if (
+                !response.didCancel &&
+                !response.errorCode &&
+                response.assets
+              ) {
+                const uris = response.assets
+                  .map(a => a.uri)
+                  .filter((uri): uri is string => !!uri);
+                if (uris.length > 0) onSelect(uris);
+              }
+            },
+          );
         },
       },
       {text: 'Cancelar', style: 'cancel'},
@@ -256,7 +275,7 @@ const ContaminadosScreen = () => {
     uri: string,
     empresaName: string,
   ): Promise<string> => {
-    const timestamp = Date.now();
+    const timestamp = Date.now() + Math.random();
     const sanitized = empresaName.trim().replace(/[^a-zA-Z0-9]/g, '_');
     const storagePath = `contaminados/${timestamp}_${sanitized}.jpg`;
     const storageRef = ref(dbStorage(), storagePath);
@@ -280,31 +299,48 @@ const ContaminadosScreen = () => {
       return;
     }
 
-    if (!photoUri) {
-      showGlobalToast('error', 'Foto obrigatória', 'Tire uma foto do resíduo', 4000);
+    if (photoUris.length === 0) {
+      showGlobalToast(
+        'error',
+        'Foto obrigatória',
+        'Adicione pelo menos uma foto do resíduo',
+        4000,
+      );
       return;
     }
     if (!empresa.trim()) {
-      showGlobalToast('error', 'Empresa obrigatória', 'Informe o nome da empresa', 4000);
+      showGlobalToast(
+        'error',
+        'Empresa obrigatória',
+        'Informe o nome da empresa',
+        4000,
+      );
       return;
     }
     if (!data.trim()) {
-      showGlobalToast('error', 'Data obrigatória', 'Informe a data de chegada', 4000);
+      showGlobalToast(
+        'error',
+        'Data obrigatória',
+        'Informe a data de chegada',
+        4000,
+      );
       return;
     }
 
     setIsSaving(true);
     try {
-      const photoUrl = await uploadImage(photoUri, empresa);
+      const photoUrls = await Promise.all(
+        photoUris.map(uri => uploadImage(uri, empresa)),
+      );
       const now = new Date().toISOString();
 
       const newItem: Omit<Contaminado, 'id'> = {
-        photoUrl,
+        photoUrls,
         data: data.trim(),
         empresa: empresa.trim(),
         mtr: mtr.trim(),
         pesagem: pesagem.trim(),
-        status: mtr.trim() && pesagem.trim() ? 'Destinado' : 'Aguardando',
+        status: 'Aguardando',
         createdAt: now,
         updatedAt: now,
       };
@@ -331,20 +367,22 @@ const ContaminadosScreen = () => {
 
     setIsUpdating(true);
     try {
-      let photoUrl = selectedItem.photoUrl;
+      const existingPhotos = getItemPhotos(selectedItem);
+      let uploadedUrls: string[] = [];
 
-      if (editPhotoUri) {
-        photoUrl = await uploadImage(editPhotoUri, selectedItem.empresa);
+      if (newEditPhotoUris.length > 0) {
+        uploadedUrls = await Promise.all(
+          newEditPhotoUris.map(uri => uploadImage(uri, selectedItem.empresa)),
+        );
       }
 
-      const updates: Partial<Contaminado> = {
+      await updateDoc(doc(db(), 'contaminados', selectedItem.id), {
+        photoUrls: [...existingPhotos, ...uploadedUrls],
         mtr: editMtr.trim(),
         pesagem: editPesagem.trim(),
-        photoUrl,
         updatedAt: new Date().toISOString(),
-      };
+      });
 
-      await updateDoc(doc(db(), 'contaminados', selectedItem.id), updates);
       showGlobalToast('success', 'Atualizado com sucesso', '', 4000);
       closeDetailModal();
     } catch (error) {
@@ -376,17 +414,20 @@ const ContaminadosScreen = () => {
 
     setIsUpdating(true);
     try {
-      let photoUrl = selectedItem.photoUrl;
+      const existingPhotos = getItemPhotos(selectedItem);
+      let uploadedUrls: string[] = [];
 
-      if (editPhotoUri) {
-        photoUrl = await uploadImage(editPhotoUri, selectedItem.empresa);
+      if (newEditPhotoUris.length > 0) {
+        uploadedUrls = await Promise.all(
+          newEditPhotoUris.map(uri => uploadImage(uri, selectedItem.empresa)),
+        );
       }
 
       await updateDoc(doc(db(), 'contaminados', selectedItem.id), {
         status: 'Destinado',
+        photoUrls: [...existingPhotos, ...uploadedUrls],
         mtr: editMtr.trim(),
         pesagem: editPesagem.trim(),
-        photoUrl,
         updatedAt: new Date().toISOString(),
       });
 
@@ -428,13 +469,13 @@ const ContaminadosScreen = () => {
             try {
               await deleteDoc(doc(db(), 'contaminados', selectedItem.id!));
 
-              // Try to delete storage image
-              if (selectedItem.photoUrl) {
+              // Tenta deletar todas as fotos do Storage (best effort)
+              const photos = getItemPhotos(selectedItem);
+              for (const url of photos) {
                 try {
-                  const imageRef = ref(dbStorage(), selectedItem.photoUrl);
-                  await deleteObject(imageRef);
+                  await deleteObject(ref(dbStorage(), url));
                 } catch {
-                  // Image may not exist anymore
+                  // ignora se não conseguir deletar
                 }
               }
 
@@ -459,7 +500,9 @@ const ContaminadosScreen = () => {
     if (cleaned.length > 8) cleaned = cleaned.slice(0, 8);
 
     if (cleaned.length >= 5) {
-      setData(`${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4)}`);
+      setData(
+        `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4)}`,
+      );
     } else if (cleaned.length >= 3) {
       setData(`${cleaned.slice(0, 2)}/${cleaned.slice(2)}`);
     } else {
@@ -471,6 +514,8 @@ const ContaminadosScreen = () => {
 
   const renderCard = ({item}: {item: Contaminado}) => {
     const isAguardando = item.status === 'Aguardando';
+    const photos = getItemPhotos(item);
+    const firstPhoto = photos[0];
 
     return (
       <TouchableOpacity
@@ -479,25 +524,33 @@ const ContaminadosScreen = () => {
         activeOpacity={0.7}>
         <View style={styles.cardRow}>
           {/* Thumbnail */}
-          {item.photoUrl && !imageErrors[item.id || ''] ? (
-            <Image
-              source={{uri: item.photoUrl}}
-              style={styles.thumbnail}
-              onError={() => {
-                if (item.id) {
-                  setImageErrors(prev => ({...prev, [item.id!]: true}));
-                }
-              }}
-            />
-          ) : (
-            <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
-              <Icon
-                name="image-off"
-                size={24}
-                color={customTheme.colors.onSurfaceVariant}
+          <View style={styles.thumbnailContainer}>
+            {firstPhoto && !imageErrors[item.id || ''] ? (
+              <Image
+                source={{uri: firstPhoto}}
+                style={styles.thumbnail}
+                onError={() => {
+                  if (item.id) {
+                    setImageErrors(prev => ({...prev, [item.id!]: true}));
+                  }
+                }}
               />
-            </View>
-          )}
+            ) : (
+              <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+                <Icon
+                  name="image-off"
+                  size={24}
+                  color={customTheme.colors.onSurfaceVariant}
+                />
+              </View>
+            )}
+            {photos.length > 1 && (
+              <View style={styles.photoCountBadge}>
+                <Icon name="image-multiple" size={9} color="#fff" />
+                <Text style={styles.photoCountBadgeText}>{photos.length}</Text>
+              </View>
+            )}
+          </View>
 
           {/* Info */}
           <View style={styles.cardInfo}>
@@ -505,7 +558,6 @@ const ContaminadosScreen = () => {
               {item.empresa}
             </Text>
             <Text style={styles.cardData}>{item.data}</Text>
-
             {item.mtr ? (
               <Text style={styles.cardDetail}>MTR: {item.mtr}</Text>
             ) : null}
@@ -518,18 +570,12 @@ const ContaminadosScreen = () => {
           <View
             style={[
               styles.statusBadge,
-              {
-                backgroundColor: isAguardando
-                  ? '#FFF3E0'
-                  : '#E8F5E9',
-              },
+              {backgroundColor: isAguardando ? '#FFF3E0' : '#E8F5E9'},
             ]}>
             <Text
               style={[
                 styles.statusText,
-                {
-                  color: isAguardando ? '#E65100' : '#2E7D32',
-                },
+                {color: isAguardando ? '#E65100' : '#2E7D32'},
               ]}>
               {item.status}
             </Text>
@@ -560,10 +606,7 @@ const ContaminadosScreen = () => {
             key={f}
             selected={filter === f}
             onPress={() => setFilter(f)}
-            style={[
-              styles.chip,
-              filter === f && styles.chipSelected,
-            ]}
+            style={[styles.chip, filter === f && styles.chipSelected]}
             textStyle={[
               styles.chipText,
               filter === f && styles.chipTextSelected,
@@ -597,6 +640,82 @@ const ContaminadosScreen = () => {
         />
       )}
 
+      {/* ==================== PHOTO VIEWER ==================== */}
+      <Modal
+        visible={viewerVisible}
+        transparent={false}
+        statusBarTranslucent
+        animationType="fade">
+        <View style={styles.viewerContainer}>
+          <TouchableOpacity
+            style={styles.viewerCloseBtn}
+            onPress={() => setViewerVisible(false)}>
+            <Icon name="close" size={26} color="#fff" />
+          </TouchableOpacity>
+
+          {viewerPhotos.length > 0 && (
+            <Image
+              source={{uri: viewerPhotos[viewerIndex]}}
+              style={styles.viewerImage}
+              resizeMode="contain"
+            />
+          )}
+
+          {viewerPhotos.length > 1 && (
+            <>
+              <View style={styles.viewerNav}>
+                <TouchableOpacity
+                  style={styles.viewerNavBtn}
+                  onPress={() => setViewerIndex(i => Math.max(0, i - 1))}
+                  disabled={viewerIndex === 0}>
+                  <Icon
+                    name="chevron-left"
+                    size={36}
+                    color={
+                      viewerIndex === 0 ? 'rgba(255,255,255,0.25)' : '#fff'
+                    }
+                  />
+                </TouchableOpacity>
+                <Text style={styles.viewerNavText}>
+                  {viewerIndex + 1} / {viewerPhotos.length}
+                </Text>
+                <TouchableOpacity
+                  style={styles.viewerNavBtn}
+                  onPress={() =>
+                    setViewerIndex(i =>
+                      Math.min(viewerPhotos.length - 1, i + 1),
+                    )
+                  }
+                  disabled={viewerIndex === viewerPhotos.length - 1}>
+                  <Icon
+                    name="chevron-right"
+                    size={36}
+                    color={
+                      viewerIndex === viewerPhotos.length - 1
+                        ? 'rgba(255,255,255,0.25)'
+                        : '#fff'
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.viewerDots}>
+                {viewerPhotos.map((_, i) => (
+                  <TouchableOpacity key={i} onPress={() => setViewerIndex(i)}>
+                    <View
+                      style={[
+                        styles.viewerDot,
+                        i === viewerIndex && styles.viewerDotActive,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+        </View>
+      </Modal>
+
       {/* ==================== NEW MODAL ==================== */}
       <Modal visible={newModalVisible} transparent animationType="none">
         <View style={styles.modalOverlay}>
@@ -612,25 +731,51 @@ const ContaminadosScreen = () => {
             <ScrollView
               showsVerticalScrollIndicator={false}
               style={styles.modalScroll}>
-              {/* Photo */}
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={() => showImagePicker(uri => setPhotoUri(uri))}>
-                {photoUri ? (
-                  <Image source={{uri: photoUri}} style={styles.photoPreview} />
-                ) : (
-                  <View style={styles.photoPlaceholder}>
-                    <Icon
-                      name="camera-plus"
-                      size={40}
-                      color={customTheme.colors.primary}
-                    />
-                    <Text style={styles.photoPlaceholderText}>
-                      Tirar foto *
-                    </Text>
+              {/* Photos */}
+              <Text style={styles.photoSectionLabel}>
+                Fotos{' '}
+                {photoUris.length > 0 ? `(${photoUris.length})` : '(obrigatório)'}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.photoStrip}
+                contentContainerStyle={styles.photoStripContent}>
+                {photoUris.map((uri, index) => (
+                  <View key={index} style={styles.photoThumbContainer}>
+                    <TouchableOpacity
+                      onPress={() => openViewer(photoUris, index)}>
+                      <Image source={{uri}} style={styles.photoThumb} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.photoRemoveBtn}
+                      onPress={() =>
+                        setPhotoUris(prev => prev.filter((_, i) => i !== index))
+                      }>
+                      <Icon name="close-circle" size={22} color="#fff" />
+                    </TouchableOpacity>
                   </View>
-                )}
-              </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[
+                    styles.photoAddBtn,
+                    photoUris.length === 0 && styles.photoAddBtnWide,
+                  ]}
+                  onPress={() =>
+                    showImagePickerMulti(uris =>
+                      setPhotoUris(prev => [...prev, ...uris]),
+                    )
+                  }>
+                  <Icon
+                    name="camera-plus"
+                    size={photoUris.length === 0 ? 36 : 26}
+                    color={customTheme.colors.primary}
+                  />
+                  <Text style={styles.photoAddBtnText}>
+                    {photoUris.length === 0 ? 'Adicionar Foto *' : 'Mais'}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
 
               {/* Empresa */}
               <TextInput
@@ -747,22 +892,73 @@ const ContaminadosScreen = () => {
                   )}
                 </View>
 
-                {/* Photo */}
-                <TouchableOpacity
-                  style={styles.detailPhotoContainer}
-                  onPress={() =>
-                    showImagePicker(uri => setEditPhotoUri(uri))
-                  }>
-                  <Image
-                    source={{
-                      uri: editPhotoUri || selectedItem.photoUrl,
-                    }}
-                    style={styles.detailPhoto}
-                  />
-                  <View style={styles.editPhotoOverlay}>
-                    <Icon name="camera" size={20} color="#FFF" />
-                  </View>
-                </TouchableOpacity>
+                {/* Photos strip */}
+                {(() => {
+                  const existingPhotos = getItemPhotos(selectedItem);
+                  const allPhotos = [...existingPhotos, ...newEditPhotoUris];
+                  return (
+                    <>
+                      <Text style={styles.photoSectionLabel}>
+                        Fotos ({allPhotos.length})
+                      </Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.photoStrip}
+                        contentContainerStyle={styles.photoStripContent}>
+                        {existingPhotos.map((url, index) => (
+                          <TouchableOpacity
+                            key={index}
+                            style={styles.photoThumbContainer}
+                            onPress={() => openViewer(allPhotos, index)}>
+                            <Image source={{uri: url}} style={styles.photoThumb} />
+                          </TouchableOpacity>
+                        ))}
+                        {newEditPhotoUris.map((uri, index) => (
+                          <View
+                            key={`new-${index}`}
+                            style={styles.photoThumbContainer}>
+                            <TouchableOpacity
+                              onPress={() =>
+                                openViewer(
+                                  allPhotos,
+                                  existingPhotos.length + index,
+                                )
+                              }>
+                              <Image source={{uri}} style={styles.photoThumb} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.photoRemoveBtn}
+                              onPress={() =>
+                                setNewEditPhotoUris(prev =>
+                                  prev.filter((_, i) => i !== index),
+                                )
+                              }>
+                              <Icon name="close-circle" size={22} color="#fff" />
+                            </TouchableOpacity>
+                            <View style={styles.photoNewBadge}>
+                              <Text style={styles.photoNewBadgeText}>Nova</Text>
+                            </View>
+                          </View>
+                        ))}
+                        <TouchableOpacity
+                          style={styles.photoAddBtn}
+                          onPress={() =>
+                            showImagePickerMulti(uris =>
+                              setNewEditPhotoUris(prev => [...prev, ...uris]),
+                            )
+                          }>
+                          <Icon
+                            name="camera-plus"
+                            size={26}
+                            color={customTheme.colors.primary}
+                          />
+                          <Text style={styles.photoAddBtnText}>Adicionar</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </>
+                  );
+                })()}
 
                 {/* Empresa + Data (read-only) */}
                 <View style={styles.detailInfoRow}>
@@ -924,6 +1120,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  thumbnailContainer: {
+    width: 60,
+    height: 60,
+    position: 'relative',
+  },
   thumbnail: {
     width: 60,
     height: 60,
@@ -933,6 +1134,23 @@ const styles = StyleSheet.create({
     backgroundColor: customTheme.colors.surfaceVariant,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  photoCountBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  photoCountBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '600',
   },
   cardInfo: {
     flex: 1,
@@ -1020,32 +1238,71 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Photo
-  photoButton: {
+  // Photo strip
+  photoSectionLabel: {
+    fontSize: 13,
+    color: customTheme.colors.onSurfaceVariant,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  photoStrip: {
     marginBottom: 16,
-    borderRadius: 12,
+  },
+  photoStripContent: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+  },
+  photoThumbContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
     overflow: 'hidden',
   },
-  photoPreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
+  photoThumb: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
   },
-  photoPlaceholder: {
-    width: '100%',
-    height: 160,
-    backgroundColor: `${customTheme.colors.primary}10`,
-    borderRadius: 12,
+  photoRemoveBtn: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+  },
+  photoAddBtn: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
     borderWidth: 2,
-    borderColor: `${customTheme.colors.primary}40`,
+    borderColor: `${customTheme.colors.primary}50`,
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: `${customTheme.colors.primary}08`,
   },
-  photoPlaceholderText: {
-    marginTop: 8,
+  photoAddBtnWide: {
+    width: 150,
+  },
+  photoAddBtnText: {
+    fontSize: 11,
     color: customTheme.colors.primary,
-    fontSize: 14,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  photoNewBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    backgroundColor: customTheme.colors.primary,
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  photoNewBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '600',
   },
 
   // Detail
@@ -1054,29 +1311,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 0,
-  },
-  detailPhotoContainer: {
-    width: '100%',
-    height: 220,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
-    position: 'relative',
-  },
-  detailPhoto: {
-    width: '100%',
-    height: '100%',
-  },
-  editPhotoOverlay: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 20,
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   detailInfoRow: {
     flexDirection: 'row',
@@ -1095,6 +1329,64 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: customTheme.colors.onSurface,
+  },
+
+  // Viewer
+  viewerContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  viewerCloseBtn: {
+    position: 'absolute',
+    top: 50,
+    right: 16,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 22,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  viewerImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH * 1.2,
+  },
+  viewerNav: {
+    position: 'absolute',
+    bottom: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 32,
+  },
+  viewerNavBtn: {
+    padding: 8,
+  },
+  viewerNavText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  viewerDots: {
+    position: 'absolute',
+    bottom: 40,
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  viewerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  viewerDotActive: {
+    width: 12,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#fff',
   },
 });
 
