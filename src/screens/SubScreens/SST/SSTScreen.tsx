@@ -207,6 +207,23 @@ export default function QSMSScreen({ navigation }: any) {
                     />
                 </CategoryCard>
 
+                {/* Card Documentos Legais */}
+                <CategoryCard
+                    title="Documentos Legais"
+                    icon="file-document-multiple-outline"
+                    color="#546E7A"
+                    expanded={expandedCard === 'documentos'}
+                    onToggle={() => toggleCard('documentos')}
+                >
+                    <ActionButton
+                        icon="file-document-outline"
+                        text="Documentos"
+                        onPress={() => navigation.navigate('ControleDocumentosScreen')}
+                        disabled={!canAccessSST()}
+                        disabledText="Requer acesso à SST nível 1"
+                    />
+                </CategoryCard>
+
                 {/* Espaço extra no final */}
                 <View style={{ height: 24 }} />
             </ScrollView>
