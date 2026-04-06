@@ -16,7 +16,6 @@ import {
     Text
 } from 'react-native-paper';
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 
 import FilterCard from './Components/Filtros/FilterCard';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -25,10 +24,9 @@ import ModernHeader from '../../../assets/components/ModernHeader';
 import RNFS from 'react-native-fs';
 import RelatorioContent from './Components/RelatorioContent';
 import Share from 'react-native-share';
-import { Timestamp } from 'firebase/firestore';
 import XLSX from 'xlsx';
 import { customTheme } from '../../../theme/theme';
-import { db } from '../../../../firebase';
+import { ecoApi } from '../../../api/ecoApi';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
@@ -52,15 +50,12 @@ const RelatorioLavagens = ({ navigation }: { navigation: any }) => {
 
     const carregarPlacasDisponiveis = async () => {
         try {
-            const querySnapshot = await getDocs(collection(db(), 'veiculos'));
-            const placas = querySnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    placa: data.placa,
-                    tipo: data.tipo || 'veiculo',
-                    numeroEquipamento: data.numeroEquipamento
-                };
-            });
+            const data = await ecoApi.list('veiculos');
+            const placas = data.map((item: any) => ({
+                placa: item.placa,
+                tipo: item.tipo || 'veiculo',
+                numeroEquipamento: item.numeroEquipamento,
+            }));
             setPlacasDisponiveis(placas);
         } catch (error) {
             console.error('Erro ao carregar placas:', error);
@@ -111,17 +106,15 @@ const RelatorioLavagens = ({ navigation }: { navigation: any }) => {
                 numeroEquipamento: null
             };
 
-        const dataField = doc.data instanceof Timestamp
+        const dataField = typeof doc.data === 'string' && doc.data.match(/^\d{2}\/\d{2}\/\d{4}$/)
             ? doc.data
-            : typeof doc.data === 'string' && doc.data.match(/^\d{2}\/\d{2}\/\d{4}$/)
+            : typeof doc.data === 'string'
                 ? doc.data
                 : '';
 
-        const createdAtField = doc.createdAt instanceof Timestamp
+        const createdAtField = typeof doc.createdAt === 'string'
             ? doc.createdAt
-            : typeof doc.createdAt === 'string' && doc.createdAt.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*Z$/)
-                ? doc.createdAt
-                : null;
+            : null;
 
         const produtos = doc.produtos?.map((prod: any) => ({
             nome: prod.produto || prod.nome || 'Produto não especificado',
@@ -164,157 +157,57 @@ const RelatorioLavagens = ({ navigation }: { navigation: any }) => {
             setFirstTimeSearch(false);
             setLoading(true);
 
-            console.log('Buscando lavagens com intervalo:', {
-                dataInicio: formatarData(dataInicio),
-                dataFim: formatarData(dataFim),
-                dataInicioRaw: dataInicio,
-                dataFimRaw: dataFim
-            });
-
-            // Converter dataInicio e dataFim para Timestamp
-            const inicioTimestamp = Timestamp.fromDate(new Date(dataInicio.setHours(0, 0, 0, 0)));
-            const fimTimestamp = Timestamp.fromDate(new Date(dataFim.setHours(23, 59, 59, 999)));
-
             if (dataInicio > dataFim) {
                 Alert.alert(
                     'Erro',
                     'A data de início deve ser anterior ou igual à data final.'
                 );
-                console.log('Erro: dataInicio > dataFim');
                 return;
             }
 
-            // Buscar lavagens no formato novo (data como Timestamp)
-            const queryNovos = query(
-                collection(db(), 'registroLavagens'),
-                where('data', '>=', inicioTimestamp),
-                where('data', '<=', fimTimestamp),
-                orderBy('data', 'desc')
-            );
+            const raw = await ecoApi.list('registroLavagens');
+            const todos = raw.map((item: any) => normalizarLavagem({ ...item, id: item._id ?? item.id ?? '' }));
 
-            // Buscar lavagens no formato antigo (data como string DD/MM/YYYY)
-            const queryAntigos = query(
-                collection(db(), 'registroLavagens'),
-                where('data', '>=', formatarData(dataInicio)),
-                where('data', '<=', formatarData(dataFim)),
-                orderBy('data', 'desc')
-            );
+            let todosDados = todos;
 
-            console.log('Executando consultas:', {
-                queryNovos: 'registroLavagens com data >= inicioTimestamp e <= fimTimestamp',
-                queryAntigos: `registroLavagens com data >= ${formatarData(dataInicio)} e <= ${formatarData(dataFim)}`
-            });
-
-            const [snapshotNovos, snapshotAntigos] = await Promise.all([
-                getDocs(queryNovos),
-                getDocs(queryAntigos)
-            ]);
-
-            const dadosNovos = snapshotNovos.docs.map(doc => {
-                const data = normalizarLavagem({ id: doc.id, ...doc.data() });
-                console.log(`Documento novo ${doc.id}:`, {
-                    data: data.data,
-                    hora: data.hora,
-                    createdAt: data.createdAt
-                });
-                return data;
-            });
-
-            const dadosAntigos = snapshotAntigos.docs.map(doc => {
-                const data = normalizarLavagem({ id: doc.id, ...doc.data() });
-                console.log(`Documento antigo ${doc.id}:`, {
-                    data: data.data,
-                    hora: data.hora,
-                    createdAt: data.createdAt
-                });
-                return data;
-            });
-
-            let todosDados = [...dadosNovos, ...dadosAntigos];
-
-            console.log('Dados combinados antes da ordenação:', todosDados.map(d => ({
-                id: d.id,
-                data: d.data instanceof Timestamp ? d.data.toDate().toISOString() : d.data,
-                hora: d.hora,
-                createdAt: d.createdAt instanceof Timestamp ? d.createdAt.toDate().toISOString() : d.createdAt
-            })));
-
-            // Filtrar novamente para garantir que apenas datas dentro do intervalo sejam incluídas
-            todosDados = todosDados.filter(lavagem => {
-                let lavagemDate: Date;
+            const parseDataLavagem = (lavagem: any): Date | null => {
                 if (typeof lavagem.data === 'string' && lavagem.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
                     const [dia, mes, ano] = lavagem.data.split('/').map(Number);
-                    lavagemDate = new Date(ano, mes - 1, dia);
+                    const d = new Date(ano, mes - 1, dia);
                     if (lavagem.hora && lavagem.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
                         const [hours, minutes, seconds = 0] = lavagem.hora.split(':').map(Number);
-                        lavagemDate.setHours(hours, minutes, seconds);
+                        d.setHours(hours, minutes, seconds);
                     }
-                } else if (lavagem.data instanceof Timestamp) {
-                    lavagemDate = lavagem.data.toDate();
-                } else {
-                    console.warn(`Data inválida no documento ${lavagem.id}:`, lavagem.data);
-                    return false;
+                    return d;
+                } else if (typeof lavagem.data === 'string' && lavagem.data) {
+                    return new Date(lavagem.data);
                 }
+                return null;
+            };
 
-                const isWithinInterval = lavagemDate >= new Date(dataInicio.setHours(0, 0, 0, 0)) &&
-                    lavagemDate <= new Date(dataFim.setHours(23, 59, 59, 999));
-                if (!isWithinInterval) {
-                    console.log(`Documento ${lavagem.id} fora do intervalo:`, {
-                        lavagemDate: lavagemDate.toISOString(),
-                        dataInicio: dataInicio.toISOString(),
-                        dataFim: dataFim.toISOString()
-                    });
-                }
-                return isWithinInterval;
+            const inicio = new Date(dataInicio);
+            inicio.setHours(0, 0, 0, 0);
+            const fim = new Date(dataFim);
+            fim.setHours(23, 59, 59, 999);
+
+            todosDados = todosDados.filter(lavagem => {
+                const lavagemDate = parseDataLavagem(lavagem);
+                if (!lavagemDate) return false;
+                return lavagemDate >= inicio && lavagemDate <= fim;
             });
 
             // Ordenar do mais recente para o mais antigo
             todosDados = todosDados.sort((a, b) => {
-                let dataA: Date = new Date(0);
-                let dataB: Date = new Date(0);
-
-                if (typeof a.data === 'string' && a.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-                    const [dia, mes, ano] = a.data.split('/').map(Number);
-                    dataA = new Date(ano, mes - 1, dia);
-                    if (a.hora && a.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
-                        const [hours, minutes, seconds = 0] = a.hora.split(':').map(Number);
-                        dataA.setHours(hours, minutes, seconds);
-                    }
-                } else if (a.data instanceof Timestamp) {
-                    dataA = a.data.toDate();
-                }
-
-                if (typeof b.data === 'string' && b.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-                    const [dia, mes, ano] = b.data.split('/').map(Number);
-                    dataB = new Date(ano, mes - 1, dia);
-                    if (b.hora && b.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
-                        const [hours, minutes, seconds = 0] = b.hora.split(':').map(Number);
-                        dataB.setHours(hours, minutes, seconds);
-                    }
-                } else if (b.data instanceof Timestamp) {
-                    dataB = b.data.toDate();
-                }
-
+                const dataA = parseDataLavagem(a) ?? new Date(0);
+                const dataB = parseDataLavagem(b) ?? new Date(0);
                 return dataB.getTime() - dataA.getTime();
             });
-
-            // console.log('Dados após ordenação:', todosDados.map(d => ({
-            //     id: d.id,
-            //     data: d.data instanceof Timestamp ? d.data.toDate().toISOString() : d.data,
-            //     hora: d.hora,
-            //     createdAt: d.createdAt instanceof Timestamp ? d.createdAt.toDate().toISOString() : d.createdAt
-            // })));
 
             // Aplicar filtro de placas se houver placas selecionadas
             if (placasFiltradas.length > 0) {
                 todosDados = todosDados.filter(lavagem =>
                     placasFiltradas.includes(lavagem.veiculo.placa.toUpperCase())
                 );
-                console.log('Dados após filtro de placas:', todosDados.map(d => ({
-                    id: d.id,
-                    placa: d.veiculo.placa,
-                    data: d.data instanceof Timestamp ? d.data.toDate().toISOString() : d.data
-                })));
             }
 
             setLavagens(todosDados);
@@ -343,9 +236,11 @@ const RelatorioLavagens = ({ navigation }: { navigation: any }) => {
 
             // Criar dados para a planilha
             const data = lavagens.map(lavagem => {
-                const dataFormatada = typeof lavagem.data === 'string'
+                const dataFormatada = typeof lavagem.data === 'string' && lavagem.data.match(/^\d{2}\/\d{2}\/\d{4}$/)
                     ? lavagem.data
-                    : format(lavagem.data.toDate(), 'dd/MM/yyyy', { locale: ptBR });
+                    : typeof lavagem.data === 'string' && lavagem.data
+                    ? format(new Date(lavagem.data), 'dd/MM/yyyy', { locale: ptBR })
+                    : '';
                 const horaFormatada = formatarHorario(lavagem.hora);
                 const produtos = lavagem.produtos.map(p => `${p.nome} (${p.quantidade})`).join(', ');
                 return {

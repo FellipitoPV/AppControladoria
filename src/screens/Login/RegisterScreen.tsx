@@ -10,12 +10,11 @@ import {
 } from 'react-native';
 import React, { useState } from 'react';
 import { Text, TextInput } from 'react-native-paper';
-import { auth, db } from '../../../firebase';
-import { collection, doc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import SaveButton from '../../assets/components/SaveButton';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { ecoApi, ecoAuth } from '../../api/ecoApi';
 import { customTheme } from '../../theme/theme';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 
@@ -78,88 +77,43 @@ export default function RegisterScreen({ navigation }: any) {
         }
     
         setLoading(true);
-    
+
         try {
-            // Verificar se já existe um usuário com este email
-            const userSnapshot = await getDocs(
-                query(
-                    collection(db(), 'users'),
-                    where('email', '==', email.toLowerCase())
-                )
-            );
-    
-            if (!userSnapshot.empty) {
-                showGlobalToast(
-                    'info',
-                    'Atenção',
-                    'Este email já está registrado no sistema',
-                    3000
-                );
-                return;
-            }
-    
-            // Criar usuário no Authentication
-            const userCredential = await createUserWithEmailAndPassword(
-                auth(),
-                email.toLowerCase(),
-                senha
-            );
-    
-            // Normalizar nome para ID
-            const normalizeNameForId = (name: string) => {
-                return name
-                    .toLowerCase()
-                    .normalize('NFD')
-                    .replace(/[\u0300-\u036f]/g, '')
-                    .replace(/[^a-z0-9]/g, '_')
-                    .replace(/_+/g, '_')
-                    .replace(/^_|_$/g, '');
-            };
-    
-            // Formatar o nome com primeiras letras maiúsculas
             const formattedName = formatName(nome);
-            const customUserId = normalizeNameForId(formattedName);
-    
-            // Criar documento do usuário
-            await setDoc(doc(db(), 'users', customUserId), {
+
+            // 1. Criar conta de autenticação
+            await ecoAuth.register(email.toLowerCase(), senha);
+
+            // 2. Fazer login para obter o token
+            const { token } = await ecoAuth.login(email.toLowerCase(), senha);
+            await AsyncStorage.setItem('@authToken', token);
+            await AsyncStorage.setItem('userEmail', email.toLowerCase());
+
+            // 3. Criar documento do usuário
+            await ecoApi.create('users', {
                 user: formattedName,
                 email: email.toLowerCase(),
                 cargo: area === 'Administrativo' ? 'Administrativo' : 'Operacional',
                 area: area,
-                createdAt: serverTimestamp(),
-                authUid: userCredential.user.uid,
+                createdAt: new Date().toISOString(),
                 acesso: area === 'Operacional' ? [
-                    {
-                        moduleId: 'operacao',
-                        level: 1
-                    }
-                ] : []
+                    { moduleId: 'operacao', level: 1 }
+                ] : [],
             });
-    
+
             showGlobalToast(
                 'success',
                 'Sucesso',
                 'Conta criada com sucesso!',
                 3000
             );
-    
+
             // Voltar para a tela de login
             navigation.goBack();
-    
+
         } catch (error: any) {
             console.error('Erro ao registrar:', error);
-            let errorMessage = 'Erro ao criar conta';
-    
-            if (error.code === 'auth/email-already-in-use') {
-                errorMessage = 'Este email já está em uso';
-            } else if (error.code === 'auth/invalid-email') {
-                errorMessage = 'Email inválido';
-            } else if (error.code === 'auth/operation-not-allowed') {
-                errorMessage = 'Operação não permitida';
-            } else if (error.code === 'auth/weak-password') {
-                errorMessage = 'Senha muito fraca';
-            }
-    
+            const errorMessage = error.message || 'Erro ao criar conta';
             showGlobalToast(
                 'error',
                 'Erro',

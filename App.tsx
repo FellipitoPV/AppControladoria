@@ -1,7 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import Toast, {ToastConfig} from 'react-native-toast-message';
-import {onAuthStateChanged, signInWithEmailAndPassword} from 'firebase/auth';
 
 import AgendamentoLavagem from './src/screens/SubScreens/Lavagem/AgendamentoLavagem';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,7 +13,6 @@ import ControladoriaScreen from './src/screens/SubScreens/Controladoria/Controla
 import ControleEstoque from './src/screens/SubScreens/Lavagem/ControleEstoque';
 import EditUserAccessScreen from './src/screens/Adm/EditUserAccessScreen';
 import FlashMessage from 'react-native-flash-message';
-import ForgotPasswordScreen from './src/screens/Login/ForgotPasswordScreen';
 import FormularioOcorrencia from './src/screens/SubScreens/ocorrencia/FormularioOcorrencia';
 import FormularioProgramacao from './src/screens/SubScreens/Controladoria/FormularioProgramacao/FormularioProgramacao';
 import HistoricoLavagem from './src/screens/SubScreens/Lavagem/HistoricoLavagem';
@@ -40,28 +38,26 @@ import RelatorioLavagens from './src/screens/SubScreens/Lavagem/RelatorioLavagen
 import RelatorioOcorrenciaList from './src/screens/SubScreens/ocorrencia/RelatoriosLista';
 import ReuniaoComponent from './src/screens/Reuniao/MeetingsScreen';
 import {UserProvider} from './src/contexts/userContext';
-import {auth} from './firebase';
 import {createStackNavigator} from '@react-navigation/stack';
 import {setNotificationNavigationHandler} from './src/helpers/notificationChannel';
-import CheckListScreen from './src/components/CheckList/CheckListScreen';
+import ChecklistScreen from './src/components/CheckList/ChecklistScreen';
 import ChecklistFormScreen from './src/components/CheckList/components/ChecklistFormScreen';
 import {ChecklistSyncProvider} from './src/contexts/ChecklistSyncContext';
 import QSMSScreen from './src/screens/SubScreens/SST/SSTScreen';
 import DDSScreen from './src/screens/SubScreens/SST/DDS/DDSScreen';
 import DDSFormScreen from './src/screens/SubScreens/SST/DDS/DDSFormScreen';
-import SSTChecklistScreen from './src/components/CheckList/SSTChecklistScreen';
 import ContaminadosScreen from './src/screens/Contaminados/ContaminadosScreen';
 import ToxicologicoScreen from './src/screens/SubScreens/SST/Toxicologico/ToxicologicoScreen';
 import ToxicologicoFormScreen from './src/screens/SubScreens/SST/Toxicologico/ToxicologicoFormScreen';
 import ControleDocumentosScreen from './src/screens/SubScreens/SST/ControleDocumentos/ControleDocumentosScreen';
 import ControleDocumentosFormScreen from './src/screens/SubScreens/SST/ControleDocumentos/ControleDocumentosFormScreen';
+import DevGuideScreen from './src/screens/DevGuide/DevGuideScreen';
 
 // Defina os tipos das rotas para o seu navegador
 interface RootStackParamList {
   Login: {nextScreen?: string; nextScreenParams?: object};
   Home: undefined;
   Register: undefined;
-  ForgotPass: undefined;
   [key: string]: object | undefined;
 }
 
@@ -169,51 +165,20 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const isNavigationReady = useRef(false);
 
-  // Função para tentar login automático com credenciais salvas
-  const tryAutoLogin = async () => {
-    try {
-      const savedEmail = await AsyncStorage.getItem('userEmail');
-      const savedPassword = await AsyncStorage.getItem('userPassword');
-      if (savedEmail && savedPassword) {
-        console.log('Tentando login automático com credenciais salvas');
-        await signInWithEmailAndPassword(auth(), savedEmail, savedPassword);
-        console.log('Login automático bem-sucedido');
-        setIsLoggedIn(true);
-        await AsyncStorage.setItem('isLoggedIn', 'true');
-        return true;
-      }
-      console.log('Nenhuma credencial salva encontrada');
-      return false;
-    } catch (error) {
-      console.error('Erro no login automático:', error);
-      // Limpar credenciais inválidas
-      await AsyncStorage.removeItem('userEmail');
-      await AsyncStorage.removeItem('userPassword');
-      await AsyncStorage.setItem('isLoggedIn', 'false');
-      return false;
-    }
-  };
-
   // Verificar autenticação e decidir a tela inicial
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth(), async user => {
-      if (user) {
-        // console.log('Usuário já autenticado:', user.uid);
-        setIsLoggedIn(true);
-        await AsyncStorage.setItem('isLoggedIn', 'true');
-        setIsReady(true);
-      } else {
-        console.log('Nenhum usuário autenticado, tentando login automático');
-        const autoLoginSuccess = await tryAutoLogin();
-        if (!autoLoginSuccess) {
-          setIsLoggedIn(false);
-          await AsyncStorage.setItem('isLoggedIn', 'false');
-        }
+    const checkAuth = async () => {
+      try {
+        const token = await AsyncStorage.getItem('@authToken');
+        setIsLoggedIn(!!token);
+      } catch {
+        setIsLoggedIn(false);
+      } finally {
         setIsReady(true);
       }
-    });
+    };
 
-    return () => unsubscribe();
+    checkAuth();
   }, []);
 
   // Configurar referências globais e notificações
@@ -307,12 +272,7 @@ export default function App() {
                   component={RegisterScreen}
                   options={{headerShown: false}}
                 />
-                <Stack.Screen
-                  name="ForgotPass"
-                  component={ForgotPasswordScreen}
-                  options={{headerShown: false}}
-                />
-                <Stack.Screen
+<Stack.Screen
                   name="UsersEdit"
                   component={EditUserAccessScreen}
                   options={{headerShown: false}}
@@ -443,11 +403,6 @@ export default function App() {
                   options={{headerShown: false}}
                 />
                 <Stack.Screen
-                  name="CheckList"
-                  component={CheckListScreen}
-                  options={{headerShown: false}}
-                />
-                <Stack.Screen
                   name="ChecklistForm"
                   component={ChecklistFormScreen}
                   options={{headerShown: false}}
@@ -473,8 +428,8 @@ export default function App() {
                 />
 
                 <Stack.Screen
-                  name="SSTChecklistScreen"
-                  component={SSTChecklistScreen}
+                  name="ChecklistScreen"
+                  component={ChecklistScreen}
                   options={{headerShown: false}}
                 />
 
@@ -505,6 +460,12 @@ export default function App() {
                 <Stack.Screen
                   name="ControleDocumentosFormScreen"
                   component={ControleDocumentosFormScreen}
+                  options={{headerShown: false}}
+                />
+
+                <Stack.Screen
+                  name="DevGuide"
+                  component={DevGuideScreen}
                   options={{headerShown: false}}
                 />
 

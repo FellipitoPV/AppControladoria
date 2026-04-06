@@ -12,9 +12,7 @@ import {
 } from 'react-native';
 import { Button, Card, Surface, Text, TextInput } from 'react-native-paper';
 import { ProdutoEstoque, UnidadeMedida } from './Components/lavagemTypes';
-import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
-import { db, dbStorage } from '../../../../firebase';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { ecoApi, ecoStorage } from '../../../api/ecoApi';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useEffect, useRef, useState } from 'react';
 
@@ -155,10 +153,10 @@ export default function ControleEstoque({ navigation }: any) {
     const handleUpdateNome = async () => {
         if (!checkOnlineStatus()) return;
         if (!selectedProduto || !novoNome.trim()) return;
-    
+
         try {
             if (selectedProduto.id) {
-                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
+                await ecoApi.update('produtos', selectedProduto.id, {
                     nome: novoNome.trim(),
                     updatedAt: new Date().toISOString(),
                 });
@@ -191,20 +189,19 @@ export default function ControleEstoque({ navigation }: any) {
     const handleUpdatePhoto = async () => {
         if (!checkOnlineStatus()) return;
         if (!selectedProduto || !photoUri || !isUpdatePhoto) return;
-    
+
         setIsSavingPhoto(true);
         try {
             const now = new Date().toISOString();
-            const filename = `produtos/${now}_${selectedProduto.nome.trim()}.jpg`;
-            const reference = ref(dbStorage(), filename);
-    
-            const response = await fetch(photoUri);
-            const blob = await response.blob();
-            await uploadBytes(reference, blob);
-            const photoUrl = await getDownloadURL(reference);
-    
+            const uploadResult = await ecoStorage.upload({
+                uri: photoUri,
+                type: 'image/jpeg',
+                name: `produtos_${Date.now()}_${selectedProduto.nome.trim()}.jpg`,
+            });
+            const photoUrl = uploadResult.url;
+
             if (selectedProduto.id) {
-                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
+                await ecoApi.update('produtos', selectedProduto.id, {
                     photoUrl,
                     updatedAt: now,
                 });
@@ -258,7 +255,7 @@ export default function ControleEstoque({ navigation }: any) {
             }
     
             if (selectedProduto.id) {
-                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
+                await ecoApi.update('produtos', selectedProduto.id, {
                     quantidade: novaQuantidadeTotal,
                     updatedAt: new Date().toISOString(),
                 });
@@ -295,7 +292,7 @@ export default function ControleEstoque({ navigation }: any) {
             setIsUpdatingUnidade(true);
     
             if (selectedProduto.id) {
-                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
+                await ecoApi.update('produtos', selectedProduto.id, {
                     unidadeMedida: novaUnidade,
                     updatedAt: new Date().toISOString(),
                 });
@@ -359,14 +356,14 @@ export default function ControleEstoque({ navigation }: any) {
             let photoUrl: string | null = null;
     
             if (photoUri) {
-                const filename = `produtos/${now}_${nome.trim()}.jpg`;
-                const reference = ref(dbStorage(), filename);
-                const response = await fetch(photoUri);
-                const blob = await response.blob();
-                await uploadBytes(reference, blob);
-                photoUrl = await getDownloadURL(reference);
+                const uploadResult = await ecoStorage.upload({
+                    uri: photoUri,
+                    type: 'image/jpeg',
+                    name: `produtos_${Date.now()}_${nome.trim()}.jpg`,
+                });
+                photoUrl = uploadResult.url;
             }
-    
+
             const novoProduto: ProdutoEstoque = {
                 nome: nome.trim(),
                 quantidade: quantidade.trim(),
@@ -376,8 +373,8 @@ export default function ControleEstoque({ navigation }: any) {
                 createdAt: now,
                 updatedAt: now,
             };
-    
-            await addDoc(collection(db(), 'produtos'), novoProduto);
+
+            await ecoApi.create('produtos', novoProduto);
             await forceSync();
     
             showGlobalToast('success', 'Produto adicionado com sucesso', '', 4000);
@@ -403,7 +400,7 @@ export default function ControleEstoque({ navigation }: any) {
     
         try {
             if (selectedProduto.id) {
-                await updateDoc(doc(db(), 'produtos', selectedProduto.id), {
+                await ecoApi.update('produtos', selectedProduto.id, {
                     quantidadeMinima: novaQuantidadeMinima,
                     updatedAt: new Date().toISOString(),
                 });

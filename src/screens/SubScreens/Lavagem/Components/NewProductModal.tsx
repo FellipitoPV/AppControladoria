@@ -10,8 +10,7 @@ import {
 } from 'react-native';
 import { Text, TextInput, Button } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
+import { ecoApi, ecoStorage } from '../../../../api/ecoApi';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
 import { customTheme } from '../../../../theme/theme';
 import { UnidadeMedida } from './lavagemTypes';
@@ -179,10 +178,12 @@ export default function NewProductModal({
             let photoUrl: string | null = null;
 
             if (photoUri) {
-                const filename = `produtos/${now}_${nome.trim()}.jpg`;
-                const reference = storage().ref(filename);
-                await reference.putFile(photoUri);
-                photoUrl = await reference.getDownloadURL();
+                const uploadResult = await ecoStorage.upload({
+                    uri: photoUri,
+                    type: 'image/jpeg',
+                    name: `produtos_${now}_${nome.trim()}.jpg`,
+                });
+                photoUrl = uploadResult.url;
             }
 
             const novoProduto = {
@@ -195,7 +196,7 @@ export default function NewProductModal({
                 updatedAt: now,
             };
 
-            await firestore().collection('produtos').add(novoProduto);
+            await ecoApi.create('produtos', novoProduto);
             await forceSync(); // Força sincronização após adicionar
 
             showGlobalToast('success', 'Produto adicionado com sucesso', '', 4000);

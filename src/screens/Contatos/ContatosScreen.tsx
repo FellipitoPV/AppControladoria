@@ -16,13 +16,12 @@ import {
     View,
 } from 'react-native';
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
 
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import ModernHeader from '../../assets/components/ModernHeader';
 import { User } from '../Adm/types/admTypes';
 import { customTheme } from '../../theme/theme';
-import { db } from '../../../firebase';
+import { ecoApi } from '../../api/ecoApi';
 
 const { width } = Dimensions.get('window');
 
@@ -34,20 +33,19 @@ export default function ContatosScreen({ navigation }: any) {
     const [users, setUsers] = useState<User[]>([]);
     const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
 
-    // Atualizar acessarUsuarios
     const acessarUsuarios = async () => {
         try {
-            const snapshot = await getDocs(collection(db(), 'users'));
+            const data = await ecoApi.list('users');
 
-            const listaUsuarios: User[] = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                user: doc.data().user,
-                email: doc.data().email,
-                telefone: doc.data().telefone,
-                cargo: doc.data().cargo,
-                ramal: doc.data().ramal || '',
-                area: doc.data().area || '',
-                photoURL: doc.data().photoURL || ''
+            const listaUsuarios: User[] = data.map((doc: any) => ({
+                id: doc._id ?? doc.id,
+                user: doc.user,
+                email: doc.email,
+                telefone: doc.telefone,
+                cargo: doc.cargo,
+                ramal: doc.ramal || '',
+                area: doc.area || '',
+                photoURL: doc.photoURL || ''
             }));
 
             const filteredUsers = listaUsuarios.filter(user =>

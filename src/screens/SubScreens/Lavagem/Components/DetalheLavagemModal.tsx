@@ -1,5 +1,4 @@
 import {
-    ActivityIndicator,
     Animated,
     Dimensions,
     FlatList,
@@ -27,6 +26,83 @@ interface Photo {
     timestamp?: number;
 }
 
+// ── Subcomponentes de módulo (FORA do componente pai para evitar remount) ─────
+
+const PhotoSection: React.FC<{
+    title: string;
+    icon: string;
+    accentColor: string;
+    fotos: Array<{ url: string; path?: string; timestamp?: number }>;
+    onOpenPhoto: (fotos: any[], index: number) => void;
+}> = ({ title, icon, accentColor, fotos, onOpenPhoto }) => (
+    <View style={[styles.sectionContainer, { borderLeftWidth: 3, borderLeftColor: accentColor }]}>
+        <View style={styles.sectionHeader}>
+            <MaterialCommunityIcons name={icon} size={24} color={accentColor} />
+            <Text style={[styles.sectionTitle, { color: accentColor }]}>{title}</Text>
+        </View>
+        <FlatList
+            data={fotos}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item, idx) => item.path || item.timestamp?.toString() || String(idx)}
+            renderItem={({ item, index }) => (
+                <TouchableOpacity
+                    style={styles.photoItem}
+                    onPress={() => onOpenPhoto(fotos, index)}
+                    activeOpacity={0.8}
+                >
+                    <Image
+                        source={{ uri: item.url }}
+                        style={styles.photoThumbnail}
+                        resizeMode="cover"
+                    />
+                    <View style={styles.photoOverlay}>
+                        <MaterialCommunityIcons name="magnify-plus" size={18} color="#FFF" />
+                    </View>
+                </TouchableOpacity>
+            )}
+            contentContainerStyle={styles.photosContainer}
+        />
+    </View>
+);
+
+const ChecklistSection: React.FC<{
+    checklist: Array<{ id: string; label: string; checked: boolean }>;
+}> = ({ checklist }) => {
+    const total = checklist.length;
+    const done = checklist.filter(i => i.checked).length;
+    return (
+        <View style={[styles.sectionContainer, { borderLeftWidth: 3, borderLeftColor: '#43A047' }]}>
+            <View style={styles.checklistHeaderRow}>
+                <View style={styles.sectionHeader}>
+                    <MaterialCommunityIcons name="clipboard-check" size={24} color="#43A047" />
+                    <Text style={[styles.sectionTitle, { color: '#43A047' }]}>Checklist</Text>
+                </View>
+                <View style={styles.checklistBadge}>
+                    <Text style={styles.checklistBadgeText}>{done}/{total}</Text>
+                </View>
+            </View>
+            {checklist.map(item => (
+                <View key={item.id} style={styles.checklistItem}>
+                    <MaterialCommunityIcons
+                        name={item.checked ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+                        size={20}
+                        color={item.checked ? '#43A047' : customTheme.colors.onSurfaceVariant}
+                    />
+                    <Text style={[
+                        styles.checklistItemLabel,
+                        item.checked && styles.checklistItemLabelChecked
+                    ]}>
+                        {item.label}
+                    </Text>
+                </View>
+            ))}
+        </View>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface DetalheLavagemModalProps {
     visible: boolean;
     onClose: () => void;
@@ -40,11 +116,10 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
     lavagem,
     onEdit
 }) => {
-    const [loadingPhotos, setLoadingPhotos] = useState<{ [key: string]: boolean }>({});
-
     const [isEditLoading, setIsEditLoading] = useState(false);
 
-    const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
+    const [viewerPhotos, setViewerPhotos] = useState<Photo[]>([]);
+    const [viewerIndex, setViewerIndex] = useState(0);
     const [isPhotoModalVisible, setIsPhotoModalVisible] = useState(false);
 
     // Animação de slide
@@ -77,29 +152,27 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
         }, 0);
     };
 
-    const handleOpenPhoto = (photo: any) => {
-        const photoObj = {
-            uri: photo.url,
-            id: photo.timestamp?.toString() || Date.now().toString()
-        };
-        setSelectedPhoto(photoObj);
+    const handleOpenPhoto = (fotos: any[], index: number) => {
+        const photoObjs: Photo[] = fotos.map(f => ({
+            uri: f.url,
+            id: f.timestamp?.toString() || f.path || String(Math.random()),
+        }));
+        setViewerPhotos(photoObjs);
+        setViewerIndex(index);
         setIsPhotoModalVisible(true);
     };
 
     const handleClosePhoto = () => {
         setIsPhotoModalVisible(false);
-        setSelectedPhoto(null);
+        setViewerPhotos([]);
     };
 
-    // Cabeçalho de seção
-    const SectionHeader: React.FC<{ icon: string; title: string }> = ({ icon, title }) => (
+    const SectionHeader: React.FC<{ icon: string; title: string; color?: string }> = ({
+        icon, title, color = customTheme.colors.primary
+    }) => (
         <View style={styles.sectionHeader}>
-            <MaterialCommunityIcons
-                name={icon}
-                size={24}
-                color={customTheme.colors.primary}
-            />
-            <Text style={styles.sectionTitle}>{title}</Text>
+            <MaterialCommunityIcons name={icon} size={24} color={color} />
+            <Text style={[styles.sectionTitle, { color }]}>{title}</Text>
         </View>
     );
 
@@ -118,7 +191,8 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
         >
             <FullScreenImage
                 visible={isPhotoModalVisible}
-                photo={selectedPhoto}
+                photos={viewerPhotos}
+                initialIndex={viewerIndex}
                 onClose={handleClosePhoto}
             />
             <View style={styles.modalOverlay}>
@@ -302,58 +376,44 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
                                         </View>
                                     )}
 
-                                {/* Fotos */}
-                                {lavagem.fotos && lavagem.fotos.length > 0 && (
-                                    <View style={styles.sectionContainer}>
-                                        <SectionHeader icon="image-multiple" title="Registro Fotográfico" />
-
-                                        <FlatList
-                                            data={lavagem.fotos}
-                                            horizontal
-                                            showsHorizontalScrollIndicator={false}
-                                            keyExtractor={(item) => item.path || item.timestamp?.toString() || ''}
-                                            renderItem={({ item }) => (
-                                                <TouchableOpacity
-                                                    style={styles.photoItem}
-                                                    onPress={() => handleOpenPhoto(item)}
-                                                    activeOpacity={0.8}
-                                                >
-                                                    <Image
-                                                        source={{ uri: item.url }}
-                                                        style={styles.photoThumbnail}
-                                                        resizeMode="cover"
-                                                        onLoadStart={() => setLoadingPhotos(prevState => ({
-                                                            ...prevState,
-                                                            [item.path || item.timestamp?.toString() || '']: true
-                                                        }))}
-                                                        onLoadEnd={() => setLoadingPhotos(prevState => ({
-                                                            ...prevState,
-                                                            [item.path || item.timestamp?.toString() || '']: false
-                                                        }))}
-                                                    />
-
-                                                    {loadingPhotos[item.path || item.timestamp?.toString() || ''] && (
-                                                        <View style={styles.loadingOverlay}>
-                                                            <ActivityIndicator
-                                                                size="large"
-                                                                color={customTheme.colors.primary}
-                                                            />
-                                                        </View>
-                                                    )}
-
-                                                    <View style={styles.photoOverlay}>
-                                                        <MaterialCommunityIcons
-                                                            name="magnify-plus"
-                                                            size={24}
-                                                            color="#FFFFFF"
-                                                        />
-                                                    </View>
-                                                </TouchableOpacity>
-                                            )}
-                                            contentContainerStyle={styles.photosContainer}
-                                        />
-                                    </View>
+                                {/* Fotos Antes (formato novo) */}
+                                {lavagem.fotosAntes && lavagem.fotosAntes.length > 0 && (
+                                    <PhotoSection
+                                        title="Fotos Antes"
+                                        icon="camera-plus"
+                                        accentColor="#FF9800"
+                                        fotos={lavagem.fotosAntes}
+                                        onOpenPhoto={handleOpenPhoto}
+                                    />
                                 )}
+
+                                {/* Checklist */}
+                                {lavagem.checklist && lavagem.checklist.length > 0 && (
+                                    <ChecklistSection checklist={lavagem.checklist} />
+                                )}
+
+                                {/* Fotos Depois (formato novo) */}
+                                {lavagem.fotosDepois && lavagem.fotosDepois.length > 0 && (
+                                    <PhotoSection
+                                        title="Fotos Depois"
+                                        icon="camera-check"
+                                        accentColor="#2196F3"
+                                        fotos={lavagem.fotosDepois}
+                                        onOpenPhoto={handleOpenPhoto}
+                                    />
+                                )}
+
+                                {/* Fotos legado (registros antigos) */}
+                                {!lavagem.fotosAntes?.length && !lavagem.fotosDepois?.length &&
+                                    lavagem.fotos && lavagem.fotos.length > 0 && (
+                                        <PhotoSection
+                                            title="Registro Fotográfico"
+                                            icon="image-multiple"
+                                            accentColor={customTheme.colors.primary}
+                                            fotos={lavagem.fotos}
+                                            onOpenPhoto={handleOpenPhoto}
+                                        />
+                                    )}
 
                                 {/* Observações */}
                                 {lavagem.observacoes && (
@@ -383,9 +443,7 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
                                             <View style={styles.sysInfoItem}>
                                                 <Text style={styles.sysInfoLabel}>Criado em:</Text>
                                                 <Text style={styles.sysInfoValue}>
-                                                    {typeof lavagem.createdAt === 'object' && 'toDate' in lavagem.createdAt
-                                                        ? lavagem.createdAt.toDate().toLocaleString('pt-BR')
-                                                        : new Date(lavagem.createdAt).toLocaleString('pt-BR')}
+                                                    {new Date(lavagem.createdAt as string).toLocaleString('pt-BR')}
                                                 </Text>
                                             </View>
                                         )}
@@ -560,9 +618,9 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     photoItem: {
-        width: 160,
-        height: 160,
-        marginRight: 12,
+        width: 96,
+        height: 96,
+        marginRight: 10,
         borderRadius: 8,
         overflow: 'hidden',
         position: 'relative',
@@ -570,17 +628,6 @@ const styles = StyleSheet.create({
     photoThumbnail: {
         width: '100%',
         height: '100%',
-    },
-    loadingOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(255,255,255,0.7)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 10,
     },
     photoOverlay: {
         position: 'absolute',
@@ -592,6 +639,42 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         opacity: 0.7,
+    },
+
+    // Checklist
+    checklistHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    checklistBadge: {
+        backgroundColor: '#43A04720',
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+    },
+    checklistBadgeText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#43A047',
+    },
+    checklistItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 7,
+        borderBottomWidth: 1,
+        borderBottomColor: customTheme.colors.surfaceVariant,
+    },
+    checklistItemLabel: {
+        flex: 1,
+        fontSize: 14,
+        color: customTheme.colors.onSurface,
+    },
+    checklistItemLabelChecked: {
+        color: customTheme.colors.onSurfaceVariant,
+        textDecorationLine: 'line-through',
     },
 
     // Observações

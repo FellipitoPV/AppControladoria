@@ -11,9 +11,9 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { Badge, Card, Chip, Surface, Text } from 'react-native-paper';
+import { Surface, Text } from 'react-native-paper';
 import React, { useEffect, useRef, useState } from 'react';
-import { Timestamp, collection, deleteDoc, doc, getDocs, orderBy, query, where } from 'firebase/firestore';
+import { BASE_URL, ecoApi, ecoStorage } from '../../../api/ecoApi';
 import { getTipoLavagemDetails, getTipoVeiculoColor, getTipoVeiculoIcon, getTipoVeiculoLabel } from './Components/utils/lavagemUtils';
 
 import ConfirmationModal from '../../../assets/components/ConfirmationModal';
@@ -22,7 +22,6 @@ import { LavagemInterface } from './Components/lavagemTypes';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import { customTheme } from '../../../theme/theme';
-import { db } from '../../../../firebase';
 import { format } from 'date-fns';
 import { hasAccess } from '../../Adm/types/admTypes';
 import { ptBR } from 'date-fns/locale';
@@ -60,166 +59,81 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
 
     const canEditDelete = () => userInfo && hasAccess(userInfo, 'lavagem', 2);
 
+    const parseDataLavagem = (dataStr: any, hora?: string): Date => {
+        if (!dataStr) return new Date(0);
+        if (dataStr instanceof Date) return dataStr;
+        if (typeof dataStr === 'string' && dataStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            const [dia, mes, ano] = dataStr.split('/').map(Number);
+            const d = new Date(ano, mes - 1, dia);
+            if (hora && hora.match(/^\d{2}:\d{2}/)) {
+                const [h, m, s = 0] = hora.split(':').map(Number);
+                d.setHours(h, m, s);
+            }
+            return isNaN(d.getTime()) ? new Date(0) : d;
+        }
+        const d = new Date(dataStr);
+        return isNaN(d.getTime()) ? new Date(0) : d;
+    };
+
     const buscarLavagens = async () => {
         try {
             setLoading(true);
 
-            // Buscar lavagens no novo formato
-            const snapshotNovo = await getDocs(
-                query(
-                    collection(db(), 'registroLavagens'),
-                    orderBy('createdAt', 'desc')
-                )
-            );
+            const registros = await ecoApi.list('registroLavagens');
 
-            // Buscar lavagens no formato antigo
-            const snapshotAntigo = await getDocs(
-                query(
-                    collection(db(), 'registroLavagens'),
-                    where('placaVeiculo', '!=', null)
-                )
-            );
+            // Separar formato novo (tem campo veiculo) do antigo (tem placaVeiculo)
+            const dadosNovos: LavagemInterface[] = registros
+                .filter((r: any) => !r.placaVeiculo)
+                .map((r: any) => ({
+                    id: r._id ?? r.id,
+                    responsavel: r.responsavel || '',
+                    data: parseDataLavagem(r.data, r.hora),
+                    hora: r.hora || '',
+                    veiculo: r.veiculo || { placa: '', tipo: '' },
+                    tipoLavagem: r.tipoLavagem || '',
+                    produtos: r.produtos || [],
+                    fotos: r.fotos || [],
+                    fotosAntes: r.fotosAntes || [],
+                    fotosDepois: r.fotosDepois || [],
+                    checklist: r.checklist || [],
+                    observacoes: r.observacoes || '',
+                    status: r.status || 'concluido',
+                    createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
+                    createdBy: r.createdBy || null,
+                    agendamentoId: r.agendamentoId || null,
+                } as LavagemInterface));
 
-            // Processar dados do novo formato
-            const dadosNovos = snapshotNovo.docs
-                .filter(doc => !doc.data().placaVeiculo)
-                .map(doc => {
-                    const data = doc.data() as LavagemInterface;
-                    let dataField: Timestamp;
-                    if (data.data instanceof Timestamp && !isNaN(data.data.seconds)) {
-                        dataField = data.data;
-                    } else if (typeof data.data === 'string' && data.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-                        // Formato DD/MM/YYYY
-                        const [dia, mes, ano] = data.data.split('/').map(Number);
-                        const date = new Date(ano, mes - 1, dia);
-                        // Adicionar hora, se disponível (HH:mm ou HH:mm:ss)
-                        if (data.hora && data.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
-                            const timeParts = data.hora.split(':').map(Number);
-                            const [hours, minutes, seconds = 0] = timeParts;
-                            date.setHours(hours, minutes, seconds);
-                        }
-                        if (!isNaN(date.getTime())) {
-                            dataField = Timestamp.fromDate(date);
-                        } else {
-                            console.warn(`Data inválida no documento ${doc.id}:`, data.data, data.hora);
-                            dataField = Timestamp.fromDate(new Date());
-                        }
-                    } else {
-                        console.warn(`Formato de data inesperado no documento ${doc.id}:`, data.data);
-                        dataField = Timestamp.fromDate(new Date());
-                    }
+            const dadosAntigos: LavagemInterface[] = registros
+                .filter((r: any) => !!r.placaVeiculo)
+                .map((r: any) => {
+                    const fotos = r.photoUrls
+                        ? r.photoUrls.map((url: string, i: number) => ({ url, timestamp: Date.now() + i, path: `legado/${r._id ?? r.id}/${i}` }))
+                        : r.photoUris
+                            ? r.photoUris.map((uri: any, i: number) => ({ url: uri.url || uri.uri || uri, timestamp: Date.now() + i, path: `legado/${r._id ?? r.id}/${i}` }))
+                            : [];
                     return {
-                        id: doc.id,
-                        responsavel: data.responsavel || '',
-                        data: dataField,
-                        hora: data.hora || '',
-                        veiculo: data.veiculo || { placa: '', tipo: '' },
-                        tipoLavagem: data.tipoLavagem || '',
-                        produtos: data.produtos || [],
-                        fotos: data.fotos || [],
-                        observacoes: data.observacoes || '',
-                        status: data.status || 'concluido',
-                        createdAt: data.createdAt instanceof Timestamp && !isNaN(data.createdAt.seconds)
-                            ? data.createdAt
-                            : Timestamp.fromDate(new Date()),
-                        createdBy: data.createdBy || null,
-                        agendamentoId: data.agendamentoId || null
+                        id: r._id ?? r.id,
+                        responsavel: r.responsavel || '',
+                        data: parseDataLavagem(r.data, r.hora),
+                        hora: r.hora || '',
+                        veiculo: { placa: r.placaVeiculo || '', tipo: 'veiculo', numeroEquipamento: null },
+                        tipoLavagem: r.tipoLavagem || '',
+                        produtos: (r.produtos || []).map((p: any) => ({
+                            nome: p.produto || '',
+                            quantidade: parseInt(p.quantidade) || 0,
+                        })),
+                        fotos,
+                        observacoes: r.observacoes || '',
+                        status: 'concluido',
+                        createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
+                        createdBy: null,
+                        agendamentoId: null,
                     } as LavagemInterface;
                 });
 
-            // Processar dados do formato antigo
-            const dadosAntigos = snapshotAntigo.docs.map(doc => {
-                const data = doc.data();
-                let timestamp: Timestamp;
-                if (data.data && typeof data.data === 'string' && data.data.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-                    // Formato antigo: data "DD/MM/YYYY" e hora "HH:mm" ou "HH:mm:ss"
-                    const [dia, mes, ano] = data.data.split('/').map(Number);
-                    const date = new Date(ano, mes - 1, dia);
-                    if (data.hora && data.hora.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
-                        const timeParts = data.hora.split(':').map(Number);
-                        const [hours, minutes, seconds = 0] = timeParts;
-                        date.setHours(hours, minutes, seconds);
-                    }
-                    if (!isNaN(date.getTime())) {
-                        timestamp = Timestamp.fromDate(date);
-                    } else {
-                        console.warn(`Data inválida no documento antigo ${doc.id}:`, data.data, data.hora);
-                        timestamp = Timestamp.fromDate(new Date());
-                    }
-                } else {
-                    console.warn(`Data ausente ou inválida no documento antigo ${doc.id}:`, data.data);
-                    timestamp = Timestamp.fromDate(new Date());
-                }
-                return {
-                    id: doc.id,
-                    responsavel: data.responsavel || '',
-                    data: timestamp,
-                    hora: data.hora || '',
-                    veiculo: {
-                        placa: data.placaVeiculo || '',
-                        tipo: 'veiculo',
-                        numeroEquipamento: null
-                    },
-                    tipoLavagem: data.tipoLavagem || '',
-                    produtos: (data.produtos || []).map((p: any) => ({
-                        nome: p.produto || '',
-                        quantidade: parseInt(p.quantidade) || 0
-                    })),
-                    fotos: [],
-                    observacoes: data.observacoes || '',
-                    status: 'concluido',
-                    createdAt: data.createdAt
-                        ? (typeof data.createdAt === 'string'
-                            ? Timestamp.fromDate(new Date(data.createdAt))
-                            : data.createdAt instanceof Timestamp && !isNaN(data.createdAt.seconds)
-                                ? data.createdAt
-                                : Timestamp.fromDate(new Date()))
-                        : Timestamp.fromDate(new Date()),
-                    createdBy: null,
-                    agendamentoId: null
-                } as LavagemInterface;
-            });
-
-            // Processar fotos do formato antigo
-            for (const lavagem of dadosAntigos) {
-                const docData = snapshotAntigo.docs.find(doc => doc.id === lavagem.id)?.data();
-
-                if (docData) {
-                    if (docData.photoUrls && Array.isArray(docData.photoUrls)) {
-                        lavagem.fotos = docData.photoUrls.map((url: string, index: number) => ({
-                            url,
-                            timestamp: Date.now() + index,
-                            path: `legado/${lavagem.id}/${index}`
-                        }));
-                    }
-                    else if (docData.photoUris && Array.isArray(docData.photoUris)) {
-                        lavagem.fotos = docData.photoUris.map((uri: any, index: number) => ({
-                            url: uri.url || uri.uri || uri,
-                            timestamp: Date.now() + index,
-                            path: `legado/${lavagem.id}/${index}`
-                        }));
-                    }
-                }
-            }
-
-            // Combinar dados dos dois formatos
-            const todosDados = [...dadosNovos, ...dadosAntigos];
-
-            // Ordenar pela data da lavagem (do mais novo para o mais velho)
-            const dadosOrdenados = todosDados.sort((a, b) => {
-                let dataA: Date = new Date(0); // Data padrão para casos inválidos
-                let dataB: Date = new Date(0);
-
-                // Usar o campo 'data' (data da lavagem) para ordenação
-                if (a.data instanceof Timestamp && !isNaN(a.data.seconds)) {
-                    dataA = a.data.toDate();
-                }
-
-                if (b.data instanceof Timestamp && !isNaN(b.data.seconds)) {
-                    dataB = b.data.toDate();
-                }
-
-                // Ordenar do mais recente (maior timestamp) para o mais antigo (menor timestamp)
+            const dadosOrdenados = [...dadosNovos, ...dadosAntigos].sort((a, b) => {
+                const dataA = a.data instanceof Date ? a.data : new Date(0);
+                const dataB = b.data instanceof Date ? b.data : new Date(0);
                 return dataB.getTime() - dataA.getTime();
             });
 
@@ -255,7 +169,23 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
 
     const handleDelete = async (id: string) => {
         try {
-            await deleteDoc(doc(db(), 'registroLavagens', id));
+            // Coletar todas as fotos do registro para excluir do storage
+            const lavagem = selectedLavagem;
+            if (lavagem) {
+                const todasFotos = [
+                    ...(lavagem.fotosAntes || []),
+                    ...(lavagem.fotosDepois || []),
+                    ...(lavagem.fotos || []),
+                ];
+                const storagePrefix = `${BASE_URL}/storage/files/`;
+                await Promise.allSettled(
+                    todasFotos
+                        .filter(f => f.url?.startsWith(storagePrefix))
+                        .map(f => ecoStorage.delete(f.url!.replace(storagePrefix, '')))
+                );
+            }
+
+            await ecoApi.delete('registroLavagens', id);
             showGlobalToast('success', 'Sucesso', 'Registro excluído com sucesso', 3000);
             onRefresh();
         } catch (error) {
@@ -334,37 +264,11 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
         }
     }, [filterStatus, filterVeiculo, filterTipoLavagem]);
 
-    const formatarData = (data: Timestamp | string | undefined, hora?: string) => {
+    const formatarData = (data: Date | string | undefined, hora?: string) => {
         if (!data) return '';
-
         try {
-            let date: Date;
-            if (typeof data === 'string') {
-                // Formato DD/MM/YYYY
-                const parts = data.split('/');
-                if (parts.length !== 3) return data;
-                const dia = parseInt(parts[0]);
-                const mes = parseInt(parts[1]) - 1; // Mês em JS começa em 0
-                const ano = parseInt(parts[2]);
-                date = new Date(ano, mes, dia);
-
-                // Adicionar hora, se disponível (HH:mm ou HH:mm:ss)
-                if (hora) {
-                    const timeParts = hora.split(':').map(Number);
-                    if (timeParts.length >= 2) {
-                        const [hours, minutes, seconds = 0] = timeParts;
-                        date.setHours(hours, minutes, seconds);
-                    }
-                }
-            } else {
-                // Timestamp
-                if (isNaN(data.seconds) || isNaN(data.nanoseconds)) {
-                    console.warn('Timestamp inválido:', data);
-                    return '';
-                }
-                date = data.toDate();
-            }
-            if (isNaN(date.getTime())) throw new Error('Invalid time value');
+            const date = parseDataLavagem(data, hora);
+            if (date.getTime() === 0) return '';
             return format(date, "EEE, dd 'de' MMM", { locale: ptBR });
         } catch (error) {
             console.error('Erro ao formatar data:', error);
@@ -373,191 +277,137 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
     };
 
     const renderLavagemCard = (lavagem: LavagemInterface, index: number) => {
-        const tipoLavagemInfo = getTipoLavagemDetails(lavagem.tipoLavagem);
+        const tipoInfo = getTipoLavagemDetails(lavagem.tipoLavagem, lavagem.veiculo?.tipo);
+        const veiculoColor = getTipoVeiculoColor(lavagem.veiculo?.tipo);
         const dataFormatada = formatarData(lavagem.data, lavagem.hora);
+        const produtosValidos = (lavagem.produtos || []).filter(p => p.nome && !isNaN(p.quantidade));
+        const todasFotos = [
+            ...(lavagem.fotosAntes || []),
+            ...(lavagem.fotosDepois || []),
+            ...(lavagem.fotos || []),  // legado
+        ];
+        const fotosCount = todasFotos.length;
 
         return (
             <Animated.View
                 key={lavagem.id}
-                style={[
-                    {
-                        opacity: fadeAnim,
-                        transform: [{ scale: scaleAnim }],
-                    }
-                ]}
+                style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}
             >
                 <TouchableOpacity
                     style={styles.card}
-                    onPress={() => {
-                        setSelectedLavagem(lavagem);
-                        setDetalheModalVisible(true);
-                    }}
-                    activeOpacity={0.7}
+                    onPress={() => { setSelectedLavagem(lavagem); setDetalheModalVisible(true); }}
+                    activeOpacity={0.75}
                 >
-                    {/* Barra colorida superior */}
-                    <View style={[styles.cardGradient, { backgroundColor: tipoLavagemInfo.bg }]} />
+                    {/* Faixa de cor no topo */}
+                    <View style={[styles.cardAccentBar, { backgroundColor: tipoInfo.text }]} />
 
                     <View style={styles.cardContent}>
-                        {/* Cabeçalho: Tipo de Lavagem, Status e Data */}
-                        <View style={styles.headerRow}>
-                            <Chip
-                                icon={() => (
-                                    <MaterialCommunityIcons
-                                        name={tipoLavagemInfo.icon}
-                                        size={16}
-                                        color={tipoLavagemInfo.text}
-                                    />
-                                )}
-                                style={[styles.tipoChip, { backgroundColor: tipoLavagemInfo.bg }]}
-                                textStyle={{ color: tipoLavagemInfo.text }}
-                            >
-                                {lavagem.tipoLavagem.toUpperCase()}
-                            </Chip>
 
-                            {/* <View style={styles.statusContainer}>
-                                <Badge
-                                    style={[
-                                        styles.statusBadge,
-                                        {
-                                            backgroundColor: lavagem.status === 'concluido' ?
-                                                customTheme.colors.primaryContainer :
-                                                customTheme.colors.errorContainer
-                                        }
-                                    ]}
-                                >
-                                    {lavagem.status === 'concluido' ? 'Concluído' : 'Pendente'}
-                                </Badge>
-                            </View> */}
-                        </View>
-
-                        {/* Linha 2: Veículo e Data/Hora */}
-                        <View style={styles.infoRow}>
-                            <View style={styles.veiculoContainer}>
-                                <MaterialCommunityIcons
-                                    name={getTipoVeiculoIcon(lavagem.veiculo.tipo)}
-                                    size={20}
-                                    color={getTipoVeiculoColor(lavagem.veiculo.tipo)}
-                                />
-                                <View style={styles.veiculoInfoContainer}>
-                                    <Text style={styles.veiculoText}>
-                                        {lavagem.veiculo.placa}
-                                        {lavagem.veiculo.numeroEquipamento ?
-                                            ` (Eq. ${lavagem.veiculo.numeroEquipamento})` :
-                                            ''}
-                                    </Text>
-
-                                    {/* Badge mostrando o tipo do item quando for "outros" */}
-                                    {lavagem.veiculo.tipo.toLowerCase() === 'outros' && (
-                                        <View style={styles.tipoOutrosContainer}>
-                                            <Text style={styles.tipoOutrosText}>
-                                                {getTipoVeiculoLabel(lavagem.veiculo.tipo)}
-                                            </Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-
-                            <View style={styles.dataHoraContainer}>
-                                <MaterialCommunityIcons
-                                    name="calendar-today"
-                                    size={18}
-                                    color={customTheme.colors.secondary}
-                                />
-                                <View>
-                                    <Text style={styles.dataText}>
-                                        {dataFormatada}
-                                    </Text>
-                                    <Text style={styles.horaText}>
-                                        {lavagem.hora}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Linha 3: Produtos utilizados */}
-                        {lavagem.produtos && lavagem.produtos.length > 0 &&
-                            lavagem.produtos.some(p => p.nome && !isNaN(p.quantidade)) && (
-                                <View style={styles.produtosContainer}>
-                                    <Text style={styles.produtosTitle}>
-                                        <MaterialCommunityIcons
-                                            name="spray-bottle"
-                                            size={16}
-                                            color={customTheme.colors.primary}
-                                            style={{ marginRight: 4 }}
-                                        />
-                                        Produtos:
-                                    </Text>
-                                    <View style={styles.produtosRow}>
-                                        {lavagem.produtos
-                                            .filter(produto => produto.nome && !isNaN(produto.quantidade))
-                                            .slice(0, 3).map((produto, idx) => (
-                                                <Chip
-                                                    key={`${lavagem.id}-prod-${idx}`}
-                                                    style={styles.produtoChip}
-                                                    textStyle={styles.produtoChipText}
-                                                >
-                                                    {produto.nome} ({produto.quantidade})
-                                                </Chip>
-                                            ))}
-
-                                        {lavagem.produtos.filter(p => p.nome && !isNaN(p.quantidade)).length > 3 && (
-                                            <Chip
-                                                style={styles.produtoChipMais}
-                                                textStyle={{ color: customTheme.colors.primary }}
-                                            >
-                                                +{lavagem.produtos.filter(p => p.nome && !isNaN(p.quantidade)).length - 3}
-                                            </Chip>
-                                        )}
-                                    </View>
-                                </View>
-                            )}
-
-                        {/* Linha 4: Fotos e Responsável */}
-                        <View style={styles.footerRow}>
-                            <View style={styles.fotosContainer}>
-                                <MaterialCommunityIcons
-                                    name="image-multiple"
-                                    size={18}
-                                    color={customTheme.colors.primary}
-                                />
-                                <Text style={styles.fotosText}>
-                                    {lavagem.fotos?.length || 0} fotos
+                        {/* ── Linha 1: tipo + data ──────────────────────── */}
+                        <View style={styles.cardTopRow}>
+                            <View style={[styles.tipoBadge, { backgroundColor: tipoInfo.bg }]}>
+                                <MaterialCommunityIcons name={tipoInfo.icon} size={13} color={tipoInfo.text} />
+                                <Text style={[styles.tipoBadgeText, { color: tipoInfo.text }]}>
+                                    {(lavagem.tipoLavagem || '').toUpperCase()}
                                 </Text>
+                            </View>
 
-                                {/* Miniatura das fotos */}
-                                {lavagem.fotos && lavagem.fotos.length > 0 && (
-                                    <View style={styles.thumbnailsContainer}>
-                                        {lavagem.fotos.slice(0, 2).map((foto, idx) => (
+                            <View style={styles.dataHoraBox}>
+                                <Text style={styles.dataText}>{dataFormatada}</Text>
+                                {!!lavagem.hora && (
+                                    <Text style={styles.horaText}>{lavagem.hora}</Text>
+                                )}
+                            </View>
+                        </View>
+
+                        {/* ── Linha 2: veículo (destaque) ───────────────── */}
+                        <View style={styles.veiculoRow}>
+                            <View style={[styles.veiculoIconBox, { backgroundColor: `${veiculoColor}18` }]}>
+                                <MaterialCommunityIcons
+                                    name={getTipoVeiculoIcon(lavagem.veiculo?.tipo)}
+                                    size={22}
+                                    color={veiculoColor}
+                                />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.veiculoPlaca} numberOfLines={1}>
+                                    {lavagem.veiculo?.placa || '—'}
+                                    {lavagem.veiculo?.numeroEquipamento
+                                        ? `  Nº ${lavagem.veiculo.numeroEquipamento}`
+                                        : ''}
+                                </Text>
+                                <Text style={styles.veiculoTipo}>
+                                    {getTipoVeiculoLabel(lavagem.veiculo?.tipo)}
+                                </Text>
+                            </View>
+                        </View>
+
+                        {/* ── Linha 3: produtos ─────────────────────────── */}
+                        {produtosValidos.length > 0 && (
+                            <View style={styles.produtosRow}>
+                                <MaterialCommunityIcons
+                                    name="spray-bottle"
+                                    size={14}
+                                    color={customTheme.colors.onSurfaceVariant}
+                                />
+                                {produtosValidos.slice(0, 3).map((p, idx) => (
+                                    <View key={idx} style={styles.produtoBadge}>
+                                        <Text style={styles.produtoBadgeText}>
+                                            {p.nome} ({p.quantidade})
+                                        </Text>
+                                    </View>
+                                ))}
+                                {produtosValidos.length > 3 && (
+                                    <View style={[styles.produtoBadge, styles.produtoBadgeMais]}>
+                                        <Text style={[styles.produtoBadgeText, { color: customTheme.colors.primary }]}>
+                                            +{produtosValidos.length - 3}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        {/* ── Rodapé: fotos + responsável + delete ──────── */}
+                        <View style={styles.cardFooter}>
+                            {/* Fotos */}
+                            <View style={styles.fotosRow}>
+                                {fotosCount > 0 ? (
+                                    <>
+                                        {todasFotos.slice(0, 3).map((foto, idx) => (
                                             <Image
-                                                key={`thumb-${idx}`}
+                                                key={idx}
                                                 source={{ uri: foto.url }}
                                                 style={styles.thumbnail}
                                             />
                                         ))}
-
-                                        {lavagem.fotos.length > 2 && (
-                                            <View style={styles.moreThumbnails}>
-                                                <Text style={styles.moreThumbnailsText}>
-                                                    +{lavagem.fotos.length - 2}
-                                                </Text>
+                                        {fotosCount > 3 && (
+                                            <View style={styles.thumbnailExtra}>
+                                                <Text style={styles.thumbnailExtraText}>+{fotosCount - 3}</Text>
                                             </View>
                                         )}
+                                    </>
+                                ) : (
+                                    <View style={styles.semFotos}>
+                                        <MaterialCommunityIcons
+                                            name="image-off-outline"
+                                            size={14}
+                                            color={customTheme.colors.onSurfaceVariant}
+                                        />
+                                        <Text style={styles.semFotosText}>Sem fotos</Text>
                                     </View>
                                 )}
                             </View>
 
-                            <View style={styles.responsavelActionContainer}>
-                                <View style={styles.responsavelContainer}>
-                                    <MaterialCommunityIcons
-                                        name="account"
-                                        size={16}
-                                        color={customTheme.colors.primary}
-                                    />
-                                    <Text style={styles.responsavelText} numberOfLines={1}>
-                                        {lavagem.responsavel}
-                                    </Text>
-                                </View>
-
+                            {/* Responsável + delete */}
+                            <View style={styles.responsavelRow}>
+                                <MaterialCommunityIcons
+                                    name="account-circle-outline"
+                                    size={15}
+                                    color={customTheme.colors.onSurfaceVariant}
+                                />
+                                <Text style={styles.responsavelText} numberOfLines={1}>
+                                    {lavagem.responsavel}
+                                </Text>
                                 {canEditDelete() && (
                                     <TouchableOpacity
                                         onPress={(e) => {
@@ -565,155 +415,140 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                                             setSelectedLavagem(lavagem);
                                             setShowDeleteConfirm(true);
                                         }}
-                                        style={styles.deleteButton}
+                                        style={styles.deleteBtn}
+                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                     >
                                         <MaterialCommunityIcons
-                                            name="delete"
-                                            size={20}
+                                            name="trash-can-outline"
+                                            size={18}
                                             color={customTheme.colors.error}
                                         />
                                     </TouchableOpacity>
                                 )}
                             </View>
                         </View>
+
                     </View>
                 </TouchableOpacity>
             </Animated.View>
         );
     };
 
-    const renderFilterBar = () => (
-        <View style={styles.filterBar}>
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterScrollContent}
+    const renderFilterBar = () => {
+        const hasFilter = !!(filterStatus || filterVeiculo || filterTipoLavagem);
+        const sourceCount = hasFilter ? lagensFiltradas.length : todasLavagens.length;
+
+        const FilterChip = ({
+            label,
+            icon,
+            value,
+            active,
+            onPress,
+        }: {
+            label: string;
+            icon: string;
+            value: string;
+            active: boolean;
+            onPress: () => void;
+        }) => (
+            <TouchableOpacity
+                style={[styles.filterChip, active && styles.filterChipActive]}
+                onPress={onPress}
+                activeOpacity={0.7}
             >
-
-                {/* Filtro de Tipo de Lavagem */}
-                <TouchableOpacity
-                    style={[
-                        styles.filterChip,
-                        filterTipoLavagem === 'completa' && styles.filterChipActive
-                    ]}
-                    onPress={() => setFilterTipoLavagem(
-                        filterTipoLavagem === 'completa' ? null : 'completa'
-                    )}
-                >
-                    <MaterialCommunityIcons
-                        name="car-wash"
-                        size={16}
-                        color={filterTipoLavagem === 'completa' ?
-                            customTheme.colors.primary :
-                            customTheme.colors.onSurfaceVariant
-                        }
-                    />
-                    <Text
-                        style={[
-                            styles.filterChipText,
-                            filterTipoLavagem === 'completa' && styles.filterChipTextActive
-                        ]}
-                    >
-                        Completa
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[
-                        styles.filterChip,
-                        filterTipoLavagem === 'simples' && styles.filterChipActive
-                    ]}
-                    onPress={() => setFilterTipoLavagem(
-                        filterTipoLavagem === 'simples' ? null : 'simples'
-                    )}
-                >
-                    <MaterialCommunityIcons
-                        name="car-wash"
-                        size={16}
-                        color={filterTipoLavagem === 'simples' ?
-                            customTheme.colors.primary :
-                            customTheme.colors.onSurfaceVariant
-                        }
-                    />
-                    <Text
-                        style={[
-                            styles.filterChipText,
-                            filterTipoLavagem === 'simples' && styles.filterChipTextActive
-                        ]}
-                    >
-                        Simples
-                    </Text>
-                </TouchableOpacity>
-
-                {/* Botão para limpar filtros */}
-                {(filterStatus || filterVeiculo || filterTipoLavagem) && (
-                    <TouchableOpacity
-                        style={styles.clearFilterButton}
-                        onPress={limparFiltros}
-                    >
-                        <MaterialCommunityIcons
-                            name="close"
-                            size={16}
-                            color={customTheme.colors.error}
-                        />
-                        <Text style={styles.clearFilterText}>
-                            Limpar filtros
-                        </Text>
-                    </TouchableOpacity>
+                <MaterialCommunityIcons
+                    name={icon}
+                    size={14}
+                    color={active ? customTheme.colors.primary : customTheme.colors.onSurfaceVariant}
+                />
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                    {label}
+                </Text>
+                {active && (
+                    <MaterialCommunityIcons name="close" size={12} color={customTheme.colors.primary} />
                 )}
-            </ScrollView>
-        </View>
-    );
+            </TouchableOpacity>
+        );
 
-    const renderLoadMoreButton = () => (
-        <View style={styles.loadMoreWrapper}>
+        return (
+            <View style={styles.filterBar}>
+                {/* Resumo */}
+                <View style={styles.filterSummary}>
+                    <MaterialCommunityIcons name="history" size={14} color={customTheme.colors.onSurfaceVariant} />
+                    <Text style={styles.filterSummaryText}>
+                        {sourceCount} {sourceCount === 1 ? 'registro' : 'registros'}
+                        {hasFilter ? ' encontrados' : ' no total'}
+                    </Text>
+                    {hasFilter && (
+                        <TouchableOpacity onPress={limparFiltros} style={styles.clearBtn}>
+                            <Text style={styles.clearBtnText}>Limpar</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+
+                {/* Chips de filtro */}
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterScrollContent}
+                >
+                    <FilterChip
+                        label="Completa"
+                        icon="shimmer"
+                        value="completa"
+                        active={filterTipoLavagem === 'completa'}
+                        onPress={() => setFilterTipoLavagem(filterTipoLavagem === 'completa' ? null : 'completa')}
+                    />
+                    <FilterChip
+                        label="Simples"
+                        icon="car-wash"
+                        value="simples"
+                        active={filterTipoLavagem === 'simples'}
+                        onPress={() => setFilterTipoLavagem(filterTipoLavagem === 'simples' ? null : 'simples')}
+                    />
+                </ScrollView>
+            </View>
+        );
+    };
+
+    const renderLoadMoreButton = () => {
+        const restantes = todasLavagens.length - lavagens.length;
+        return (
             <TouchableOpacity
                 style={styles.loadMoreButton}
                 onPress={handleLoadMore}
                 disabled={loadingMore}
+                activeOpacity={0.7}
             >
                 {loadingMore ? (
                     <ActivityIndicator size="small" color={customTheme.colors.primary} />
                 ) : (
                     <>
+                        <MaterialCommunityIcons name="chevron-double-down" size={16} color={customTheme.colors.primary} />
                         <Text style={styles.loadMoreText}>
-                            Carregar mais
-                            {todasLavagens.length - lavagens.length > 0 &&
-                                ` (${todasLavagens.length - lavagens.length} restantes)`}
+                            Ver mais {restantes > 0 ? `(${restantes} restantes)` : ''}
                         </Text>
-                        <MaterialCommunityIcons
-                            name="chevron-double-down"
-                            size={20}
-                            color={customTheme.colors.primary}
-                        />
                     </>
                 )}
             </TouchableOpacity>
-        </View>
-    );
+        );
+    };
 
     const renderEmptyState = () => (
         <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons
-                name="car-off"
-                size={64}
-                color={customTheme.colors.onSurfaceVariant}
-            />
-            <Text style={styles.emptyTitle}>
-                Nenhuma lavagem encontrada
-            </Text>
+            <View style={styles.emptyIconBox}>
+                <MaterialCommunityIcons name="car-wash" size={40} color={customTheme.colors.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>Nenhuma lavagem encontrada</Text>
             <Text style={styles.emptyText}>
-                Não há registros de lavagens no sistema.
+                {(filterStatus || filterVeiculo || filterTipoLavagem)
+                    ? 'Nenhum registro corresponde aos filtros aplicados.'
+                    : 'Ainda não há registros de lavagem no sistema.'}
             </Text>
-
             {(filterStatus || filterVeiculo || filterTipoLavagem) && (
-                <TouchableOpacity
-                    style={styles.clearFilterButtonEmpty}
-                    onPress={limparFiltros}
-                >
-                    <Text style={styles.clearFilterButtonEmptyText}>
-                        Limpar filtros
-                    </Text>
+                <TouchableOpacity style={styles.emptyLimparBtn} onPress={limparFiltros}>
+                    <MaterialCommunityIcons name="filter-off-outline" size={15} color={customTheme.colors.primary} />
+                    <Text style={styles.emptyLimparText}>Limpar filtros</Text>
                 </TouchableOpacity>
             )}
         </View>
@@ -803,48 +638,61 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
 }
 
 const styles = StyleSheet.create({
-    veiculoInfoContainer: {
-        flex: 1,
-    },
-    tipoOutrosContainer: {
-        backgroundColor: customTheme.colors.tertiaryContainer || '#FFF3E0',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-        alignSelf: 'flex-start',
-        marginTop: 2,
-    },
-    tipoOutrosText: {
-        fontSize: 10,
-        color: customTheme.colors.tertiary || '#FF9800',
-        fontWeight: '600',
-    },
+    // ── Layout ───────────────────────────────────────────────────────────────
     safeArea: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: customTheme.colors.background,
     },
     scrollView: {
         flex: 1,
     },
     container: {
         padding: 16,
+        paddingBottom: 32,
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        gap: 12,
     },
     loadingText: {
-        marginTop: 12,
-        fontSize: 16,
+        fontSize: 15,
         color: customTheme.colors.onSurfaceVariant,
     },
 
-    // Estilos dos filtros
+    // ── Barra de filtros ─────────────────────────────────────────────────────
     filterBar: {
-        backgroundColor: customTheme.colors.surfaceVariant,
-        paddingVertical: 12,
-        elevation: 2,
+        backgroundColor: customTheme.colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: customTheme.colors.surfaceVariant,
+        paddingBottom: 10,
+    },
+    filterSummary: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 16,
+        paddingTop: 10,
+        paddingBottom: 8,
+    },
+    filterSummaryText: {
+        flex: 1,
+        fontSize: 12,
+        color: customTheme.colors.onSurfaceVariant,
+        fontWeight: '500',
+    },
+    clearBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: customTheme.colors.error,
+    },
+    clearBtnText: {
+        fontSize: 11,
+        color: customTheme.colors.error,
+        fontWeight: '600',
     },
     filterScrollContent: {
         paddingHorizontal: 16,
@@ -853,239 +701,256 @@ const styles = StyleSheet.create({
     filterChip: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 5,
         paddingHorizontal: 12,
-        paddingVertical: 6,
-        backgroundColor: customTheme.colors.surface,
-        borderRadius: 20,
+        paddingVertical: 7,
+        backgroundColor: customTheme.colors.background,
+        borderRadius: 8,
         borderWidth: 1,
-        borderColor: customTheme.colors.outline,
-        marginRight: 8,
-        gap: 6,
+        borderColor: customTheme.colors.outlineVariant,
     },
     filterChipActive: {
         backgroundColor: customTheme.colors.primaryContainer,
         borderColor: customTheme.colors.primary,
     },
     filterChipText: {
-        fontSize: 14,
+        fontSize: 13,
         color: customTheme.colors.onSurfaceVariant,
+        fontWeight: '500',
     },
     filterChipTextActive: {
-        fontSize: 14,
+        fontSize: 13,
         color: customTheme.colors.primary,
-        fontWeight: '500',
-    },
-    clearFilterButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        backgroundColor: customTheme.colors.errorContainer,
-        borderRadius: 20,
-        gap: 6,
-    },
-    clearFilterText: {
-        fontSize: 14,
-        color: customTheme.colors.error,
-        fontWeight: '500',
-    },
-    clearFilterButtonEmpty: {
-        marginTop: 16,
-        paddingHorizontal: 20,
-        paddingVertical: 8,
-        backgroundColor: customTheme.colors.errorContainer,
-        borderRadius: 20,
-    },
-    clearFilterButtonEmptyText: {
-        fontSize: 14,
-        color: customTheme.colors.error,
-        fontWeight: '500',
+        fontWeight: '600',
     },
 
-    // Estilos dos cards
+    // ── Card ─────────────────────────────────────────────────────────────────
     card: {
-        marginBottom: 16,
+        marginBottom: 12,
         borderRadius: 12,
         overflow: 'hidden',
-        backgroundColor: '#FFFFFF',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        backgroundColor: customTheme.colors.surface,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: customTheme.colors.surfaceVariant,
     },
-    cardGradient: {
-        height: 5,
-        width: '100%',
+    cardAccentBar: {
+        height: 4,
     },
     cardContent: {
-        padding: 16,
-        gap: 16,
-    },
-    headerRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    tipoChip: {
-        paddingHorizontal: 8,
-        height: 28,
+        padding: 14,
+        gap: 12,
     },
 
-    // Info Row
-    infoRow: {
+    // linha 1: tipo + data
+    cardTopRow: {
         flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'space-between',
-        alignItems: 'center',
     },
-    veiculoContainer: {
+    tipoBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        flex: 1,
+        gap: 5,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+        borderRadius: 6,
     },
-    veiculoText: {
-        fontSize: 17,
-        fontWeight: '600',
-        color: customTheme.colors.onSurface,
+    tipoBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.5,
     },
-    dataHoraContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
+    dataHoraBox: {
+        alignItems: 'flex-end',
     },
     dataText: {
-        fontSize: 14,
+        fontSize: 13,
+        fontWeight: '600',
         color: customTheme.colors.onSurface,
+        textTransform: 'capitalize',
     },
     horaText: {
-        fontSize: 12,
+        fontSize: 11,
         color: customTheme.colors.onSurfaceVariant,
+        marginTop: 1,
     },
 
-    // Produtos
-    produtosContainer: {
-        gap: 8,
+    // linha 2: veículo
+    veiculoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
     },
-    produtosTitle: {
-        fontSize: 14,
+    veiculoIconBox: {
+        width: 44,
+        height: 44,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    veiculoPlaca: {
+        fontSize: 17,
+        fontWeight: '700',
         color: customTheme.colors.onSurface,
-        fontWeight: '500',
+        letterSpacing: 0.3,
     },
+    veiculoTipo: {
+        fontSize: 12,
+        color: customTheme.colors.onSurfaceVariant,
+        marginTop: 1,
+    },
+
+    // linha 3: produtos
     produtosRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 8,
+        alignItems: 'center',
+        gap: 6,
     },
-    produtoChip: {
+    produtoBadge: {
         backgroundColor: customTheme.colors.surfaceVariant,
+        borderRadius: 5,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
     },
-    produtoChipText: {
+    produtoBadgeMais: {
+        backgroundColor: customTheme.colors.primaryContainer,
+    },
+    produtoBadgeText: {
+        fontSize: 11,
+        color: customTheme.colors.onSurfaceVariant,
+        fontWeight: '500',
+    },
+
+    // rodapé
+    cardFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: 10,
+        borderTopWidth: 1,
+        borderTopColor: customTheme.colors.surfaceVariant,
+    },
+    fotosRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        flex: 1,
+    },
+    thumbnail: {
+        width: 32,
+        height: 32,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: customTheme.colors.surfaceVariant,
+    },
+    thumbnailExtra: {
+        width: 32,
+        height: 32,
+        borderRadius: 6,
+        backgroundColor: customTheme.colors.primaryContainer,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    thumbnailExtraText: {
+        fontSize: 10,
+        color: customTheme.colors.primary,
+        fontWeight: '700',
+    },
+    semFotos: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    semFotosText: {
         fontSize: 12,
         color: customTheme.colors.onSurfaceVariant,
     },
-    produtoChipMais: {
-        backgroundColor: customTheme.colors.primaryContainer,
-    },
-
-    // Footer
-    footerRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        borderTopWidth: 1,
-        borderTopColor: customTheme.colors.surfaceVariant,
-        paddingTop: 12,
-    },
-    fotosContainer: {
+    responsavelRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-    },
-    fotosText: {
-        fontSize: 14,
-        color: customTheme.colors.onSurfaceVariant,
-    },
-    thumbnailsContainer: {
-        flexDirection: 'row',
-        marginLeft: 8,
-        gap: 4,
-    },
-    thumbnail: {
-        width: 30,
-        height: 30,
-        borderRadius: 4,
-    },
-    moreThumbnails: {
-        width: 30,
-        height: 30,
-        borderRadius: 4,
-        backgroundColor: customTheme.colors.surfaceVariant,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    moreThumbnailsText: {
-        fontSize: 10,
-        color: customTheme.colors.onSurfaceVariant,
-        fontWeight: '600',
-    },
-    responsavelActionContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    responsavelContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
+        gap: 5,
+        flexShrink: 1,
+        maxWidth: '55%',
     },
     responsavelText: {
-        fontSize: 14,
-        color: customTheme.colors.onSurface,
+        fontSize: 12,
+        color: customTheme.colors.onSurfaceVariant,
+        flex: 1,
     },
-    deleteButton: {
-        padding: 4,
+    deleteBtn: {
+        marginLeft: 6,
+        padding: 2,
     },
 
-    // Load More
-    loadMoreWrapper: {
-        paddingTop: 8,
-        paddingBottom: 24,
-    },
+    // ── Load more ────────────────────────────────────────────────────────────
     loadMoreButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 12,
-        backgroundColor: customTheme.colors.primaryContainer,
-        borderRadius: 10,
         gap: 8,
+        marginTop: 4,
+        marginBottom: 8,
+        paddingVertical: 12,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        borderColor: customTheme.colors.primary,
+        backgroundColor: customTheme.colors.surface,
     },
     loadMoreText: {
-        color: customTheme.colors.primary,
         fontSize: 14,
-        fontWeight: '500',
+        fontWeight: '600',
+        color: customTheme.colors.primary,
     },
 
-    // Estado vazio
+    // ── Estado vazio ─────────────────────────────────────────────────────────
     emptyContainer: {
+        marginTop: 24,
         paddingVertical: 48,
+        paddingHorizontal: 24,
+        alignItems: 'center',
+        backgroundColor: customTheme.colors.surface,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: customTheme.colors.surfaceVariant,
+    },
+    emptyIconBox: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: customTheme.colors.primaryContainer,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: customTheme.colors.surfaceVariant,
-        borderRadius: 12,
-        opacity: 0.9,
+        marginBottom: 16,
     },
     emptyTitle: {
-        marginTop: 16,
-        fontSize: 18,
-        fontWeight: '600',
-        color: customTheme.colors.onSurfaceVariant,
+        fontSize: 17,
+        fontWeight: '700',
+        color: customTheme.colors.onSurface,
+        marginBottom: 8,
+        textAlign: 'center',
     },
     emptyText: {
-        marginTop: 8,
         fontSize: 14,
         color: customTheme.colors.onSurfaceVariant,
         textAlign: 'center',
-        paddingHorizontal: 32,
+        lineHeight: 20,
+    },
+    emptyLimparBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 20,
+        paddingHorizontal: 16,
+        paddingVertical: 9,
+        borderRadius: 8,
+        borderWidth: 1.5,
+        borderColor: customTheme.colors.primary,
+    },
+    emptyLimparText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: customTheme.colors.primary,
     },
 });

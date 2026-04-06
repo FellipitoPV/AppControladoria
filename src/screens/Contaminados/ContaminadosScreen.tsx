@@ -15,17 +15,6 @@ import {
 } from 'react-native';
 import {Button, Chip, Text, TextInput} from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {
-  collection,
-  query,
-  orderBy,
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-} from 'firebase/firestore';
-import {ref, uploadBytes, getDownloadURL, deleteObject} from 'firebase/storage';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import {useNavigation} from '@react-navigation/native';
 
@@ -34,7 +23,7 @@ import {showGlobalToast} from '../../helpers/GlobalApi';
 import {useNetwork} from '../../contexts/NetworkContext';
 import {useUser} from '../../contexts/userContext';
 import {customTheme} from '../../theme/theme';
-import {db, dbStorage} from '../../../firebase';
+import {ecoApi, ecoStorage, BASE_URL} from '../../api/ecoApi';
 import {
   Contaminado,
   ContaminadoStatus,
@@ -89,30 +78,24 @@ const ContaminadosScreen = () => {
   const [viewerPhotos, setViewerPhotos] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  // Real-time listener
+  const loadContaminados = async () => {
+    try {
+      const data = await ecoApi.list('contaminados');
+      const items: Contaminado[] = data
+        .map((doc: any) => ({...doc, id: doc._id ?? doc.id}))
+        .sort((a: Contaminado, b: Contaminado) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+      setContaminados(items);
+    } catch (error) {
+      console.error('Erro ao carregar contaminados:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const q = query(
-      collection(db(), 'contaminados'),
-      orderBy('createdAt', 'desc'),
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      snapshot => {
-        const items: Contaminado[] = [];
-        snapshot.forEach(docSnap => {
-          items.push({id: docSnap.id, ...docSnap.data()} as Contaminado);
-        });
-        setContaminados(items);
-        setLoading(false);
-      },
-      error => {
-        console.error('Erro ao carregar contaminados:', error);
-        setLoading(false);
-      },
-    );
-
-    return () => unsubscribe();
+    loadContaminados();
   }, []);
 
   // Sort: Aguardando first, then by date desc
@@ -277,13 +260,9 @@ const ContaminadosScreen = () => {
   ): Promise<string> => {
     const timestamp = Date.now() + Math.random();
     const sanitized = empresaName.trim().replace(/[^a-zA-Z0-9]/g, '_');
-    const storagePath = `contaminados/${timestamp}_${sanitized}.jpg`;
-    const storageRef = ref(dbStorage(), storagePath);
-
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
+    const filename = `contaminados_${timestamp}_${sanitized}.jpg`;
+    const result = await ecoStorage.upload({uri, type: 'image/jpeg', name: filename});
+    return result.url;
   };
 
   // ==================== SAVE NEW ====================
@@ -345,9 +324,10 @@ const ContaminadosScreen = () => {
         updatedAt: now,
       };
 
-      await addDoc(collection(db(), 'contaminados'), newItem);
+      await ecoApi.create('contaminados', newItem);
       showGlobalToast('success', 'Registro salvo', '', 4000);
       closeNewModal();
+      loadContaminados();
     } catch (error) {
       console.error('Erro ao salvar contaminado:', error);
       showGlobalToast('error', 'Erro ao salvar', 'Tente novamente', 4000);
@@ -376,7 +356,7 @@ const ContaminadosScreen = () => {
         );
       }
 
-      await updateDoc(doc(db(), 'contaminados', selectedItem.id), {
+      await ecoApi.update('contaminados', selectedItem.id, {
         photoUrls: [...existingPhotos, ...uploadedUrls],
         mtr: editMtr.trim(),
         pesagem: editPesagem.trim(),
@@ -385,6 +365,7 @@ const ContaminadosScreen = () => {
 
       showGlobalToast('success', 'Atualizado com sucesso', '', 4000);
       closeDetailModal();
+      loadContaminados();
     } catch (error) {
       console.error('Erro ao atualizar:', error);
       showGlobalToast('error', 'Erro ao atualizar', 'Tente novamente', 4000);
@@ -423,7 +404,7 @@ const ContaminadosScreen = () => {
         );
       }
 
-      await updateDoc(doc(db(), 'contaminados', selectedItem.id), {
+      await ecoApi.update('contaminados', selectedItem.id, {
         status: 'Destinado',
         photoUrls: [...existingPhotos, ...uploadedUrls],
         mtr: editMtr.trim(),
@@ -433,6 +414,7 @@ const ContaminadosScreen = () => {
 
       showGlobalToast('success', 'Marcado como Destinado', '', 4000);
       closeDetailModal();
+      loadContaminados();
     } catch (error) {
       console.error('Erro ao atualizar status:', error);
       showGlobalToast('error', 'Erro ao atualizar', 'Tente novamente', 4000);
@@ -467,13 +449,14 @@ const ContaminadosScreen = () => {
 
             setIsDeleting(true);
             try {
-              await deleteDoc(doc(db(), 'contaminados', selectedItem.id!));
+              await ecoApi.delete('contaminados', selectedItem.id!);
 
               // Tenta deletar todas as fotos do Storage (best effort)
               const photos = getItemPhotos(selectedItem);
               for (const url of photos) {
                 try {
-                  await deleteObject(ref(dbStorage(), url));
+                  const filename = url.replace(`${BASE_URL}/storage/files/`, '');
+                  await ecoStorage.delete(filename);
                 } catch {
                   // ignora se não conseguir deletar
                 }
@@ -481,6 +464,7 @@ const ContaminadosScreen = () => {
 
               showGlobalToast('success', 'Registro excluído', '', 4000);
               closeDetailModal();
+              loadContaminados();
             } catch (error) {
               console.error('Erro ao excluir:', error);
               showGlobalToast('error', 'Erro ao excluir', 'Tente novamente', 4000);

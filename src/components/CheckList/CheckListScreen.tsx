@@ -1,8 +1,6 @@
 import React, {useEffect, useState} from 'react';
-import {View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform, Modal, Dimensions} from 'react-native';
+import {View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform} from 'react-native';
 import {Surface, Text, Card, ActivityIndicator} from 'react-native-paper';
-import {ref, onValue} from 'firebase/database';
-import {dbRealTime} from '../../../firebase';
 import ModernHeader from '../../assets/components/ModernHeader';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {customTheme} from '../../theme/theme';
@@ -27,6 +25,13 @@ interface ChecklistLocation {
   status: ChecklistStatus;
   lastUpdate?: string;
   monthlyStatus?: Record<number, ChecklistStatus>;
+  useCustomQuestions?: boolean;
+  questions?: Array<{
+    id: string;
+    label: string;
+    quantidade?: string;
+    sectionTitle?: string;
+  }>;
 }
 
 interface ChecklistDefinition {
@@ -36,11 +41,11 @@ interface ChecklistDefinition {
   icon: string;
   category: string;
   frequency: string;
-  requisitos?: string;
   questions: Array<{
     id: string;
     label: string;
     quantidade?: string;
+    sectionTitle?: string;
   }>;
   locations: ChecklistLocation[];
 }
@@ -74,11 +79,28 @@ interface ReportModalData {
   checklistTitle: string;
   locationId: string;
   locationName: string;
-  questions: Array<{id: string; label: string}>;
-  requisitos?: string;
+  questions: Array<{id: string; label: string; sectionTitle?: string}>;
 }
 
-export default function CheckListScreen({navigation}: any) {
+export interface ChecklistScreenProps {
+  navigation: any;
+  route?: {
+    params?: {
+      category?: string;
+      title?: string;
+      headerIcon?: string;
+      reportVariant?: 'sst' | 'meioAmbiente' | 'qualidade';
+    };
+  };
+}
+
+export default function ChecklistScreen({navigation, route}: ChecklistScreenProps) {
+  const category = route?.params?.category || 'QSMS - Geral';
+  const screenTitle = route?.params?.title || 'Checklist SST';
+  const headerIcon = route?.params?.headerIcon || 'shield-check';
+  const reportVariant = route?.params?.reportVariant || 'sst';
+
+  const cacheKey = category.replace(/\s+/g, '_').toLowerCase();
   const {userInfo} = useUser();
   const {isOnline, syncStatus} = useChecklistSync();
   const [loading, setLoading] = useState(true);
@@ -87,17 +109,10 @@ export default function CheckListScreen({navigation}: any) {
   const [checklists, setChecklists] = useState<ChecklistDefinition[]>([]);
   const [loadingDefinitions, setLoadingDefinitions] = useState(true);
 
-  // Estados do modal de relatório
   const [reportModalVisible, setReportModalVisible] = useState(false);
-  const [reportModalData, setReportModalData] = useState<ReportModalData | null>(
-    null,
-  );
+  const [reportModalData, setReportModalData] = useState<ReportModalData | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
 
-  // Estado do modal de seleção de mês/ano
-  const [monthPickerVisible, setMonthPickerVisible] = useState(false);
-
-  // Mapear ícones Lucide para MaterialCommunityIcons
   const getIconName = (lucideIcon: string): string => {
     const iconMap: Record<string, string> = {
       Droplet: 'water',
@@ -116,17 +131,13 @@ export default function CheckListScreen({navigation}: any) {
       Lock: 'lock',
       Leaf: 'leaf',
     };
-
     return iconMap[lucideIcon] || 'clipboard-check';
   };
 
-  // ADICIONAR função para cachear definições
-  const cacheChecklistDefinitions = async (
-    definitions: ChecklistDefinition[],
-  ) => {
+  const cacheChecklistDefinitions = async (definitions: ChecklistDefinition[]) => {
     try {
       await AsyncStorage.setItem(
-        '@checklist_definitions',
+        `@checklist_definitions_${cacheKey}`,
         JSON.stringify(definitions),
       );
     } catch (error) {
@@ -136,11 +147,10 @@ export default function CheckListScreen({navigation}: any) {
 
   const loadCachedDefinitions = async () => {
     try {
-      const cached = await AsyncStorage.getItem('@checklist_definitions');
+      const cached = await AsyncStorage.getItem(`@checklist_definitions_${cacheKey}`);
       if (cached) {
-        const definitions = JSON.parse(cached);
-        setChecklists(definitions);
-        return definitions;
+        setChecklists(JSON.parse(cached));
+        return JSON.parse(cached);
       }
     } catch (error) {
       console.error('Erro ao carregar cache:', error);
@@ -148,47 +158,35 @@ export default function CheckListScreen({navigation}: any) {
     return null;
   };
 
-  // Buscar definições dos checklists do Firebase
   useEffect(() => {
-    // Carregar cache primeiro (resposta rápida)
     loadCachedDefinitions();
 
-    // Se estiver online, buscar do Firebase
     if (isOnline) {
-      const definitionsRef = ref(dbRealTime(), 'checklists-config');
-
-      const unsubscribe = onValue(definitionsRef, snapshot => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-
-          const filteredChecklists = Object.values(data)
-            .filter(
-              (checklist: any) => checklist.category === 'QSMS - Meio Ambiente',
-            )
-            .map((checklist: any) => checklist as ChecklistDefinition);
-
-          setChecklists(filteredChecklists);
-          cacheChecklistDefinitions(filteredChecklists); // ← Cachear
-          console.log('Checklists carregados do Firebase');
-        } else {
-          setChecklists([]);
-        }
-        setLoadingDefinitions(false);
-      });
-
-      return () => unsubscribe();
+      loadChecklistDefinitions();
     } else {
-      // Offline: usar apenas cache
       setLoadingDefinitions(false);
     }
-  }, [isOnline]); // ← Adicionar dependência
+  }, [isOnline]);
 
-  // Função para converter semanas em meses (para checklists semanais)
+  const loadChecklistDefinitions = async () => {
+    try {
+      const {ecoApi} = require('../../api/ecoApi');
+      const results = await ecoApi.list('checklistsConfig', {category});
+
+      const filteredChecklists = results.map((item: any) => item as ChecklistDefinition);
+      setChecklists(filteredChecklists);
+      cacheChecklistDefinitions(filteredChecklists);
+    } catch (error) {
+      console.error('Erro ao carregar definições da API:', error);
+    } finally {
+      setLoadingDefinitions(false);
+    }
+  };
+
   const getMonthFromWeek = (weekNumber: number): number => {
     return Math.ceil(weekNumber / 4);
   };
 
-  // Função para converter status semanal em mensal
   const getMonthlyStatusFromWeekly = (
     weeklyStatus: Record<number, ChecklistStatus>,
   ): Record<number, ChecklistStatus> => {
@@ -198,18 +196,14 @@ export default function CheckListScreen({navigation}: any) {
     Object.entries(weeklyStatus).forEach(([week, status]) => {
       const weekNum = parseInt(week);
       const month = getMonthFromWeek(weekNum);
-
       if (month >= 1 && month <= 12) {
-        if (!weeksByMonth[month]) {
-          weeksByMonth[month] = [];
-        }
+        if (!weeksByMonth[month]) weeksByMonth[month] = [];
         weeksByMonth[month].push(status);
       }
     });
 
     Object.entries(weeksByMonth).forEach(([month, statuses]) => {
       const monthNum = parseInt(month);
-
       if (statuses.every(s => s === 'Concluído')) {
         monthlyStatus[monthNum] = 'Concluído';
       } else if (statuses.some(s => s === 'Concluído com NC')) {
@@ -230,22 +224,13 @@ export default function CheckListScreen({navigation}: any) {
     const updatedChecklists = checklists.map(checklist => ({
       ...checklist,
       locations: checklist.locations.map(location => {
-        const savedDataForLocation =
-          savedData[year]?.[checklist.id]?.[location.id];
+        const savedDataForLocation = savedData[year]?.[checklist.id]?.[location.id];
 
         if (savedDataForLocation) {
-          // Pegar status mensal (convertendo de semanal se necessário)
           let displayMonthlyStatus = savedDataForLocation.monthlyStatus || {};
-
-          if (
-            checklist.frequency === 'Semanal' &&
-            savedDataForLocation.monthlyStatus
-          ) {
-            displayMonthlyStatus = getMonthlyStatusFromWeekly(
-              savedDataForLocation.monthlyStatus,
-            );
+          if (checklist.frequency === 'Semanal' && savedDataForLocation.monthlyStatus) {
+            displayMonthlyStatus = getMonthlyStatusFromWeekly(savedDataForLocation.monthlyStatus);
           }
-
           return {
             ...location,
             status: savedDataForLocation.status,
@@ -266,11 +251,10 @@ export default function CheckListScreen({navigation}: any) {
     setChecklists(updatedChecklists);
   };
 
-  // Cachear dados salvos
   const cacheSavedData = async (year: string, data: any) => {
     try {
       await AsyncStorage.setItem(
-        `@checklist_saved_${year}`,
+        `@checklist_saved_${cacheKey}_${year}`,
         JSON.stringify(data),
       );
     } catch (error) {
@@ -280,47 +264,48 @@ export default function CheckListScreen({navigation}: any) {
 
   const loadCachedSavedData = async (year: string) => {
     try {
-      const cached = await AsyncStorage.getItem(`@checklist_saved_${year}`);
-      if (cached) {
-        return JSON.parse(cached);
-      }
+      const cached = await AsyncStorage.getItem(`@checklist_saved_${cacheKey}_${year}`);
+      if (cached) return JSON.parse(cached);
     } catch (error) {
       console.error('Erro ao carregar dados salvos do cache:', error);
     }
     return null;
   };
 
-  // ADAPTAR useEffect dos dados salvos
+  const loadSavedData = async (year: string) => {
+    try {
+      const {ecoApi} = require('../../api/ecoApi');
+      const results = await ecoApi.list('checklists', {year, category});
+
+      const data: any = {};
+      results.forEach((item: any) => {
+        const {checklistId, locationId, respostas} = item;
+        if (!data[checklistId]) data[checklistId] = {};
+        data[checklistId][locationId] = respostas;
+      });
+
+      setSavedData(prev => ({...prev, [year]: data}));
+      cacheSavedData(year, data);
+    } catch (error) {
+      console.error('Erro ao carregar dados salvos da API:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const year = selectedMonth.getFullYear().toString();
 
-    // Carregar cache primeiro
     loadCachedSavedData(year).then(cached => {
-      if (cached) {
-        setSavedData(prev => ({...prev, [year]: cached}));
-      }
+      if (cached) setSavedData(prev => ({...prev, [year]: cached}));
     });
 
-    // Se online, buscar do Firebase
     if (isOnline) {
-      const checklistsRef = ref(dbRealTime(), `checklists/${year}`);
-
-      const unsubscribe = onValue(checklistsRef, snapshot => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          setSavedData(prev => ({...prev, [year]: data}));
-          cacheSavedData(year, data); // ← Cachear
-        } else {
-          setSavedData(prev => ({...prev, [year]: {}}));
-        }
-        setLoading(false);
-      });
-
-      return () => unsubscribe();
+      loadSavedData(year);
     } else {
       setLoading(false);
     }
-  }, [selectedMonth, isOnline]); // ← Adicionar isOnline
+  }, [selectedMonth, isOnline]);
 
   useEffect(() => {
     if (!loadingDefinitions) {
@@ -330,29 +315,19 @@ export default function CheckListScreen({navigation}: any) {
 
   const getStatusColor = (status: ChecklistStatus) => {
     switch (status) {
-      case 'Concluído':
-        return '#4CAF50';
-      case 'Concluído com NC':
-        return '#FF9800';
-      case 'Em Andamento':
-        return '#2196F3';
-      case 'Pendente':
-      default:
-        return '#9E9E9E';
+      case 'Concluído': return '#4CAF50';
+      case 'Concluído com NC': return '#FF9800';
+      case 'Em Andamento': return '#2196F3';
+      default: return '#9E9E9E';
     }
   };
 
   const getCardBackgroundColor = (status: ChecklistStatus) => {
     switch (status) {
-      case 'Concluído':
-        return '#E8F5E9'; // Verde claro
-      case 'Concluído com NC':
-        return '#FFF3E0'; // Laranja claro
-      case 'Em Andamento':
-        return '#E3F2FD'; // Azul claro
-      case 'Pendente':
-      default:
-        return customTheme.colors.surfaceVariant;
+      case 'Concluído': return '#E8F5E9';
+      case 'Concluído com NC': return '#FFF3E0';
+      case 'Em Andamento': return '#E3F2FD';
+      default: return customTheme.colors.surfaceVariant;
     }
   };
 
@@ -362,25 +337,14 @@ export default function CheckListScreen({navigation}: any) {
     locationId: string,
     locationName: string,
     questions: Array<{id: string; label: string}>,
-    requisitos?: string,
   ) => {
-    setReportModalData({
-      checklistId,
-      checklistTitle,
-      locationId,
-      locationName,
-      questions,
-      requisitos,
-    });
+    setReportModalData({checklistId, checklistTitle, locationId, locationName, questions});
     setReportModalVisible(true);
   };
 
   const handleGenerateReport = async (data: any) => {
-    console.log('Gerando relatório com dados:', data);
     setGeneratingReport(true);
-
     try {
-      // Preparar os itens do checklist com seus resultados
       const year = selectedMonth.getFullYear().toString();
       const month = selectedMonth.getMonth() + 1;
 
@@ -396,6 +360,7 @@ export default function CheckListScreen({navigation}: any) {
           id: q.id,
           label: q.label,
           resultado: resultado || 'NA',
+          sectionTitle: (q as any).sectionTitle || '',
           ...(ncProof && {ncProof}),
         };
       });
@@ -408,14 +373,9 @@ export default function CheckListScreen({navigation}: any) {
         },
       };
 
-      console.log('Enviando para Cloud Run:', requestData);
-
-      // Fazer requisição para o Cloud Run
       const response = await fetch(`${CLOUD_RUN_URL}/generate-file`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(requestData),
       });
 
@@ -424,26 +384,29 @@ export default function CheckListScreen({navigation}: any) {
         throw new Error(errorData.error || 'Erro ao gerar relatório');
       }
 
-      const result = await response.json();
+      const blob = await response.blob();
+      if (!blob || blob.size === 0) throw new Error('Resposta inválida do servidor');
 
-      if (!result.success || !result.fileBase64) {
-        throw new Error('Resposta inválida do servidor');
-      }
+      const base64Data: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
 
-      // Salvar o PDF no dispositivo
-      const fileName = result.fileName || `Relatorio_Checklist_${Date.now()}.pdf`;
+      const disposition = response.headers.get('Content-Disposition');
+      const fileNameMatch = disposition?.match(/filename="?(.+?)"?$/);
+      const fileName = fileNameMatch?.[1] || `Relatorio_Checklist_${Date.now()}.pdf`;
       const filePath = `${
-        Platform.OS === 'android'
-          ? RNFS.DownloadDirectoryPath
-          : RNFS.DocumentDirectoryPath
+        Platform.OS === 'android' ? RNFS.DownloadDirectoryPath : RNFS.DocumentDirectoryPath
       }/${fileName}`;
 
-      await RNFS.writeFile(filePath, result.fileBase64, 'base64');
-      console.log('PDF salvo em:', filePath);
-
+      await RNFS.writeFile(filePath, base64Data, 'base64');
       setReportModalVisible(false);
 
-      // Perguntar se quer compartilhar
       Alert.alert(
         'Relatório Gerado',
         `O relatório foi salvo em:\n${fileName}`,
@@ -453,161 +416,27 @@ export default function CheckListScreen({navigation}: any) {
             text: 'Compartilhar',
             onPress: async () => {
               try {
-                await Share.open({
-                  url: `file://${filePath}`,
-                  type: 'application/pdf',
-                  title: 'Compartilhar Relatório',
-                });
-              } catch (shareError) {
-                console.log('Compartilhamento cancelado ou erro:', shareError);
-              }
+                await Share.open({url: `file://${filePath}`, type: 'application/pdf', title: 'Compartilhar Relatório'});
+              } catch {}
             },
           },
         ],
       );
     } catch (error: any) {
-      console.error('Erro ao gerar relatório:', error);
-      Alert.alert(
-        'Erro',
-        error.message || 'Não foi possível gerar o relatório. Tente novamente.',
-        [{text: 'OK'}],
-      );
+      Alert.alert('Erro', error.message || 'Não foi possível gerar o relatório.', [{text: 'OK'}]);
     } finally {
       setGeneratingReport(false);
     }
   };
 
   const getMonthYearLabel = () => {
-    const months = [
-      'Janeiro',
-      'Fevereiro',
-      'Março',
-      'Abril',
-      'Maio',
-      'Junho',
-      'Julho',
-      'Agosto',
-      'Setembro',
-      'Outubro',
-      'Novembro',
-      'Dezembro',
-    ];
+    const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
     return `${months[selectedMonth.getMonth()]}/${selectedMonth.getFullYear()}`;
   };
 
-  const MONTHS = [
-    'Janeiro',
-    'Fevereiro',
-    'Março',
-    'Abril',
-    'Maio',
-    'Junho',
-    'Julho',
-    'Agosto',
-    'Setembro',
-    'Outubro',
-    'Novembro',
-    'Dezembro',
-  ];
-
-  const MonthYearPickerModal = () => {
-    const [tempYear, setTempYear] = useState(selectedMonth.getFullYear());
-    const currentYear = new Date().getFullYear();
-    const years = Array.from({length: 10}, (_, i) => currentYear - 5 + i);
-
-    const handleSelectMonth = (monthIndex: number) => {
-      const newDate = new Date(tempYear, monthIndex, 1);
-      setSelectedMonth(newDate);
-      setMonthPickerVisible(false);
-    };
-
-    return (
-      <Modal
-        visible={monthPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMonthPickerVisible(false)}>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setMonthPickerVisible(false)}>
-          <View style={styles.monthPickerContainer}>
-            <TouchableOpacity activeOpacity={1}>
-              {/* Header do modal */}
-              <View style={styles.monthPickerHeader}>
-                <Text style={styles.monthPickerTitle}>Selecionar Período</Text>
-                <TouchableOpacity onPress={() => setMonthPickerVisible(false)}>
-                  <MaterialCommunityIcons
-                    name="close"
-                    size={24}
-                    color={customTheme.colors.onSurface}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {/* Seletor de ano */}
-              <View style={styles.yearSelector}>
-                <TouchableOpacity
-                  style={styles.yearNavButton}
-                  onPress={() => setTempYear(prev => prev - 1)}>
-                  <MaterialCommunityIcons
-                    name="chevron-left"
-                    size={28}
-                    color={customTheme.colors.primary}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.yearText}>{tempYear}</Text>
-                <TouchableOpacity
-                  style={styles.yearNavButton}
-                  onPress={() => setTempYear(prev => prev + 1)}>
-                  <MaterialCommunityIcons
-                    name="chevron-right"
-                    size={28}
-                    color={customTheme.colors.primary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {/* Grid de meses */}
-              <View style={styles.monthsGrid}>
-                {MONTHS.map((month, index) => {
-                  const isSelected =
-                    selectedMonth.getMonth() === index &&
-                    selectedMonth.getFullYear() === tempYear;
-                  const isCurrentMonth =
-                    new Date().getMonth() === index &&
-                    new Date().getFullYear() === tempYear;
-
-                  return (
-                    <TouchableOpacity
-                      key={month}
-                      style={[
-                        styles.monthItem,
-                        isSelected && styles.monthItemSelected,
-                        isCurrentMonth && !isSelected && styles.monthItemCurrent,
-                      ]}
-                      onPress={() => handleSelectMonth(index)}>
-                      <Text
-                        style={[
-                          styles.monthItemText,
-                          isSelected && styles.monthItemTextSelected,
-                          isCurrentMonth && !isSelected && styles.monthItemTextCurrent,
-                        ]}>
-                        {month.substring(0, 3)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    );
-  };
-
   const MonthNavigator = () => {
-    const monthName = MONTHS[selectedMonth.getMonth()];
+    const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const monthName = months[selectedMonth.getMonth()];
     const year = selectedMonth.getFullYear();
 
     const goToPreviousMonth = () => {
@@ -624,41 +453,15 @@ export default function CheckListScreen({navigation}: any) {
 
     return (
       <View style={styles.monthNavigator}>
-        <TouchableOpacity
-          style={styles.monthNavButton}
-          onPress={goToPreviousMonth}>
-          <MaterialCommunityIcons
-            name="chevron-left"
-            size={24}
-            color={customTheme.colors.primary}
-          />
+        <TouchableOpacity style={styles.monthNavButton} onPress={goToPreviousMonth}>
+          <MaterialCommunityIcons name="chevron-left" size={24} color={customTheme.colors.primary} />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.monthDisplay}
-          onPress={() => setMonthPickerVisible(true)}
-          activeOpacity={0.7}>
-          <MaterialCommunityIcons
-            name="calendar-month"
-            size={20}
-            color={customTheme.colors.primary}
-          />
-          <Text style={styles.monthDisplayText}>
-            {monthName} de {year}
-          </Text>
-          <MaterialCommunityIcons
-            name="chevron-down"
-            size={18}
-            color={customTheme.colors.primary}
-          />
-        </TouchableOpacity>
-
+        <View style={styles.monthDisplay}>
+          <MaterialCommunityIcons name="calendar-month" size={20} color={customTheme.colors.primary} />
+          <Text style={styles.monthDisplayText}>{monthName} de {year}</Text>
+        </View>
         <TouchableOpacity style={styles.monthNavButton} onPress={goToNextMonth}>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={24}
-            color={customTheme.colors.primary}
-          />
+          <MaterialCommunityIcons name="chevron-right" size={24} color={customTheme.colors.primary} />
         </TouchableOpacity>
       </View>
     );
@@ -671,25 +474,19 @@ export default function CheckListScreen({navigation}: any) {
     checklistIcon,
     checklistFrequency,
     questions,
-    requisitos,
   }: {
     location: ChecklistLocation;
     checklistId: string;
     checklistTitle: string;
     checklistIcon: string;
     checklistFrequency: string;
-    questions: Array<{id: string; label: string}>;
-    requisitos?: string;
+    questions: Array<{id: string; label: string; sectionTitle?: string}>;
   }) => {
-    // Pegar o status do mês atualmente selecionado
     const currentMonth = selectedMonth.getMonth() + 1;
-    const currentMonthStatus =
-      location.monthlyStatus?.[currentMonth] || 'Pendente';
+    const currentMonthStatus = location.monthlyStatus?.[currentMonth] || 'Pendente';
     const statusColor = getStatusColor(currentMonthStatus);
     const cardBackground = getCardBackgroundColor(currentMonthStatus);
-    const canGenerateReport =
-      currentMonthStatus === 'Concluído' ||
-      currentMonthStatus === 'Concluído com NC';
+    const canGenerateReport = currentMonthStatus === 'Concluído' || currentMonthStatus === 'Concluído com NC';
 
     return (
       <TouchableOpacity
@@ -707,28 +504,14 @@ export default function CheckListScreen({navigation}: any) {
         }}>
         <View style={styles.locationContent}>
           <View style={[styles.statusDot, {backgroundColor: statusColor}]} />
-          <Text style={styles.locationName} numberOfLines={2}>
-            {location.name}
-          </Text>
+          <Text style={styles.locationName} numberOfLines={2}>{location.name}</Text>
         </View>
-
         <TouchableOpacity
-          style={[
-            styles.reportButton,
-            !canGenerateReport && styles.reportButtonDisabled,
-          ]}
+          style={[styles.reportButton, !canGenerateReport && styles.reportButtonDisabled]}
           activeOpacity={0.7}
-          disabled={!canGenerateReport}
-          onPress={(e) => {
+          onPress={e => {
             e.stopPropagation();
-            handleOpenReportModal(
-              checklistId,
-              checklistTitle,
-              location.id,
-              location.name,
-              questions,
-              requisitos,
-            );
+            handleOpenReportModal(checklistId, checklistTitle, location.id, location.name, questions);
           }}>
           <MaterialCommunityIcons
             name="file-pdf-box"
@@ -743,11 +526,7 @@ export default function CheckListScreen({navigation}: any) {
   if (loading || loadingDefinitions) {
     return (
       <Surface style={styles.container}>
-        <ModernHeader
-          title="Checklist Meio Ambiente"
-          iconName="leaf"
-          onBackPress={() => navigation.goBack()}
-        />
+        <ModernHeader title={screenTitle} iconName={headerIcon} onBackPress={() => navigation.goBack()} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={customTheme.colors.primary} />
         </View>
@@ -757,19 +536,11 @@ export default function CheckListScreen({navigation}: any) {
 
   return (
     <Surface style={styles.container}>
-      <ModernHeader
-        title="Checklist Meio Ambiente"
-        iconName="leaf"
-        onBackPress={() => navigation.goBack()}
-      />
+      <ModernHeader title={screenTitle} iconName={headerIcon} onBackPress={() => navigation.goBack()} />
 
       {!isOnline && (
         <View style={styles.offlineBanner}>
-          <MaterialCommunityIcons
-            name="cloud-off-outline"
-            size={16}
-            color="#FF9800"
-          />
+          <MaterialCommunityIcons name="cloud-off-outline" size={16} color="#FF9800" />
           <Text style={styles.offlineText}>Modo Offline - Dados em cache</Text>
         </View>
       )}
@@ -779,18 +550,13 @@ export default function CheckListScreen({navigation}: any) {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {checklists.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons
-              name="clipboard-alert-outline"
-              size={64}
-              color={customTheme.colors.outline}
-            />
+            <MaterialCommunityIcons name="clipboard-alert-outline" size={64} color={customTheme.colors.outline} />
             <Text style={styles.emptyText}>Nenhum checklist encontrado</Text>
           </View>
         ) : (
           checklists.map(checklist => {
             const completedCount = checklist.locations.filter(
-              loc =>
-                loc.status === 'Concluído' || loc.status === 'Concluído com NC',
+              loc => loc.status === 'Concluído' || loc.status === 'Concluído com NC',
             ).length;
             const totalCount = checklist.locations.length;
 
@@ -805,15 +571,10 @@ export default function CheckListScreen({navigation}: any) {
                         color={customTheme.colors.primary}
                         style={styles.checklistIcon}
                       />
-                      <Text style={styles.checklistTitle} numberOfLines={2}>
-                        {checklist.title}
-                      </Text>
+                      <Text style={styles.checklistTitle} numberOfLines={2}>{checklist.title}</Text>
                     </View>
-
                     <View style={styles.progressBadge}>
-                      <Text style={styles.progressText}>
-                        {completedCount}/{totalCount}
-                      </Text>
+                      <Text style={styles.progressText}>{completedCount}/{totalCount}</Text>
                     </View>
                   </View>
 
@@ -826,8 +587,11 @@ export default function CheckListScreen({navigation}: any) {
                         checklistTitle={checklist.title}
                         checklistIcon={checklist.icon}
                         checklistFrequency={checklist.frequency}
-                        questions={checklist.questions}
-                        requisitos={checklist.requisitos}
+                        questions={
+                          location.useCustomQuestions && location.questions && location.questions.length > 0
+                            ? location.questions.map(q => ({id: q.id, label: q.label, sectionTitle: q.sectionTitle}))
+                            : checklist.questions
+                        }
                       />
                     ))}
                   </View>
@@ -838,10 +602,6 @@ export default function CheckListScreen({navigation}: any) {
         )}
       </ScrollView>
 
-      {/* Modal de Seleção de Mês/Ano */}
-      <MonthYearPickerModal />
-
-      {/* Modal de Geração de Relatório */}
       {reportModalData && (
         <ReportGeneratorModal
           visible={reportModalVisible}
@@ -849,14 +609,10 @@ export default function CheckListScreen({navigation}: any) {
           onGenerate={handleGenerateReport}
           checklistTitle={reportModalData.checklistTitle}
           locationName={reportModalData.locationName}
-          itens={reportModalData.questions.map(q => ({
-            id: q.id,
-            label: q.label,
-            resultado: undefined,
-          }))}
+          itens={reportModalData.questions.map(q => ({id: q.id, label: q.label, resultado: undefined}))}
           mesAno={getMonthYearLabel()}
           loading={generatingReport}
-          requisitos={reportModalData.requisitos}
+          variant={reportVariant}
         />
       )}
     </Surface>
@@ -873,35 +629,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#FFE0B2',
   },
-  offlineText: {
-    fontSize: 12,
-    color: '#F57C00',
-    fontWeight: '500',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: customTheme.colors.background,
-  },
-  content: {
-    flex: 1,
-    padding: 12,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: customTheme.colors.outline,
-  },
+  offlineText: {fontSize: 12, color: '#F57C00', fontWeight: '500'},
+  container: {flex: 1, backgroundColor: customTheme.colors.background},
+  content: {flex: 1, padding: 12},
+  loadingContainer: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  emptyContainer: {flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60},
+  emptyText: {marginTop: 16, fontSize: 16, color: customTheme.colors.outline},
   monthNavigator: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -919,186 +652,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: customTheme.colors.surfaceVariant,
   },
-  monthDisplay: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-    justifyContent: 'center',
-  },
-  monthDisplayText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: customTheme.colors.onSurface,
-  },
-  checklistCard: {
-    marginBottom: 12,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  cardContent: {
-    padding: 12,
-  },
-  checklistHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  checklistTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    flex: 1,
-  },
-  checklistIcon: {
-    marginTop: 2,
-  },
-  checklistTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: customTheme.colors.onSurface,
-    flex: 1,
-    lineHeight: 20,
-  },
-  progressBadge: {
-    backgroundColor: customTheme.colors.primaryContainer,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  progressText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: customTheme.colors.onPrimaryContainer,
-  },
-  locationsContainer: {
-    gap: 8,
-  },
-  locationCard: {
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 48,
-  },
-  locationContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-  },
-  locationName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: customTheme.colors.onSurface,
-    flex: 1,
-  },
-  reportButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: 'rgba(211, 47, 47, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  reportButtonDisabled: {
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  // Estilos do Modal de Seleção de Mês/Ano
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  monthPickerContainer: {
-    backgroundColor: customTheme.colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    width: Dimensions.get('window').width - 48,
-    maxWidth: 360,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-  },
-  monthPickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: customTheme.colors.outline,
-  },
-  monthPickerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: customTheme.colors.onSurface,
-  },
-  yearSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    gap: 16,
-  },
-  yearNavButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: customTheme.colors.surfaceVariant,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  yearText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: customTheme.colors.primary,
-    minWidth: 80,
-    textAlign: 'center',
-  },
-  monthsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  monthItem: {
-    width: '30%',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: customTheme.colors.surfaceVariant,
-  },
-  monthItemSelected: {
-    backgroundColor: customTheme.colors.primary,
-  },
-  monthItemCurrent: {
-    borderWidth: 2,
-    borderColor: customTheme.colors.primary,
-  },
-  monthItemText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: customTheme.colors.onSurface,
-  },
-  monthItemTextSelected: {
-    color: customTheme.colors.onPrimary,
-    fontWeight: '600',
-  },
-  monthItemTextCurrent: {
-    color: customTheme.colors.primary,
-    fontWeight: '600',
-  },
+  monthDisplay: {flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center'},
+  monthDisplayText: {fontSize: 16, fontWeight: '600', color: customTheme.colors.onSurface},
+  checklistCard: {marginBottom: 12, borderRadius: 12, elevation: 2},
+  cardContent: {padding: 12},
+  checklistHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12},
+  checklistTitleRow: {flexDirection: 'row', alignItems: 'flex-start', gap: 8, flex: 1},
+  checklistIcon: {marginTop: 2},
+  checklistTitle: {fontSize: 16, fontWeight: '600', color: customTheme.colors.onSurface, flex: 1, lineHeight: 20},
+  progressBadge: {backgroundColor: customTheme.colors.primaryContainer, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12},
+  progressText: {fontSize: 12, fontWeight: '600', color: customTheme.colors.onPrimaryContainer},
+  locationsContainer: {gap: 8},
+  locationCard: {borderRadius: 8, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 8},
+  locationContent: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8},
+  statusDot: {width: 8, height: 8, borderRadius: 4, marginTop: 4, alignSelf: 'flex-start'},
+  locationName: {fontSize: 14, fontWeight: '500', color: customTheme.colors.onSurface, flex: 1},
+  reportButton: {width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(211, 47, 47, 0.1)', justifyContent: 'center', alignItems: 'center'},
+  reportButtonDisabled: {backgroundColor: 'rgba(0, 0, 0, 0.05)'},
 });

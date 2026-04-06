@@ -16,10 +16,8 @@ import {
   Card,
   ActivityIndicator,
 } from 'react-native-paper';
-import {ref, get, set, onValue, off} from 'firebase/database';
-import {dbRealTime} from '../../../../firebase';
-import storage from '@react-native-firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {ecoApi, ecoStorage} from '../../../api/ecoApi';
 import NetInfo from '@react-native-community/netinfo';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import ModernHeader from '../../../assets/components/ModernHeader';
@@ -216,14 +214,8 @@ export default function ChecklistFormScreen({route, navigation}: any) {
       init();
     });
 
-    // Cleanup: remover listener do Firebase quando sair da tela
     return () => {
       interactionPromise.cancel();
-      if (firebaseListenerRef.current) {
-        const path = `checklists/${year}/${checklistId}/${location.id}`;
-        off(ref(dbRealTime(), path));
-        firebaseListenerRef.current = null;
-      }
     };
   }, []);
 
@@ -235,121 +227,110 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     return () => backHandler.remove();
   }, []);
 
-  // Carregar perguntas do checklist
+  // Carregar perguntas e configuração do checklist
   const loadQuestions = async () => {
     try {
       // Verifica se a location tem questões personalizadas
       if (location.useCustomQuestions && location.questions?.length > 0) {
         console.log('Usando questões personalizadas da location');
         setQuestions(location.questions);
-      } else {
-        // Buscar questões do Firebase
-        const cacheKey = `@checklist_questions_${checklistId}`;
-
-        try {
-          const questionsRef = ref(dbRealTime(), `checklists-config/${checklistId}/questions`);
-          const snapshot = await get(questionsRef);
-
-          if (snapshot.exists()) {
-            const questionsData = snapshot.val();
-            setQuestions(questionsData);
-            // Salvar no cache
-            await AsyncStorage.setItem(cacheKey, JSON.stringify(questionsData));
-          } else {
-            // Tentar carregar do cache
-            const cached = await AsyncStorage.getItem(cacheKey);
-            if (cached) {
-              setQuestions(JSON.parse(cached));
-            }
-          }
-        } catch (error) {
-          // Se falhar, tentar cache
-          const cached = await AsyncStorage.getItem(cacheKey);
-          if (cached) {
-            setQuestions(JSON.parse(cached));
-          }
-        }
+        await loadProofConfig();
+        return;
       }
 
-      // Carregar configuração de requiresProofOnNC
-      await loadProofConfig();
+      const cacheKey = `@checklist_questions_${checklistId}`;
+
+      try {
+        const results = await ecoApi.list('checklistsConfig', {checklistId});
+
+        if (results.length > 0) {
+          const checklistData = results[0];
+          const questionsData = checklistData.questions || [];
+          setQuestions(questionsData);
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(questionsData));
+
+          // Extrair configuração de prova do mesmo resultado
+          applyProofConfig(checklistData);
+        } else {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) setQuestions(JSON.parse(cached));
+          await loadProofConfig();
+        }
+      } catch (error) {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) setQuestions(JSON.parse(cached));
+        await loadProofConfig();
+      }
     } catch (error) {
       console.error('Erro ao carregar perguntas:', error);
     }
   };
 
-  // Carregar configuração de comprovação de NC
+  const applyProofConfig = (checklistData: any) => {
+    let proofConfig: 'none' | 'photo' | 'description' | 'both' = 'none';
+
+    if (checklistData.requiresProofOnNC && checklistData.requiresProofOnNC !== 'none') {
+      proofConfig = checklistData.requiresProofOnNC;
+    }
+
+    if (checklistData.locations && location?.id) {
+      const locationData = checklistData.locations.find((loc: any) => loc.id === location.id);
+      if (locationData?.requiresProofOnNC && locationData.requiresProofOnNC !== '') {
+        proofConfig = locationData.requiresProofOnNC;
+      }
+    }
+
+    setRequiresProofOnNC(proofConfig);
+    console.log('requiresProofOnNC:', proofConfig);
+  };
+
+  // Carregar configuração de comprovação de NC (fallback isolado)
   const loadProofConfig = async () => {
     try {
-      const checklistRef = ref(dbRealTime(), `checklists-config/${checklistId}`);
-      const snapshot = await get(checklistRef);
-
-      if (snapshot.exists()) {
-        const checklistData = snapshot.val();
-
-        // Prioridade: location > checklist
-        let proofConfig: 'none' | 'photo' | 'description' | 'both' = 'none';
-
-        if (checklistData.requiresProofOnNC && checklistData.requiresProofOnNC !== 'none') {
-          proofConfig = checklistData.requiresProofOnNC;
-        }
-
-        // Verificar se a location tem configuração específica
-        if (checklistData.locations && location?.id) {
-          const locationData = checklistData.locations.find((loc: any) => loc.id === location.id);
-          if (locationData?.requiresProofOnNC && locationData.requiresProofOnNC !== '') {
-            proofConfig = locationData.requiresProofOnNC;
-          }
-        }
-
-        setRequiresProofOnNC(proofConfig);
-        console.log('requiresProofOnNC:', proofConfig);
-      }
+      const results = await ecoApi.list('checklistsConfig', {checklistId});
+      if (results.length > 0) applyProofConfig(results[0]);
     } catch (error) {
       console.error('Erro ao carregar configuração de prova:', error);
     }
   };
 
-  // Configurar listener em tempo real do Firebase
+  // Carregar dados salvos do checklist
   const setupRealtimeListener = async () => {
-    const path = `checklists/${year}/${checklistId}/${location.id}`;
-    const cacheKey = `@checklist_cache_${year}_${checklistId}_${location.id}`;
+    const yearStr = year.toString();
+    const cacheKey = `@checklist_cache_${yearStr}_${checklistId}_${location.id}`;
 
-    // Primeiro, tentar carregar do cache para mostrar algo rápido
+    // Carregar cache primeiro para resposta rápida
     try {
       const cached = await AsyncStorage.getItem(cacheKey);
       if (cached) {
-        const data = JSON.parse(cached);
-        applyDataToForm(data);
+        applyDataToForm(JSON.parse(cached));
       }
     } catch (e) {
       console.log('Sem cache disponível');
     }
 
-    // Configurar listener em tempo real
-    const dataRef = ref(dbRealTime(), path);
-    firebaseListenerRef.current = onValue(dataRef, async (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        console.log('Dados recebidos do Firebase em tempo real');
+    // Buscar da API
+    try {
+      const results = await ecoApi.list('checklists', {
+        year: yearStr,
+        checklistId,
+        locationId: location.id,
+      });
 
-        // Salvar no cache para uso offline
-        try {
+      if (results.length > 0) {
+        const data = results[0].respostas ?? null;
+        if (data) {
           await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
-        } catch (e) {
-          console.error('Erro ao salvar cache:', e);
-        }
-
-        // Só aplicar se não houver mudanças locais não salvas
-        if (!hasUnsavedChanges.current) {
-          applyDataToForm(data);
+          if (!hasUnsavedChanges.current) {
+            applyDataToForm(data);
+          }
         }
       }
+    } catch (error) {
+      console.error('Erro ao carregar dados do checklist:', error);
+    } finally {
       setLoading(false);
-    }, (error) => {
-      console.error('Erro no listener Firebase:', error);
-      setLoading(false);
-    });
+    }
   };
 
   // Aplicar dados ao formulário
@@ -435,18 +416,26 @@ export default function ChecklistFormScreen({route, navigation}: any) {
       // Sempre salvar no cache primeiro
       await AsyncStorage.setItem(cacheKey, JSON.stringify(saveData));
 
-      // Verificar conectividade e salvar no Firebase
+      // Verificar conectividade e salvar na API
       const netState = await NetInfo.fetch();
       if (netState.isConnected) {
-        const dataRef = ref(dbRealTime(), path);
-        await set(dataRef, saveData);
-        console.log('Checklist salvo no Firebase');
+        const existing = await ecoApi.list('checklists', {
+          year: yearStr,
+          checklistId,
+          locationId: location.id,
+        });
+        if (existing.length > 0) {
+          await ecoApi.update('checklists', existing[0]._id ?? existing[0].id, {respostas: saveData});
+        } else {
+          await ecoApi.create('checklists', {year: yearStr, checklistId, locationId: location.id, respostas: saveData});
+        }
+        console.log('Checklist salvo na API');
       } else {
         // Salvar na fila de pendentes para sincronizar depois
         const pendingKey = '@checklist_pending_saves';
         const pendingStr = await AsyncStorage.getItem(pendingKey);
         const pending = pendingStr ? JSON.parse(pendingStr) : [];
-        pending.push({path, data: saveData, timestamp: Date.now()});
+        pending.push({year: yearStr, checklistId, locationId: location.id, respostas: saveData, timestamp: Date.now()});
         await AsyncStorage.setItem(pendingKey, JSON.stringify(pending));
         console.log('Checklist salvo offline, aguardando sincronização');
       }
@@ -635,9 +624,8 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
       if (netState.isConnected) {
         // Online: fazer upload direto
-        const reference = storage().ref(storagePath);
-        await reference.putFile(uri);
-        photoUrl = await reference.getDownloadURL();
+        const result = await ecoStorage.upload({uri, type: 'image/jpeg', name: fileName});
+        photoUrl = result.url;
         console.log('Foto enviada:', photoUrl);
       } else {
         // Offline: salvar localmente para upload posterior

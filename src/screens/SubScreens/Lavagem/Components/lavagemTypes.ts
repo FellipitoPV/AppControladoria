@@ -1,5 +1,3 @@
-import { Timestamp } from "firebase/firestore";
-
 // lavagemTypes.ts
 export type TipoEquipamento = 'COMPACTADORA' | 'CAÇAMBA' | 'CONTAINER' | 'COLETOR';
 
@@ -38,10 +36,23 @@ export interface Equipamento {
     tipo: 'equipamento';
 }
 
+export interface FotoRegistro {
+    url: string;
+    path: string;
+    id?: string;
+    timestamp?: number;
+}
+
+export interface ChecklistItemSalvo {
+    id: string;
+    label: string;
+    checked: boolean;
+}
+
 export interface LavagemInterface {
     id: string;
     responsavel: string;
-    data: Timestamp | string; // Permitir string para dados antigos
+    data: Date | string; // Permitir string para dados antigos
     hora: string;
     veiculo: {
         placa: string;
@@ -53,14 +64,15 @@ export interface LavagemInterface {
         nome: string;
         quantidade: number;
     }>;
-    fotos: Array<{
-        url: string;
-        timestamp: number;
-        path: string;
-    }>;
+    // Formato legado (todas as fotos juntas)
+    fotos?: FotoRegistro[];
+    // Formato novo (antes e depois separados)
+    fotosAntes?: FotoRegistro[];
+    fotosDepois?: FotoRegistro[];
+    checklist?: ChecklistItemSalvo[];
     observacoes?: string;
     status: string;
-    createdAt: Timestamp | string | null; // Ajustado para maior clareza
+    createdAt: Date | string | null;
     createdBy: string | null;
     agendamentoId?: string | null;
 }

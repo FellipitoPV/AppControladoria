@@ -15,8 +15,6 @@ import {
     Text,
 } from 'react-native-paper';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { getDownloadURL, getMetadata, list, ref } from 'firebase/storage';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -27,8 +25,7 @@ import UserInfoModal from './components/UserInfoModal';
 import UserProfileModal from './components/UserInfoModal';
 import checkPermissions from '../../helpers/checkPermissions';
 import { customTheme } from '../../theme/theme';
-import { dbStorage } from '../../../firebase';
-import { firebaseApp } from '../../../firebase'; // Ajuste o caminho conforme sua estrutura
+import { ecoApi } from '../../api/ecoApi';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 import { useAppUpdater } from '../../helpers/AppUpdater';
 import { useNetwork } from '../../contexts/NetworkContext';
@@ -189,35 +186,20 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         return () => clearInterval(interval);
     }, [scrollToNextItem]);
 
-    // Atualizar fetchCarouselImages
     const fetchCarouselImages = async () => {
         try {
-            // Referência para a pasta no Storage
-            const storageRef = ref(dbStorage(), 'carrosel_Mobile');
+            const data = await ecoApi.list('carrosselMobile');
 
-            // Lista todos os itens na pasta
-            const result = await list(storageRef);
+            const images: CarouselItem[] = data
+                .sort((a: any, b: any) =>
+                    new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+                )
+                .map((item: any) => ({
+                    id: item._id ?? item.id,
+                    imageUrl: item.url ?? item.imageUrl ?? '',
+                }));
 
-            // Obtém as URLs de download para cada imagem
-            const imagePromises = result.items.map(async (item) => {
-                const url = await getDownloadURL(item);
-                const metadata = await getMetadata(item);
-
-                return {
-                    id: item.name, // Usa o nome do arquivo como ID
-                    imageUrl: url,
-                    createdAt: metadata.timeCreated // Para ordenação
-                };
-            });
-
-            const images = await Promise.all(imagePromises);
-
-            // Ordena as imagens por data de criação (mais recentes primeiro)
-            const sortedImages = images.sort((a, b) =>
-                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            );
-
-            setCarouselData(sortedImages);
+            setCarouselData(images);
         } catch (error) {
             console.error('Erro ao carregar imagens do carrossel:', error);
         } finally {

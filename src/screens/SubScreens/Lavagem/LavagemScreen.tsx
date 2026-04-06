@@ -12,7 +12,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { Firestore, collection, getDocs, query, where } from 'firebase/firestore'
 import React, { useEffect, useState } from 'react';
 
 import ActionButton from '../../../assets/components/ActionButton';
@@ -20,7 +19,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { LowStockAlert } from './Components/LowStockAlert';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import { customTheme } from '../../../theme/theme';
-import { db } from '../../../../firebase';
+import { ecoApi } from '../../../api/ecoApi';
 import { useBackgroundSync } from '../../../contexts/backgroundSyncContext';
 
 const { width } = Dimensions.get('window');
@@ -77,114 +76,52 @@ export default function LavagemScreen({ navigation }: any) {
 
     const fetchLavagemStats = async () => {
         try {
-            // Datas de referência como timestamps
             const hoje = new Date();
             hoje.setHours(0, 0, 0, 0);
-
             const inicioSemana = getStartOfWeek();
             const inicioMes = getStartOfMonth();
 
-            // Buscar todos os registros da coleção registroLavagens
-            const snapshot = await getDocs(collection(db(), 'registroLavagens'))
+            const registros = await ecoApi.list('registroLavagens');
 
             let statsHoje = 0;
             let statsSemana = 0;
             let statsMes = 0;
 
-            // Função auxiliar para processar documentos
-            const processarDocumento = (doc: any) => {
-                const dados = doc.data();
-
-                // Verifica se o documento tem o campo data
-                if (!dados || !dados.data) {
-                    console.warn('Documento sem data encontrado:', doc.id);
-                    return;
-                }
+            registros.forEach((dados: any) => {
+                if (!dados?.data) return;
 
                 let dataLavagem: Date;
-
                 try {
-                    // Tenta primeiro parsear como string DD/MM/YYYY
                     if (typeof dados.data === 'string' && dados.data.includes('/')) {
                         const [dia, mes, ano] = dados.data.split('/');
                         dataLavagem = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-                    }
-                    // Se for um timestamp do Firestore
-                    else if (dados.data && dados.data.toDate) {
-                        dataLavagem = dados.data.toDate();
-                    }
-                    // Se for uma data JavaScript
-                    else if (dados.data instanceof Date) {
-                        dataLavagem = dados.data;
-                    }
-                    else {
-                        console.warn('Formato de data não reconhecido:', dados.data);
-                        return;
+                    } else {
+                        dataLavagem = new Date(dados.data);
                     }
 
-                    // Normaliza a hora para meia-noite
+                    if (isNaN(dataLavagem.getTime())) return;
                     dataLavagem.setHours(0, 0, 0, 0);
 
-                    // Comparar usando timestamps
-                    if (dataLavagem.getTime() === hoje.getTime()) {
-                        statsHoje++;
-                    }
-                    if (dataLavagem >= inicioSemana) {
-                        statsSemana++;
-                    }
-                    if (dataLavagem >= inicioMes) {
-                        statsMes++;
-                    }
-
-                    // Para debug - identificar o tipo de registro (antigo ou novo)
-                    // const tipoRegistro = dados.createdBy ? 'novo' : 'antigo';
-                    // console.log(`Processado registro ${tipoRegistro} - Data: ${dataLavagem.toLocaleDateString()} - ID: ${doc.id}`);
-
-                } catch (error) {
-                    console.warn('Erro ao processar data do documento:', doc.id, error);
+                    if (dataLavagem.getTime() === hoje.getTime()) statsHoje++;
+                    if (dataLavagem >= inicioSemana) statsSemana++;
+                    if (dataLavagem >= inicioMes) statsMes++;
+                } catch {
+                    // ignora registros com data inválida
                 }
-            };
+            });
 
-            // Processar todos os documentos
-            snapshot.docs.forEach(processarDocumento);
-
-            const total = snapshot.size;
-
-            // Para debug
-            // console.log('Estatísticas de Lavagem:', {
-            //     hoje: statsHoje,
-            //     semana: statsSemana,
-            //     mes: statsMes,
-            //     total,
-            //     dataReferencia: {
-            //         hoje: hoje.toLocaleDateString(),
-            //         inicioSemana: inicioSemana.toLocaleDateString(),
-            //         inicioMes: inicioMes.toLocaleDateString()
-            //     }
-            // });
-
-            return {
-                hoje: statsHoje,
-                semana: statsSemana,
-                mes: statsMes,
-                total
-            };
+            return { hoje: statsHoje, semana: statsSemana, mes: statsMes, total: registros.length };
         } catch (error) {
             console.error('Erro ao buscar estatísticas:', error);
-            return {
-                hoje: 0,
-                semana: 0,
-                mes: 0,
-                total: 0
-            };
+            return { hoje: 0, semana: 0, mes: 0, total: 0 };
         }
     };
 
     const fetchAgendamentosPendentes = async () => {
         try {
-            const snapshot = await getDocs(query(collection(db(), 'registroLavagens'), where('concluido', '==', false)));
-
-            setAgendamentosPendentes(snapshot.size);
+            const registros = await ecoApi.list('registroLavagens');
+            const pendentes = registros.filter((r: any) => r.concluido === false);
+            setAgendamentosPendentes(pendentes.length);
         } catch (error) {
             console.error('Erro ao buscar agendamentos pendentes:', error);
         }

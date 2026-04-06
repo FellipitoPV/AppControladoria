@@ -11,7 +11,7 @@ import { Surface, Button, Text, TextInput } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import firestore from '@react-native-firebase/firestore';
+import { ecoApi } from '../../../../api/ecoApi';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
 import { customTheme } from '../../../../theme/theme';
 import { PLACAS_VEICULOS, TIPOS_LAVAGEM } from './lavagemTypes';
@@ -119,11 +119,7 @@ const EditLavagemModal: React.FC<EditLavagemModalProps> = ({
             // Determina a coleção correta
             const colecao = isFormatoNovo ? 'lavagens' : 'registroLavagens';
 
-            // Atualizar no Firestore
-            await firestore()
-                .collection(colecao)
-                .doc(lavagem.id)
-                .update(dadosAtualizados);
+            await ecoApi.update(colecao, lavagem.id, dadosAtualizados);
 
             showGlobalToast('success', 'Sucesso', 'Lavagem atualizada com sucesso', 4000);
             onSave();

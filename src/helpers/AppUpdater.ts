@@ -1,7 +1,7 @@
 import { Alert, Linking, Platform } from 'react-native';
-import { collection, getDocs, getFirestore, limit, orderBy, query } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
+import { ecoApi } from '../api/ecoApi';
 import { version as appVersion } from '../../package.json';
 import semver from 'semver';
 
@@ -42,21 +42,16 @@ export const useAppUpdater = () => {
         try {
             setUpdateState({ checking: true });
 
-            const db = getFirestore();
-            const versionsRef = query(
-                collection(db, 'versoes_app_controladoria'),
-                orderBy('data_lancamento', 'desc'),
-                limit(1)
-            );
+            const data = await ecoApi.list('versoes_app_controladoria');
 
-            const snapshot = await getDocs(versionsRef);
-
-            if (snapshot.empty) {
+            if (!data || data.length === 0) {
                 setUpdateInfo(null);
                 return;
             }
 
-            const latestVersion = snapshot.docs[0].data() as VersionInfo;
+            const latestVersion = data.sort((a: VersionInfo, b: VersionInfo) =>
+                new Date(b.data_lancamento).getTime() - new Date(a.data_lancamento).getTime()
+            )[0] as VersionInfo;
 
             // Compara versões usando semver
             if (semver.gt(latestVersion.versao, appVersion)) {

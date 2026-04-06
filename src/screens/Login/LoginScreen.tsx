@@ -18,10 +18,9 @@ import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import SaveButton from '../../assets/components/SaveButton';
 import { StackNavigationProp } from '@react-navigation/stack';
 import WelcomeScreen from './WelcomeScreen';
-import { auth } from '../../../firebase';
+import { ecoAuth } from '../../api/ecoApi';
 import { customTheme } from '../../theme/theme';
 import { showGlobalToast } from '../../helpers/GlobalApi';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useUser } from '../../contexts/userContext';
 
 const inputTheme = {
@@ -38,7 +37,6 @@ type RootStackParamList = {
         nextScreenParams?: object;
     };
     Home: undefined;
-    ForgotPass: undefined;
     Register: undefined;
 };
 
@@ -106,22 +104,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                 throw new Error('Por favor, forneça uma senha válida');
             }
 
-            console.log('Tentando login com:', { email: loginEmail.toLowerCase(), password: loginPassword });
+            console.log('Tentando login com:', { email: loginEmail.toLowerCase() });
 
-            // Autenticação no Firebase
-            const userCredential = await signInWithEmailAndPassword(
-                auth(),
-                loginEmail.toLowerCase(),
-                loginPassword
-            );
-            console.log('Usuário autenticado:', userCredential.user.uid);
+            // Autenticação na nova API
+            const { token } = await ecoAuth.login(loginEmail.toLowerCase(), loginPassword);
+            console.log('Token recebido com sucesso');
 
-            // Salva as credenciais apenas se não for login automático
-            if (!isAutoLogin) {
-                await AsyncStorage.setItem('userEmail', loginEmail);
-                await AsyncStorage.setItem('userPassword', loginPassword);
-                console.log('Credenciais salvas no AsyncStorage:', { email: loginEmail.toLowerCase(), password: loginPassword });
-            }
+            // Salva token e email (não salva senha)
+            await AsyncStorage.setItem('@authToken', token);
+            await AsyncStorage.setItem('userEmail', loginEmail.toLowerCase());
+            console.log('Token e email salvos no AsyncStorage');
 
             // Atualiza as informações do usuário
             await updateUserInfo();
@@ -152,12 +144,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             console.error('Erro no login:', error);
             if (!isAutoLogin) {
                 let errorMessage = 'Erro ao fazer login';
-                if (error.code === 'auth/user-not-found') {
-                    errorMessage = 'Usuário não encontrado';
-                } else if (error.code === 'auth/wrong-password') {
-                    errorMessage = 'Senha incorreta';
-                } else if (error.code === 'auth/invalid-email') {
-                    errorMessage = 'Email inválido';
+                if (error.message === 'Credenciais inválidas') {
+                    errorMessage = 'Email ou senha incorretos';
                 } else if (error.message === 'Falha ao carregar informações do usuário') {
                     errorMessage = 'Não foi possível carregar suas informações';
                 } else if (error.message === 'Por favor, forneça um email válido') {
@@ -175,23 +163,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
     const checkAuthentication = async () => {
         try {
+            const savedToken = await AsyncStorage.getItem('@authToken');
             const savedEmail = await AsyncStorage.getItem('userEmail');
-            const savedPassword = await AsyncStorage.getItem('userPassword');
-            console.log('Credenciais encontradas no AsyncStorage:', { savedEmail, savedPassword });
+            console.log('Token salvo encontrado:', !!savedToken);
 
-            // Limpa credenciais inválidas
-            if (savedEmail === null || savedPassword === null) {
-                console.log('Credenciais inválidas encontradas, limpando AsyncStorage');
-                await AsyncStorage.removeItem('userEmail');
-                await AsyncStorage.removeItem('userPassword');
-            } else if (savedEmail && savedPassword) {
-                console.log('Tentando login automático');
-                await handleLogin(savedEmail, savedPassword, true, route?.params?.nextScreen, route?.params?.nextScreenParams);
+            if (savedToken && savedEmail) {
+                console.log('Tentando login automático via token salvo');
+                await updateUserInfo();
+
+                const savedUserInfo = await AsyncStorage.getItem('@UserInfo');
+                if (!savedUserInfo) throw new Error('Falha ao carregar informações do usuário');
+
+                setWelcomeIsOpen(false);
+                setTimeout(() => {
+                    if (route?.params?.nextScreen) {
+                        navigation.replace(route.params.nextScreen as keyof RootStackParamList, route.params.nextScreenParams);
+                    } else {
+                        navigation.replace('Home');
+                    }
+                }, 100);
             } else {
-                console.log('Nenhuma credencial salva encontrada');
+                console.log('Nenhum token salvo encontrado');
+                await AsyncStorage.multiRemove(['@authToken', 'userEmail']);
             }
         } catch (error) {
             console.error('Erro na verificação de autenticação:', error);
+            await AsyncStorage.multiRemove(['@authToken', 'userEmail']);
         } finally {
             setIsCheckingAuth(false);
         }
@@ -284,15 +281,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                         theme={inputTheme}
                     />
 
-                    <TouchableOpacity
-                        onPress={() => navigation.navigate('ForgotPass')}
-                        style={styles.forgotPasswordContainer}
-                    >
-                        <Text style={styles.forgotPasswordText}>
-                            Esqueceu a senha?
-                        </Text>
-                    </TouchableOpacity>
-
                     <SaveButton
                         onPress={handleManualLogin}
                         text="Login"
@@ -363,14 +351,6 @@ const styles = StyleSheet.create({
     input: {
         backgroundColor: 'transparent',
         fontSize: 16,
-    },
-    forgotPasswordContainer: {
-        alignSelf: 'flex-end',
-        marginTop: -10,
-    },
-    forgotPasswordText: {
-        color: customTheme.colors.primary,
-        fontSize: 14,
     },
     footer: {
         position: 'absolute',

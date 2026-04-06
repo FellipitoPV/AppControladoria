@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { ref, onValue, set, off, get } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { dbRealTime } from '../../firebase';
-import storage from '@react-native-firebase/storage';
+import { ecoApi, ecoStorage } from '../api/ecoApi';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 
@@ -117,10 +115,9 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
         locationId: string,
         data: any
     ) => {
-        const path = `checklists/${year}/${checklistId}/${locationId}`;
         const cacheKey = `${year}_${checklistId}_${locationId}`;
 
-        logSync('Save', `Salvando checklist: ${path}`);
+        logSync('Save', `Salvando checklist: ${cacheKey}`);
 
         // Sempre salva no cache primeiro
         await saveToCache(cacheKey, data);
@@ -131,16 +128,20 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
 
         if (currentlyOnline) {
             try {
-                const dataRef = ref(dbRealTime(), path);
-                await set(dataRef, data);
-                logSync('Save', `Checklist salvo no Firebase: ${path}`);
+                const existing = await ecoApi.list('checklists', { year, checklistId, locationId });
+                if (existing.length > 0) {
+                    await ecoApi.update('checklists', existing[0]._id ?? existing[0].id, { respostas: data });
+                } else {
+                    await ecoApi.create('checklists', { year, checklistId, locationId, respostas: data });
+                }
+                logSync('Save', `Checklist salvo na API: ${cacheKey}`);
             } catch (error) {
-                logSync('Error', 'Erro ao salvar no Firebase, adicionando à fila', error);
+                logSync('Error', 'Erro ao salvar na API, adicionando à fila', error);
                 await addPendingOperation({
                     id: `${Date.now()}_${cacheKey}`,
                     type: 'save',
-                    path,
-                    data,
+                    path: 'checklists',
+                    data: { year, checklistId, locationId, respostas: data },
                     timestamp: Date.now(),
                 });
             }
@@ -149,82 +150,76 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
             await addPendingOperation({
                 id: `${Date.now()}_${cacheKey}`,
                 type: 'save',
-                path,
-                data,
+                path: 'checklists',
+                data: { year, checklistId, locationId, respostas: data },
                 timestamp: Date.now(),
             });
         }
     };
 
-    // Carregar checklist (Firebase primeiro quando online, cache como fallback)
+    // Carregar checklist (API primeiro quando online, cache como fallback)
     const loadChecklist = async (
         year: string,
         checklistId: string,
         locationId: string
     ): Promise<any> => {
-        const path = `checklists/${year}/${checklistId}/${locationId}`;
         const cacheKey = `${year}_${checklistId}_${locationId}`;
 
-        logSync('Load', `Carregando checklist: ${path}`);
+        logSync('Load', `Carregando checklist: ${cacheKey}`);
 
         // Verificar conectividade no momento da chamada (não usar estado)
         const currentlyOnline = await checkConnectivity();
         logSync('Load', `Conectividade atual: ${currentlyOnline ? 'Online' : 'Offline'}`);
 
         if (currentlyOnline) {
-            // ONLINE: Firebase é a fonte da verdade - usar get() em vez de onValue()
+            // ONLINE: API é a fonte da verdade
             try {
-                const dataRef = ref(dbRealTime(), path);
-                const snapshot = await get(dataRef);
+                const results = await ecoApi.list('checklists', { year, checklistId, locationId });
 
-                if (snapshot.exists()) {
-                    const data = snapshot.val();
-                    await saveToCache(cacheKey, data); // Atualiza cache
-                    logSync('Load', `Checklist carregado do Firebase: ${path}`);
-                    return data;
+                if (results.length > 0) {
+                    const respostas = results[0].respostas ?? null;
+                    await saveToCache(cacheKey, respostas); // Atualiza cache
+                    logSync('Load', `Checklist carregado da API: ${cacheKey}`);
+                    return respostas;
                 } else {
-                    // Firebase vazio = limpar cache local
-                    logSync('Load', 'Checklist não existe no Firebase, limpando cache');
+                    // Não existe na API = limpar cache local
+                    logSync('Load', 'Checklist não existe na API, limpando cache');
                     await AsyncStorage.removeItem(`@checklist_cache_${cacheKey}`);
                     return null;
                 }
             } catch (error) {
-                logSync('Error', 'Erro ao carregar do Firebase, usando cache', error);
-                const cached = await loadFromCache(cacheKey);
-                return cached;
+                logSync('Error', 'Erro ao carregar da API, usando cache', error);
+                return loadFromCache(cacheKey);
             }
         } else {
             // OFFLINE: usa cache
             logSync('Load', 'Offline: usando dados do cache');
-            const cached = await loadFromCache(cacheKey);
-            return cached;
+            return loadFromCache(cacheKey);
         }
     };
 
     // Carregar perguntas do checklist
     const loadQuestions = async (checklistId: string): Promise<any[]> => {
-        const path = `checklists-config/${checklistId}/questions`;
         const cacheKey = `questions_${checklistId}`;
 
-        logSync('Load', `Carregando perguntas: ${path}`);
+        logSync('Load', `Carregando perguntas: ${checklistId}`);
 
         // Verificar conectividade no momento da chamada
         const currentlyOnline = await checkConnectivity();
 
         if (currentlyOnline) {
-            // ONLINE: Firebase é a fonte da verdade - usar get()
+            // ONLINE: API é a fonte da verdade
             try {
-                const questionsRef = ref(dbRealTime(), path);
-                const snapshot = await get(questionsRef);
+                const results = await ecoApi.list('checklistsConfig', { checklistId });
 
-                if (snapshot.exists()) {
-                    const questions = snapshot.val();
+                if (results.length > 0) {
+                    const questions = results[0].questions || [];
                     await saveToCache(cacheKey, questions);
-                    logSync('Load', `Perguntas carregadas do Firebase`);
+                    logSync('Load', `Perguntas carregadas da API`);
                     return questions;
                 } else {
-                    // Firebase vazio = limpar cache
-                    logSync('Load', 'Perguntas não existem no Firebase, limpando cache');
+                    // Não existe na API = limpar cache
+                    logSync('Load', 'Perguntas não existem na API, limpando cache');
                     await AsyncStorage.removeItem(`@checklist_cache_${cacheKey}`);
                     return [];
                 }
@@ -268,16 +263,21 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
                 logSync('Sync', `Processando operação: ${op.id} (${op.type})`);
 
                 if (op.type === 'upload_photo' && op.localUri) {
-                    // Upload de foto
-                    const reference = storage().ref(op.path);
-                    await reference.putFile(op.localUri);
-                    const downloadURL = await reference.getDownloadURL();
-                    logSync('Sync', `Foto enviada: ${downloadURL}`);
-                    // TODO: Atualizar referências do tempId para downloadURL nos checklists salvos
+                    const filename = `checklist_${Date.now()}_${op.path.split('/').pop()}`;
+                    const uploadResult = await ecoStorage.upload({
+                        uri: op.localUri,
+                        type: 'image/jpeg',
+                        name: filename,
+                    });
+                    logSync('Sync', `Foto enviada: ${uploadResult.url}`);
                 } else if (op.type === 'save') {
-                    // Salvar dados no Firebase
-                    const dataRef = ref(dbRealTime(), op.path);
-                    await set(dataRef, op.data);
+                    const { year, checklistId, locationId, respostas } = op.data;
+                    const existing = await ecoApi.list('checklists', { year, checklistId, locationId });
+                    if (existing.length > 0) {
+                        await ecoApi.update('checklists', existing[0]._id ?? existing[0].id, { respostas });
+                    } else {
+                        await ecoApi.create('checklists', op.data);
+                    }
                 }
 
                 logSync('Sync', `Operação concluída: ${op.id}`);
@@ -304,14 +304,16 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
         if (currentlyOnline) {
             // Online: fazer upload direto
             try {
-                const reference = storage().ref(storagePath);
-                await reference.putFile(localUri);
-                const downloadURL = await reference.getDownloadURL();
-                logSync('Photo', `Foto enviada com sucesso: ${downloadURL}`);
-                return downloadURL;
+                const filename = `checklist_${Date.now()}_${storagePath.split('/').pop()}`;
+                const uploadResult = await ecoStorage.upload({
+                    uri: localUri,
+                    type: 'image/jpeg',
+                    name: filename,
+                });
+                logSync('Photo', `Foto enviada com sucesso: ${uploadResult.url}`);
+                return uploadResult.url;
             } catch (error) {
                 logSync('Error', 'Erro ao enviar foto online, salvando para depois', error);
-                // Falhou online, salvar para depois
                 const tempId = `temp_${Date.now()}`;
                 await addPendingOperation({
                     id: `photo_${Date.now()}`,
@@ -321,7 +323,7 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
                     timestamp: Date.now(),
                     localUri,
                 });
-                return tempId; // Retorna ID temporário
+                return tempId;
             }
         } else {
             // Offline: salvar URI local e adicionar à fila
@@ -335,7 +337,7 @@ export function ChecklistSyncProvider({ children }: { children: React.ReactNode 
                 timestamp: Date.now(),
                 localUri,
             });
-            return tempId; // Retorna ID temporário que será substituído pelo URL real
+            return tempId;
         }
     };
 

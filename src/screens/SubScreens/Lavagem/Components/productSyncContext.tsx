@@ -1,8 +1,8 @@
 // productSyncContext.tsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { ecoApi } from '../../../../api/ecoApi';
 import { UnidadeMedida } from './lavagemTypes';
 
 export interface ProdutoEstoque {
@@ -32,7 +32,6 @@ export function ProductSyncProvider({ children }: { children: React.ReactNode })
     const [isLoading, setIsLoading] = useState(true);
     const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
-    const [unsubscribe, setUnsubscribe] = useState<(() => void) | null>(null);
 
     // Função para salvar produtos no AsyncStorage
     const saveProdutosLocally = async (produtos: ProdutoEstoque[]) => {
@@ -61,48 +60,29 @@ export function ProductSyncProvider({ children }: { children: React.ReactNode })
         }
     };
 
-    // Função para iniciar sincronização com Firestore
-    const startFirestoreSync = () => {
-        if (unsubscribe) {
-            unsubscribe();
+    // Função para buscar produtos da API
+    const fetchProdutos = async () => {
+        setSyncStatus('syncing');
+        try {
+            const raw = await ecoApi.list('produtos');
+            const produtosData: ProdutoEstoque[] = raw.map((item: any) => ({
+                ...item,
+                id: item._id ?? item.id ?? '',
+            }));
+            setProdutos(produtosData);
+            saveProdutosLocally(produtosData);
+            setLastSyncTime(new Date());
+            setSyncStatus('idle');
+        } catch (error) {
+            console.error('Erro ao buscar produtos:', error);
+            setSyncStatus('error');
         }
-
-        const subscriber = firestore()
-            .collection('produtos')
-            .onSnapshot(
-                querySnapshot => {
-                    const produtosData: ProdutoEstoque[] = [];
-                    querySnapshot.forEach(doc => {
-                        produtosData.push({
-                            id: doc.id,
-                            ...doc.data() as Omit<ProdutoEstoque, 'id'>
-                        });
-                    });
-
-                    console.log(produtosData)
-
-                    setProdutos(produtosData);
-                    saveProdutosLocally(produtosData);
-                    setLastSyncTime(new Date());
-                    setSyncStatus('idle');
-                },
-                error => {
-                    console.error('Erro na sincronização com Firestore:', error);
-                    setSyncStatus('error');
-                }
-            );
-
-        setUnsubscribe(() => subscriber);
     };
 
     // Função para gerenciar a conexão e sincronização
     const handleConnectivityChange = async (isConnected: boolean | null) => {
         if (isConnected) {
-            setSyncStatus('syncing');
-            startFirestoreSync();
-        } else if (unsubscribe) {
-            unsubscribe();
-            setUnsubscribe(null);
+            await fetchProdutos();
         }
     };
 
@@ -126,9 +106,6 @@ export function ProductSyncProvider({ children }: { children: React.ReactNode })
             // Cleanup
             return () => {
                 unsubscribeNetInfo();
-                if (unsubscribe) {
-                    unsubscribe();
-                }
             };
         };
 
@@ -139,9 +116,7 @@ export function ProductSyncProvider({ children }: { children: React.ReactNode })
     const forceSync = async () => {
         const netInfo = await NetInfo.fetch();
         if (netInfo.isConnected) {
-            setSyncStatus('syncing');
-            startFirestoreSync();
-            console.log("Atualizando")
+            await fetchProdutos();
         }
     };
 

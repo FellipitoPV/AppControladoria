@@ -12,13 +12,12 @@ import { Text, TextInput } from 'react-native-paper';
 import { EnhancedSearchContainer } from './components/ModernSearchBar';
 import { NavigationProp, ParamListBase, useFocusEffect, useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
-import { collection, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
 
 import ConfirmationModal from '../../assets/components/ConfirmationModal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ModernHeader from '../../assets/components/ModernHeader';
 import { customTheme } from '../../theme/theme';
-import { db } from '../../../firebase';
+import { ecoApi } from '../../api/ecoApi';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 
 // ==================== ACCESS ITEM ====================
@@ -135,23 +134,21 @@ export default function EditUserAccessScreen() {
 
     const loadUsers = async () => {
         try {
-            const usersQuery = query(
-                collection(db(), 'users'),
-                orderBy('user', 'asc')
-            );
-            const snapshot = await getDocs(usersQuery);
+            const data = await ecoApi.list('users');
 
-            const listaUsuarios: User[] = snapshot.docs.map((docSnap) => ({
-                id: docSnap.id,
-                user: docSnap.data().user,
-                email: docSnap.data().email,
-                telefone: docSnap.data().telefone,
-                cargo: docSnap.data().cargo,
-                ramal: docSnap.data().ramal || '',
-                area: docSnap.data().area || '',
-                acesso: docSnap.data().acesso || [],
-                photoURL: docSnap.data().photoURL || ''
-            }));
+            const listaUsuarios: User[] = data
+                .map((doc: any) => ({
+                    id: doc._id ?? doc.id,
+                    user: doc.user,
+                    email: doc.email,
+                    telefone: doc.telefone,
+                    cargo: doc.cargo,
+                    ramal: doc.ramal || '',
+                    area: doc.area || '',
+                    acesso: doc.acesso || [],
+                    photoURL: doc.photoURL || ''
+                }))
+                .sort((a: User, b: User) => a.user.localeCompare(b.user));
 
             setUsers(listaUsuarios);
         } catch (error) {
@@ -237,7 +234,7 @@ export default function EditUserAccessScreen() {
 
         setLoading(true);
         try {
-            await updateDoc(doc(db(), 'users', selectedUser.id), {
+            await ecoApi.update('users', selectedUser.id, {
                 acesso: selectedAccess
             });
 

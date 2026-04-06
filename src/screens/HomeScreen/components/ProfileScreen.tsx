@@ -4,18 +4,18 @@ import {
     ActivityIndicator,
     FlatList,
     Image,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
+    TextInput as RNTextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 import { Button, Dialog, Portal, Text, TextInput } from 'react-native-paper';
 import { PERMISSIONS, request } from 'react-native-permissions';
 import React, { useEffect, useState } from 'react';
-import { arrayUnion, doc, updateDoc } from 'firebase/firestore';
-import { db, dbStorage } from '../../../../firebase';
-import { getDownloadURL, getStorage, ref, uploadString } from 'firebase/storage';
+import { ecoApi, ecoStorage } from '../../../api/ecoApi';
 
 import Contacts from 'react-native-contacts';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -23,7 +23,6 @@ import { customTheme } from '../../../theme/theme';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { useUser } from '../../../contexts/userContext';
-import { v4 as uuidv4 } from 'uuid';
 
 // Componente para itens de informação
 interface InfoItemProps {
@@ -105,6 +104,10 @@ export default function ProfileScreen() {
     const [emergencyPhone, setEmergencyPhone] = useState('');
     const [emergencyParentesco, setEmergencyParentesco] = useState('');
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [contactPickerVisible, setContactPickerVisible] = useState(false);
+    const [allContacts, setAllContacts] = useState<any[]>([]);
+    const [contactSearch, setContactSearch] = useState('');
+    const [loadingContacts, setLoadingContacts] = useState(false);
 
     useEffect(() => {
         updateUserInfo();
@@ -138,28 +141,16 @@ export default function ProfileScreen() {
                 if (response.assets && response.assets[0]) {
                     setUploadingPhoto(true);
                     const imageUri = response.assets[0].uri;
-                    const filename = imageUri.substring(imageUri.lastIndexOf('/') + 1);
-                    const storageRef = ref(dbStorage(), `profile-photos/${userInfo?.id}/${filename}`);
+                    const filename = `profile-photos/${userInfo?.id}/${imageUri.substring(imageUri.lastIndexOf('/') + 1)}`;
 
                     try {
-                        await uploadString(storageRef, imageUri, 'data_url');
-                        const downloadUrl = await getDownloadURL(storageRef);
-                        await updateUserPhoto(downloadUrl);
+                        const result = await ecoStorage.upload({ uri: imageUri, type: 'image/jpeg', name: filename });
+                        await updateUserPhoto(result.url);
 
-                        showGlobalToast(
-                            'success',
-                            'Sucesso',
-                            'Foto de perfil atualizada!',
-                            3000
-                        );
+                        showGlobalToast('success', 'Sucesso', 'Foto de perfil atualizada!', 3000);
                     } catch (uploadError) {
                         console.error('Erro ao fazer upload:', uploadError);
-                        showGlobalToast(
-                            'error',
-                            'Erro',
-                            'Não foi possível fazer upload da imagem',
-                            3000
-                        );
+                        showGlobalToast('error', 'Erro', 'Não foi possível fazer upload da imagem', 3000);
                     } finally {
                         setUploadingPhoto(false);
                     }
@@ -187,9 +178,7 @@ export default function ProfileScreen() {
         setLoading(true);
         try {
             if (userInfo?.id) {
-                await updateDoc(doc(db(), 'users', userInfo.id), {
-                    ramal: newRamal.trim(),
-                });
+                await ecoApi.update('users', userInfo.id, { ramal: newRamal.trim() });
             } else {
                 showGlobalToast('error', 'Erro', 'Usuário não encontrado', 3000);
             }
@@ -215,9 +204,7 @@ export default function ProfileScreen() {
         setLoading(true);
         try {
             if (userInfo?.id) {
-                await updateDoc(doc(db(), 'users', userInfo.id), {
-                    telefone: formatPhoneNumber(newPhone.trim()),
-                });
+                await ecoApi.update('users', userInfo.id, { telefone: formatPhoneNumber(newPhone.trim()) });
             } else {
                 showGlobalToast('error', 'Erro', 'Usuário não encontrado', 3000);
             }
@@ -243,15 +230,16 @@ export default function ProfileScreen() {
         setLoading(true);
         try {
             const newContact = {
-                id: uuidv4(),
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
                 nome: emergencyName.trim(),
                 parentesco: emergencyParentesco.trim() || 'Não informado',
                 telefone: formatPhoneNumber(emergencyPhone.trim()),
             };
 
             if (userInfo?.id) {
-                await updateDoc(doc(db(), 'users', userInfo.id), {
-                    emergency_contacts: arrayUnion(newContact),
+                const currentContacts = userInfo.emergency_contacts ?? [];
+                await ecoApi.update('users', userInfo.id, {
+                    emergency_contacts: [...currentContacts, newContact],
                 });
             } else {
                 showGlobalToast('error', 'Erro', 'Usuário não encontrado', 3000);
@@ -278,31 +266,37 @@ export default function ProfileScreen() {
     };
     //
 
-    const selectContact = async () => {
+    const openContactPicker = async () => {
+        setLoadingContacts(true);
         try {
-            const contact = await Contacts.openContactForm({
-                givenName: '',
-                familyName: '',
-                phoneNumbers: [{ label: 'mobile', number: '' }],
-            });
-            if (contact) {
-                const name = contact.givenName || contact.displayName || '';
-                const phoneNumber = contact.phoneNumbers[0]?.number || '';
-                setEmergencyName(name);
-                setEmergencyPhone(phoneNumber.replace(/\D/g, '')); // Limpa formatação
-                setEmergencyMode('manual'); // Após importar, permite edição manual
-            } else {
-                showGlobalToast('info', 'Atenção', 'Nenhum contato selecionado.', 3000);
-            }
+            const contacts = await Contacts.getAll();
+            // Filtrar apenas contatos com pelo menos um telefone
+            const withPhone = contacts
+                .filter(c => c.phoneNumbers && c.phoneNumbers.length > 0)
+                .sort((a, b) => {
+                    const nameA = (a.displayName || a.givenName || '').toLowerCase();
+                    const nameB = (b.displayName || b.givenName || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
+            setAllContacts(withPhone);
+            setContactSearch('');
+            setContactPickerVisible(true);
         } catch (error) {
-            console.error('Erro ao selecionar contato:', error);
-            showGlobalToast(
-                'error',
-                'Erro',
-                'Não foi possível selecionar o contato.',
-                3000
-            );
+            console.error('Erro ao carregar contatos:', error);
+            showGlobalToast('error', 'Erro', 'Não foi possível carregar os contatos.', 3000);
+        } finally {
+            setLoadingContacts(false);
         }
+    };
+
+    const handleSelectContact = (contact: any) => {
+        const name = contact.displayName || `${contact.givenName || ''} ${contact.familyName || ''}`.trim();
+        const phone = (contact.phoneNumbers[0]?.number || '').replace(/\D/g, '');
+        setEmergencyName(name);
+        setEmergencyPhone(phone);
+        setContactPickerVisible(false);
+        setContactSearch('');
+        setEmergencyMode('manual');
     };
 
     const requestContactsPermission = async () => {
@@ -314,23 +308,13 @@ export default function ProfileScreen() {
 
             const result = await request(permission);
             if (result === 'granted') {
-                selectContact();
+                openContactPicker();
             } else {
-                showGlobalToast(
-                    'error',
-                    'Permissão negada',
-                    'Você precisa permitir o acesso aos contatos.',
-                    3000
-                );
+                showGlobalToast('error', 'Permissão negada', 'Você precisa permitir o acesso aos contatos.', 3000);
             }
         } catch (error) {
             console.error('Erro ao solicitar permissão:', error);
-            showGlobalToast(
-                'error',
-                'Erro',
-                'Não foi possível solicitar permissão.',
-                3000
-            );
+            showGlobalToast('error', 'Erro', 'Não foi possível solicitar permissão.', 3000);
         }
     };
 
@@ -350,6 +334,11 @@ export default function ProfileScreen() {
             </View>
         );
     }
+
+    const filteredContacts = allContacts.filter(c => {
+        const name = (c.displayName || `${c.givenName || ''} ${c.familyName || ''}`).toLowerCase();
+        return name.includes(contactSearch.toLowerCase());
+    });
 
     return (
         <ScrollView style={styles.container}>
@@ -533,6 +522,83 @@ export default function ProfileScreen() {
                     </Dialog.Actions>
                 </Dialog>
             </Portal>
+
+            {/* Modal de seleção de contato */}
+            <Modal
+                visible={contactPickerVisible}
+                animationType="slide"
+                onRequestClose={() => setContactPickerVisible(false)}
+            >
+                <View style={styles.pickerContainer}>
+                    {/* Header */}
+                    <View style={styles.pickerHeader}>
+                        <Text style={styles.pickerTitle}>Selecionar Contato</Text>
+                        <TouchableOpacity
+                            onPress={() => { setContactPickerVisible(false); setContactSearch(''); }}
+                            style={styles.pickerCloseBtn}
+                        >
+                            <MaterialIcons name="close" size={24} color={customTheme.colors.onSurface} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Busca */}
+                    <View style={styles.pickerSearchBox}>
+                        <MaterialIcons name="search" size={20} color={customTheme.colors.onSurfaceVariant} />
+                        <RNTextInput
+                            style={styles.pickerSearchInput}
+                            placeholder="Buscar contato..."
+                            placeholderTextColor={customTheme.colors.onSurfaceVariant}
+                            value={contactSearch}
+                            onChangeText={setContactSearch}
+                            autoFocus
+                        />
+                        {contactSearch.length > 0 && (
+                            <TouchableOpacity onPress={() => setContactSearch('')}>
+                                <MaterialIcons name="clear" size={18} color={customTheme.colors.onSurfaceVariant} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {/* Lista */}
+                    {loadingContacts ? (
+                        <View style={styles.pickerLoading}>
+                            <ActivityIndicator size="large" color={customTheme.colors.primary} />
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={filteredContacts}
+                            keyExtractor={(_, i) => String(i)}
+                            renderItem={({ item }) => {
+                                const name = item.displayName || `${item.givenName || ''} ${item.familyName || ''}`.trim();
+                                const phone = item.phoneNumbers[0]?.number || '';
+                                return (
+                                    <TouchableOpacity
+                                        style={styles.pickerItem}
+                                        onPress={() => handleSelectContact(item)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={styles.pickerItemAvatar}>
+                                            <Text style={styles.pickerItemAvatarText}>
+                                                {name.charAt(0).toUpperCase()}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.pickerItemInfo}>
+                                            <Text style={styles.pickerItemName}>{name}</Text>
+                                            <Text style={styles.pickerItemPhone}>{phone}</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            }}
+                            ItemSeparatorComponent={() => <View style={styles.pickerSeparator} />}
+                            ListEmptyComponent={
+                                <View style={styles.pickerEmpty}>
+                                    <Text style={styles.pickerEmptyText}>Nenhum contato encontrado</Text>
+                                </View>
+                            }
+                        />
+                    )}
+                </View>
+            </Modal>
 
             {/* Dialog de Contato de Emergência */}
             <Portal>
@@ -837,5 +903,98 @@ const styles = StyleSheet.create({
     emergencyModeButtonText: {
         color: 'white',
         fontWeight: '500',
+    },
+
+    // ── Contact Picker Modal ─────────────────────────────────────────────────
+    pickerContainer: {
+        flex: 1,
+        backgroundColor: customTheme.colors.background,
+    },
+    pickerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: customTheme.colors.surfaceVariant,
+        backgroundColor: customTheme.colors.surface,
+    },
+    pickerTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+    },
+    pickerCloseBtn: {
+        padding: 4,
+    },
+    pickerSearchBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        margin: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        backgroundColor: customTheme.colors.surface,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: customTheme.colors.surfaceVariant,
+        gap: 8,
+    },
+    pickerSearchInput: {
+        flex: 1,
+        fontSize: 15,
+        color: customTheme.colors.onSurface,
+        padding: 0,
+    },
+    pickerLoading: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    pickerItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 12,
+    },
+    pickerItemAvatar: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: `${customTheme.colors.primary}20`,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    pickerItemAvatarText: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: customTheme.colors.primary,
+    },
+    pickerItemInfo: {
+        flex: 1,
+    },
+    pickerItemName: {
+        fontSize: 15,
+        fontWeight: '500',
+        color: customTheme.colors.onSurface,
+    },
+    pickerItemPhone: {
+        fontSize: 13,
+        color: customTheme.colors.onSurfaceVariant,
+        marginTop: 2,
+    },
+    pickerSeparator: {
+        height: 1,
+        backgroundColor: customTheme.colors.surfaceVariant,
+        marginLeft: 70,
+    },
+    pickerEmpty: {
+        padding: 32,
+        alignItems: 'center',
+    },
+    pickerEmptyText: {
+        fontSize: 14,
+        color: customTheme.colors.onSurfaceVariant,
     },
 });

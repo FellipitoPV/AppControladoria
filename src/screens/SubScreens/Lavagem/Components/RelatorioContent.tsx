@@ -9,7 +9,6 @@ import { Surface, Text } from 'react-native-paper';
 
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import React from 'react';
-import { Timestamp } from 'firebase/firestore';
 import { customTheme } from '../../../../theme/theme';
 
 interface RelatorioContentProps {
@@ -157,7 +156,7 @@ const RelatorioContent: React.FC<RelatorioContentProps> = ({
                                     style={styles.dataIcon}
                                 />
                                 <Text style={styles.dataText}>
-                                    {lavagem.data && lavagem.data instanceof Timestamp ? lavagem.data.toDate().toLocaleDateString() : lavagem.data} - {lavagem.hora}
+                                    {lavagem.data instanceof Date ? lavagem.data.toLocaleDateString() : lavagem.data} - {lavagem.hora}
                                 </Text>
                             </View>
                         </View>

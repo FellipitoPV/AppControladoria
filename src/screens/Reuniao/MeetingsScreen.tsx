@@ -11,8 +11,7 @@ import {
     Surface,
     Text
 } from 'react-native-paper';
-import { off, onValue, ref, remove, set } from 'firebase/database';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import CreateMeetingModal from './components/CreateMeetingModal';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -22,7 +21,7 @@ import MeetingItem from './components/MeetingItem';
 import ModernHeader from '../../assets/components/ModernHeader';
 import { customTheme } from '../../theme/theme';
 import dayjs from 'dayjs';
-import { dbRealTime } from '../../../firebase';
+import { ecoApi } from '../../api/ecoApi';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 import { useUser } from '../../contexts/userContext';
 
@@ -46,107 +45,47 @@ export default function MeetingsScreen({ navigation }: any) {
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | undefined>();
     const [selectedRoom, setSelectedRoom] = useState<string | null>(null); // Para filtrar por sala
 
-    // Keep track of active listeners
-    const activeListenerRef = useRef<(() => void) | null>(null);
-
     // Date change handler
     const handleDateChange = (event: any, date?: Date) => {
         setShowDatePicker(Platform.OS === 'ios');
         if (date) {
             setSelectedDate(date);
-            const formattedDate = dayjs(date).format('YYYYMMDD');
-
-            // Clean up previous listener if exists
-            if (activeListenerRef.current) {
-                activeListenerRef.current();
-            }
-
-            // Set new listener
-            const unsubscribe = fetchMeetings(formattedDate);
-            if (typeof unsubscribe === 'function') {
-                activeListenerRef.current = unsubscribe;
-            }
+            fetchMeetings(dayjs(date).format('YYYYMMDD'));
         }
     };
 
-    // Fetch meetings for a specific date from Firebase Realtime Database
-    const fetchMeetings = (date: string): (() => void) => {
+    const fetchMeetings = async (date: string) => {
         try {
             setLoading(true);
+            const data = await ecoApi.list('meetings', { date });
 
-            // Create reference to meetings node
-            const meetingsRef = ref(dbRealTime(), '/meetings');
-            const onValueChange = onValue(meetingsRef, snapshot => {
-                const data = snapshot.val();
-                const loadedMeetings: Meeting[] = [];
+            const sorted = (data as Meeting[])
+                .map((m: any) => ({ ...m, id: m._id ?? m.id }))
+                .sort((a, b) => {
+                    const [ah, am] = a.entrada.split(':').map(Number);
+                    const [bh, bm] = b.entrada.split(':').map(Number);
+                    return ah !== bh ? ah - bh : am - bm;
+                });
 
-                if (data) {
-                    Object.keys(data).forEach((key) => {
-                        const meetingData = data[key];
-                        const meeting: Meeting = {
-                            ...meetingData,
-                            id: key,
-                        };
-                        loadedMeetings.push(meeting);
-                    });
-
-                    // Filter meetings for the specific date
-                    const filteredMeetings = loadedMeetings.filter((meeting) => meeting.date === date);
-
-                    // Sort meetings by entry time
-                    const sortedMeetings = filteredMeetings.sort((a, b) => {
-                        const timeA = a.entrada.split(':').map(Number);
-                        const timeB = b.entrada.split(':').map(Number);
-
-                        if (timeA[0] !== timeB[0]) {
-                            return timeA[0] - timeB[0]; // Compare hours
-                        } else {
-                            return timeA[1] - timeB[1]; // If hours are equal, compare minutes
-                        }
-                    });
-
-                    // Update the local state of meetings with the sorted list
-                    setMeetings(sortedMeetings);
-                } else {
-                    console.log('No meetings found.');
-                    setMeetings([]);
-                }
-                setLoading(false);
-            });
-
-            // Return cleanup function
-            return () => off(meetingsRef, 'value', onValueChange);
+            setMeetings(sorted);
         } catch (error) {
-            console.error('Error loading meetings from Realtime Database: ', error);
+            console.error('Erro ao carregar reuniões:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível carregar as reuniões', 3000);
+            setMeetings([]);
+        } finally {
             setLoading(false);
-
-            // Return empty cleanup function in case of error
-            return () => { };
         }
     };
 
     const handleDeleteMeeting = async (meetingId: string) => {
         try {
-            await remove(ref(dbRealTime(), `/meetings/${meetingId}`));
-
+            await ecoApi.delete('meetings', meetingId);
             showGlobalToast('success', 'Sucesso', 'Reunião excluída com sucesso', 3000);
-
-            // Refresh meetings after deletion
-            const formattedDate = dayjs(selectedDate).format('YYYYMMDD');
-            if (activeListenerRef.current) {
-                activeListenerRef.current();
-            }
-            const unsubscribe = fetchMeetings(formattedDate);
-            if (typeof unsubscribe === 'function') {
-                activeListenerRef.current = unsubscribe;
-            }
-
-            return Promise.resolve();
+            await fetchMeetings(dayjs(selectedDate).format('YYYYMMDD'));
         } catch (error) {
             console.error('Erro ao excluir reunião:', error);
             showGlobalToast('error', 'Erro', 'Não foi possível excluir a reunião', 3000);
-            return Promise.reject(error);
+            throw error;
         }
     };
 
@@ -203,40 +142,25 @@ export default function MeetingsScreen({ navigation }: any) {
 
             // Criar a nova reunião
             const novaReuniao = {
-                id: generateUniqueId(),
                 name: userInfo?.user || '',
                 entrada: horaEntrada,
                 saida: horaSaida,
                 date: currentDate,
                 assunto: meetingData.assunto,
-                sala: meetingData.selectedRoom
+                sala: meetingData.selectedRoom,
             };
 
-            // Salvar a nova reunião no Realtime Database
-            await set(ref(dbRealTime(), `/meetings/${novaReuniao.id}`), novaReuniao);
+            await ecoApi.create('meetings', novaReuniao);
 
             setCreatingMeeting(false);
             showGlobalToast('success', 'Sucesso', 'Reunião criada com sucesso!', 3000);
-
-            // Recarregar reuniões
-            if (activeListenerRef.current) {
-                activeListenerRef.current();
-            }
-            const unsubscribe = fetchMeetings(currentDate);
-            if (typeof unsubscribe === 'function') {
-                activeListenerRef.current = unsubscribe;
-            }
+            await fetchMeetings(currentDate);
         } catch (error) {
             console.error('Erro ao criar reunião:', error);
             showGlobalToast('error', 'Erro', 'Erro ao criar reunião. Tente novamente mais tarde.', 3000);
         } finally {
             setLoading(false);
         }
-    };
-
-    // Gerar ID único para nova reunião
-    const generateUniqueId = () => {
-        return Math.random().toString(36).substring(2, 15);
     };
 
     // Lista de salas disponíveis
@@ -257,22 +181,9 @@ export default function MeetingsScreen({ navigation }: any) {
 
     // Load initial data
     useEffect(() => {
-        // Get the current date
         const currentDate = new Date();
         setSelectedDate(currentDate);
-        const formattedDate = dayjs(currentDate).format('YYYYMMDD');
-        const unsubscribe = fetchMeetings(formattedDate);
-
-        if (typeof unsubscribe === 'function') {
-            activeListenerRef.current = unsubscribe;
-        }
-
-        // Clean up listener when component unmounts
-        return () => {
-            if (activeListenerRef.current) {
-                activeListenerRef.current();
-            }
-        };
+        fetchMeetings(dayjs(currentDate).format('YYYYMMDD'));
     }, []);
 
     // Navegar para visualizar/editar uma reunião existente

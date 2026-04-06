@@ -111,7 +111,7 @@ export default function QSMSScreen({ navigation }: any) {
                     <ActionButton
                         icon="clipboard-check-outline"
                         text="Checklist"
-                        onPress={() => navigation.navigate('SSTChecklistScreen')}
+                        onPress={() => navigation.navigate('ChecklistScreen')}
                         disabled={!canAccessSST()}
                         disabledText="Requer acesso à SST nível 1"
                     />
@@ -142,7 +142,7 @@ export default function QSMSScreen({ navigation }: any) {
                     <ActionButton
                         icon="clipboard-check-outline"
                         text="Checklist"
-                        onPress={() => navigation.navigate('SSTChecklistScreen', {
+                        onPress={() => navigation.navigate('ChecklistScreen', {
                             category: 'QSMS - Meio Ambiente',
                             title: 'Checklist Meio Ambiente',
                             headerIcon: 'leaf',
@@ -196,7 +196,7 @@ export default function QSMSScreen({ navigation }: any) {
                     <ActionButton
                         icon="clipboard-text-search-outline"
                         text="Checklist"
-                        onPress={() => navigation.navigate('SSTChecklistScreen', {
+                        onPress={() => navigation.navigate('ChecklistScreen', {
                             category: 'QSMS - Qualidade',
                             title: 'Checklist Qualidade',
                             headerIcon: 'clipboard-text-search',

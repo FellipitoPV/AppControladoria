@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Modal,
     View,
@@ -13,9 +13,7 @@ import {
     Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { customTheme } from '../../theme/theme';
 
-// Interface expandida para suportar tanto fotos locais quanto do Firebase
 interface PhotoType {
     uri?: string;
     url?: string;
@@ -26,23 +24,60 @@ interface PhotoType {
 
 interface FullScreenImageProps {
     visible: boolean;
-    photo: PhotoType | null;
     onClose: () => void;
+    // Modo simples (um único foto — compatibilidade retroativa)
+    photo?: PhotoType | null;
+    // Modo galeria (múltiplas fotos com navegação)
+    photos?: PhotoType[];
+    initialIndex?: number;
 }
 
 const FullScreenImage: React.FC<FullScreenImageProps> = ({
     visible,
+    onClose,
     photo,
-    onClose
+    photos,
+    initialIndex = 0,
 }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [imageError, setImageError] = useState(false);
+    const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
-    // Impedir renderização quando não há foto
-    if (!photo) return null;
+    // Normaliza para sempre trabalhar com array
+    const gallery: PhotoType[] = photos && photos.length > 0
+        ? photos
+        : photo ? [photo] : [];
 
-    // Determinar a URL da imagem (compatibilidade com fotos Firebase e locais)
-    const imageUri = photo.uri || photo.url || '';
+    const currentPhoto = gallery[currentIndex] ?? null;
+    const imageUri = currentPhoto?.uri || currentPhoto?.url || '';
+    const total = gallery.length;
+    const hasPrev = currentIndex > 0;
+    const hasNext = currentIndex < total - 1;
+
+    // Sincroniza índice quando o modal abre
+    useEffect(() => {
+        if (visible) {
+            setCurrentIndex(initialIndex);
+            setIsLoading(true);
+            setImageError(false);
+        }
+    }, [visible, initialIndex]);
+
+    // Reset loading state ao mudar de foto
+    useEffect(() => {
+        setIsLoading(true);
+        setImageError(false);
+    }, [currentIndex]);
+
+    if (!currentPhoto) return null;
+
+    const goToPrev = () => {
+        if (hasPrev) setCurrentIndex(i => i - 1);
+    };
+
+    const goToNext = () => {
+        if (hasNext) setCurrentIndex(i => i + 1);
+    };
 
     return (
         <Modal
@@ -54,22 +89,21 @@ const FullScreenImage: React.FC<FullScreenImageProps> = ({
         >
             <StatusBar backgroundColor="rgba(0, 0, 0, 0.9)" barStyle="light-content" />
             <SafeAreaView style={styles.container}>
-                {/* Header com botão de fechar */}
+                {/* Header */}
                 <View style={styles.header}>
+                    {total > 1 && (
+                        <Text style={styles.counter}>{currentIndex + 1} / {total}</Text>
+                    )}
                     <TouchableOpacity
                         onPress={onClose}
                         style={styles.closeButton}
                         activeOpacity={0.7}
                     >
-                        <Icon
-                            name="close"
-                            size={24}
-                            color="#FFFFFF"
-                        />
+                        <Icon name="close" size={24} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
 
-                {/* Container da Imagem */}
+                {/* Imagem + setas de navegação */}
                 <View style={styles.imageContainer}>
                     <Image
                         source={{ uri: imageUri }}
@@ -86,73 +120,48 @@ const FullScreenImage: React.FC<FullScreenImageProps> = ({
                         }}
                     />
 
-                    {/* Indicador de carregamento */}
                     {isLoading && (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator
-                                size="large"
-                                color="#FFFFFF"
-                            />
+                            <ActivityIndicator size="large" color="#FFFFFF" />
                             <Text style={styles.loadingText}>Carregando foto...</Text>
                         </View>
                     )}
 
-                    {/* Mensagem de erro */}
                     {imageError && (
                         <View style={styles.errorContainer}>
-                            <Icon
-                                name="error-outline"
-                                size={48}
-                                color="#FFFFFF"
-                            />
+                            <Icon name="error-outline" size={48} color="#FFFFFF" />
                             <Text style={styles.errorText}>
                                 Não foi possível carregar a imagem
                             </Text>
                         </View>
                     )}
-                </View>
 
-                {/* Footer com ações */}
-                <View style={styles.footer}>
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        activeOpacity={0.7}
-                    >
-                        <Icon
-                            name="share"
-                            size={22}
-                            color={customTheme.colors.primary}
-                        />
-                    </TouchableOpacity>
+                    {/* Seta anterior */}
+                    {hasPrev && (
+                        <TouchableOpacity
+                            style={[styles.navButton, styles.navButtonLeft]}
+                            onPress={goToPrev}
+                            activeOpacity={0.7}
+                        >
+                            <Icon name="chevron-left" size={36} color="#FFFFFF" />
+                        </TouchableOpacity>
+                    )}
 
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        activeOpacity={0.7}
-                    >
-                        <Icon
-                            name="file-download"
-                            size={22}
-                            color={customTheme.colors.primary}
-                        />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        activeOpacity={0.7}
-                        onPress={onClose}
-                    >
-                        <Icon
-                            name="fullscreen-exit"
-                            size={22}
-                            color={customTheme.colors.primary}
-                        />
-                    </TouchableOpacity>
+                    {/* Seta próxima */}
+                    {hasNext && (
+                        <TouchableOpacity
+                            style={[styles.navButton, styles.navButtonRight]}
+                            onPress={goToNext}
+                            activeOpacity={0.7}
+                        >
+                            <Icon name="chevron-right" size={36} color="#FFFFFF" />
+                        </TouchableOpacity>
+                    )}
                 </View>
             </SafeAreaView>
         </Modal>
     );
 };
-
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -168,6 +177,15 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
         alignItems: 'center',
         paddingHorizontal: 16,
+        gap: 12,
+    },
+    counter: {
+        color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '600',
+        flex: 1,
+        textAlign: 'center',
+        paddingLeft: 52, // compensa o botão fechar para centralizar visualmente
     },
     closeButton: {
         width: 40,
@@ -213,25 +231,22 @@ const styles = StyleSheet.create({
         marginTop: 12,
         textAlign: 'center',
     },
-    footer: {
-        height: 80,
-        flexDirection: 'row',
+    navButton: {
+        position: 'absolute',
+        top: '50%',
+        marginTop: -28,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: 24,
     },
-    actionButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#FFFFFF',
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 2,
+    navButtonLeft: {
+        left: 12,
+    },
+    navButtonRight: {
+        right: 12,
     },
 });
 
