@@ -4,7 +4,6 @@ import { Card, Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { DDSInterface } from './DDSTypes';
 import { customTheme } from '../../../../theme/theme';
-import { Timestamp } from 'firebase/firestore';
 
 interface DDSCardProps {
     dds: DDSInterface;
@@ -12,18 +11,10 @@ interface DDSCardProps {
     onEdit?: () => void;
 }
 
-const formatDate = (date: Timestamp | string): string => {
+const formatDate = (date: string): string => {
     if (!date) return '';
-
-    let dateObj: Date;
-    if (date instanceof Timestamp) {
-        dateObj = date.toDate();
-    } else if (typeof date === 'string') {
-        dateObj = new Date(date);
-    } else {
-        return '';
-    }
-
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) return '';
     return dateObj.toLocaleDateString('pt-BR', {
         day: '2-digit',
         month: '2-digit',
@@ -31,44 +22,24 @@ const formatDate = (date: Timestamp | string): string => {
     });
 };
 
-const formatTime = (time: Timestamp | string | any): string => {
+const formatTime = (time: string): string => {
     if (!time) return '';
 
     // Se já for string no formato HH:mm, retorna direto
-    if (typeof time === 'string' && /^\d{2}:\d{2}$/.test(time)) {
+    if (/^\d{2}:\d{2}$/.test(time)) {
         return time;
     }
 
-    // Se for Timestamp do Firebase
-    if (time instanceof Timestamp) {
-        const dateObj = time.toDate();
-        return dateObj.toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    }
-
-    // Se for objeto com seconds (Timestamp serializado)
-    if (time && typeof time === 'object' && 'seconds' in time) {
-        const dateObj = new Date(time.seconds * 1000);
-        return dateObj.toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    }
-
     // Se for string de data ISO
-    if (typeof time === 'string') {
-        const dateObj = new Date(time);
-        if (!isNaN(dateObj.getTime())) {
-            return dateObj.toLocaleTimeString('pt-BR', {
-                hour: '2-digit',
-                minute: '2-digit',
-            });
-        }
+    const dateObj = new Date(time);
+    if (!isNaN(dateObj.getTime())) {
+        return dateObj.toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
     }
 
-    return String(time);
+    return time;
 };
 
 export const DDSCard: React.FC<DDSCardProps> = ({ dds, onPress, onEdit }) => {

@@ -21,15 +21,7 @@ import {
 } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import {
-    collection,
-    addDoc,
-    updateDoc,
-    deleteDoc,
-    doc,
-    Timestamp,
-} from 'firebase/firestore';
-import { db } from '../../../../../firebase';
+import { ecoApi } from '../../../../api/ecoApi';
 import {
     ToxicologicoInterface,
     AssinaturaField,
@@ -267,13 +259,7 @@ const ToxicologicoFormScreen: React.FC = () => {
         setAssinaturaTestemunha(item.assinaturaTestemunha || { nome: '' });
 
         if (item.data) {
-            if (item.data instanceof Timestamp) {
-                setData(item.data.toDate());
-            } else if (item.data && typeof item.data === 'object' && 'seconds' in item.data) {
-                setData(new Date(item.data.seconds * 1000));
-            } else if (typeof item.data === 'string') {
-                setData(new Date(item.data));
-            }
+            setData(new Date(item.data));
         }
     }, [item]);
 
@@ -328,7 +314,7 @@ const ToxicologicoFormScreen: React.FC = () => {
             const docData: Omit<ToxicologicoInterface, 'id'> = {
                 colaborador: colaborador.trim(),
                 encarregado: encarregado.trim(),
-                data: Timestamp.fromDate(data),
+                data: data.toISOString(),
                 hora,
                 tipoTeste,
                 embasamento: embasamento.trim(),
@@ -340,15 +326,15 @@ const ToxicologicoFormScreen: React.FC = () => {
                 assinaturaResponsavel,
                 assinaturaColaborador,
                 ...(temRecusa ? { assinaturaTestemunha } : {}),
-                dataCriacao: isEditMode && item?.dataCriacao ? item.dataCriacao : Timestamp.now(),
+                dataCriacao: isEditMode && item?.dataCriacao ? item.dataCriacao : new Date().toISOString(),
                 criadoPor: userInfo?.user || '',
             };
 
             if (isEditMode && item?.id) {
-                await updateDoc(doc(db(), 'toxicologico', item.id), docData);
+                await ecoApi.update('toxicologico', item.id, docData);
                 showGlobalToast('success', 'Sucesso', 'Exame atualizado com sucesso!');
             } else {
-                await addDoc(collection(db(), 'toxicologico'), docData);
+                await ecoApi.create('toxicologico', docData);
                 showGlobalToast('success', 'Sucesso', 'Exame salvo com sucesso!');
             }
             navigation.goBack();
@@ -374,7 +360,7 @@ const ToxicologicoFormScreen: React.FC = () => {
                         if (!item?.id) return;
                         setDeleteLoading(true);
                         try {
-                            await deleteDoc(doc(db(), 'toxicologico', item.id));
+                            await ecoApi.delete('toxicologico', item.id);
                             showGlobalToast('success', 'Sucesso', 'Exame excluído!');
                             navigation.goBack();
                         } catch {

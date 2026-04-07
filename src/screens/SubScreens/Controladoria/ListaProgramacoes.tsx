@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     View,
     ScrollView,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Text, Surface, Dialog, Portal, Modal } from 'react-native-paper';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import database from '@react-native-firebase/database';
+import { ecoApi } from '../../../api/ecoApi';
 
 import { NavigationProp } from '@react-navigation/native';
 import { useNetwork } from '../../../contexts/NetworkContext';
@@ -49,35 +49,29 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
     const canTakeResponsibility = () => userInfo && hasAccess(userInfo, 'operacao', 1);
     const canFinishOperation = () => userInfo && hasAccess(userInfo, 'operacao', 1);
 
+    const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
     useEffect(() => {
-        const buscarProgramacoes = () => {
-            const ref = database().ref('programacoes');
-
-            ref.on('value', snapshot => {
-                const data = snapshot.val();
-                if (data) {
-                    const programacoesArray = Object.entries(data).map(([key, value]: [string, any]) => ({
-                        firebaseKey: key,
-                        ...value
-                    }));
-
-                    // Ordena por data
-                    const programacoesOrdenadas = programacoesArray.sort((a, b) => {
-                        return new Date(a.dataEntrega).getTime() - new Date(b.dataEntrega).getTime();
-                    });
-
-                    setProgramacoes(programacoesOrdenadas);
-                } else {
-                    setProgramacoes([]);
-                }
+        const buscarProgramacoes = async () => {
+            try {
+                const data: ProgramacaoEquipamento[] = await ecoApi.list('programacoes');
+                const ordenadas = data.sort((a, b) =>
+                    new Date(a.dataEntrega ?? 0).getTime() - new Date(b.dataEntrega ?? 0).getTime()
+                );
+                setProgramacoes(ordenadas);
+            } catch (error) {
+                console.error('Erro ao buscar programações:', error);
+            } finally {
                 setLoading(false);
-            });
-
-            // Cleanup listener
-            return () => ref.off();
+            }
         };
 
         buscarProgramacoes();
+        pollIntervalRef.current = setInterval(buscarProgramacoes, 30000);
+
+        return () => {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        };
     }, []);
 
     // Função de deletar modificada com verificação de acesso
@@ -96,9 +90,7 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
             setLoading(true);
             setDeleteDialogVisible(false);
 
-            await database()
-                .ref(`programacoes/${programacao.firebaseKey}`)
-                .remove();
+            await ecoApi.delete('programacoes', programacao.id);
 
             showGlobalToast(
                 'success',
@@ -144,15 +136,8 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
                 }
             };
 
-            // Salvar no Firebase Database (não real-time)
-            await database()
-                .ref(`historico/${programacao.firebaseKey}`)
-                .set(conclusaoData);
-
-            // Remover da lista de programações ativas
-            await database()
-                .ref(`programacoes/${programacao.firebaseKey}`)
-                .remove();
+            await ecoApi.create('historico', conclusaoData);
+            await ecoApi.delete('programacoes', programacao.id);
 
             showGlobalToast('success', 'Sucesso', 'Operação concluída com sucesso!', 3000);
         } catch (error) {
@@ -245,9 +230,9 @@ const ListaProgramacoes = ({ navigation }: { navigation: NavigationProp<any> }) 
         }
 
         try {
-            await database()
-                .ref(`programacoes/${programacao.firebaseKey}/${tipo === 'carregamento' ? 'responsavelCarregamento' : 'responsavelOperacao'}`)
-                .set(responsavel);
+            await ecoApi.update('programacoes', programacao.id, {
+                [tipo === 'carregamento' ? 'responsavelCarregamento' : 'responsavelOperacao']: responsavel
+            });
 
             // Atualiza o estado local após assumir a operação
             if (tipo === 'operacao') {

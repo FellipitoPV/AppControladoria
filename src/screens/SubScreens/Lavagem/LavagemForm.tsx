@@ -163,6 +163,7 @@ function SelectField({
   error = false,
   leftIcon,
   searchable = false,
+  freeSolo = false,
 }: {
   placeholder: string;
   value: string;
@@ -172,18 +173,25 @@ function SelectField({
   error?: boolean;
   leftIcon?: string;
   searchable?: boolean;
+  freeSolo?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const searchRef = useRef<TextInput>(null);
 
-  const selectedLabel = options.find(o => o.value === value)?.label ?? '';
+  const selectedLabel = options.find(o => o.value === value)?.label ?? value;
 
   const filtered = searchable && search.trim()
     ? options.filter(o =>
         o.label.toLowerCase().includes(search.toLowerCase()),
       )
     : options;
+
+  // No modo freeSolo, mostra opção de usar o texto digitado se não houver match exato
+  const showFreeSoloOption =
+    freeSolo &&
+    search.trim().length > 0 &&
+    !options.some(o => o.value.toLowerCase() === search.trim().toLowerCase());
 
   const handleOpen = () => {
     if (disabled) return;
@@ -193,6 +201,14 @@ function SelectField({
 
   const handleSelect = (item: SelectOption) => {
     onChange(item);
+    setOpen(false);
+    setSearch('');
+  };
+
+  const handleFreeSoloConfirm = () => {
+    const trimmed = search.trim();
+    if (!trimmed) return;
+    onChange({label: trimmed, value: trimmed});
     setOpen(false);
     setSearch('');
   };
@@ -226,7 +242,7 @@ function SelectField({
             !value && sfStyles.triggerPlaceholder,
           ]}
           numberOfLines={1}>
-          {selectedLabel || placeholder}
+          {value ? selectedLabel : placeholder}
         </Text>
         {!disabled && (
           <Icon
@@ -264,12 +280,14 @@ function SelectField({
               <TextInput
                 ref={searchRef}
                 style={sfStyles.searchInput}
-                placeholder="Buscar..."
+                placeholder={freeSolo ? 'Buscar ou digitar...' : 'Buscar...'}
                 placeholderTextColor={customTheme.colors.onSurfaceVariant}
                 value={search}
                 onChangeText={setSearch}
                 autoFocus
                 autoCapitalize="none"
+                onSubmitEditing={freeSolo ? handleFreeSoloConfirm : undefined}
+                returnKeyType={freeSolo ? 'done' : 'search'}
               />
               {search.length > 0 && (
                 <TouchableOpacity
@@ -283,6 +301,23 @@ function SelectField({
                 </TouchableOpacity>
               )}
             </View>
+          )}
+
+          {/* Opção freeSolo — usar texto digitado */}
+          {showFreeSoloOption && (
+            <TouchableOpacity
+              style={sfStyles.freeSoloOption}
+              onPress={handleFreeSoloConfirm}
+              activeOpacity={0.7}>
+              <Icon
+                name="plus-circle-outline"
+                size={18}
+                color={customTheme.colors.primary}
+              />
+              <Text style={sfStyles.freeSoloText}>
+                Usar: <Text style={sfStyles.freeSoloBold}>"{search.trim()}"</Text>
+              </Text>
+            </TouchableOpacity>
           )}
 
           {/* List */}
@@ -319,16 +354,18 @@ function SelectField({
               );
             }}
             ListEmptyComponent={
-              <View style={sfStyles.emptySearch}>
-                <Icon
-                  name="magnify-close"
-                  size={32}
-                  color={customTheme.colors.onSurfaceVariant}
-                />
-                <Text style={sfStyles.emptySearchText}>
-                  Nenhum resultado para "{search}"
-                </Text>
-              </View>
+              !showFreeSoloOption ? (
+                <View style={sfStyles.emptySearch}>
+                  <Icon
+                    name="magnify-close"
+                    size={32}
+                    color={customTheme.colors.onSurfaceVariant}
+                  />
+                  <Text style={sfStyles.emptySearchText}>
+                    Nenhum resultado para "{search}"
+                  </Text>
+                </View>
+              ) : null
             }
           />
         </View>
@@ -425,6 +462,25 @@ const sfStyles = StyleSheet.create({
     color: customTheme.colors.primary,
     fontWeight: '600',
   },
+  freeSoloOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: customTheme.colors.primaryContainer,
+    borderBottomWidth: 1,
+    borderBottomColor: customTheme.colors.outlineVariant,
+  },
+  freeSoloText: {
+    fontSize: 14,
+    color: customTheme.colors.onSurface,
+    flex: 1,
+  },
+  freeSoloBold: {
+    fontWeight: '700',
+    color: customTheme.colors.primary,
+  },
   emptySearch: {
     alignItems: 'center',
     paddingVertical: 32,
@@ -460,7 +516,7 @@ export default function LavagemForm({
   } = route?.params || {};
 
   // ── Form fields ─────────────────────────────────────────────────────────────
-  const [responsavel, setResponsavel] = useState('');
+  const [responsavel, setResponsavel] = useState(userInfo?.user || '');
   const [dataEHora, setDataEHora] = useState(new Date());
   const [veiculo, setVeiculo] = useState(placa || '');
   const [tipoVeiculo, setTipoVeiculo] = useState('veiculo');
@@ -480,11 +536,6 @@ export default function LavagemForm({
   const [responsaveisOptions, setResponsaveisOptions] = useState<
     {label: string; value: string}[]
   >([]);
-  const [customVeiculos, setCustomVeiculos] = useState<
-    {value: string; label: string; tipo: string}[]
-  >([]);
-  const [showCustomPlate, setShowCustomPlate] = useState(false);
-  const [customPlateInput, setCustomPlateInput] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [productModalVisible, setProductModalVisible] = useState(false);
@@ -504,7 +555,6 @@ export default function LavagemForm({
       value: item.value,
       tipo: 'equipamento',
     })),
-    ...customVeiculos,
   ];
 
   // ── Remote data ──────────────────────────────────────────────────────────────
@@ -512,16 +562,40 @@ export default function LavagemForm({
     ecoApi
       .list('RespLavagens')
       .then(data => {
-        console.log('[RespLavagens] resposta:', JSON.stringify(data));
-        const options = data
+        const fromApi = data
           .filter((item: any) => !!item.value)
           .map((item: any) => ({label: item.value, value: item.value}));
-        setResponsaveisOptions(options);
+
+        // Garante que o usuário logado aparece como primeira opção
+        const nomeUsuario = userInfo?.user;
+        if (nomeUsuario) {
+          const jaExiste = fromApi.some(
+            (o: {value: string}) => o.value === nomeUsuario,
+          );
+          if (!jaExiste) {
+            fromApi.unshift({label: nomeUsuario, value: nomeUsuario});
+          } else {
+            // Move para o topo
+            const idx = fromApi.findIndex(
+              (o: {value: string}) => o.value === nomeUsuario,
+            );
+            fromApi.unshift(fromApi.splice(idx, 1)[0]);
+          }
+        }
+
+        setResponsaveisOptions(fromApi);
       })
       .catch(err => {
         console.error('[RespLavagens] erro:', err);
       });
-  }, []);
+  }, [userInfo]);
+
+  // Pré-selecionar responsável com o usuário logado no modo create
+  useEffect(() => {
+    if (mode === 'create' && userInfo?.user) {
+      setResponsavel(userInfo.user);
+    }
+  }, [userInfo?.user, mode]);
 
   useEffect(() => {
     ecoApi
@@ -905,6 +979,7 @@ export default function LavagemForm({
             }}
             leftIcon="account"
             searchable
+            freeSolo
             error={!!errors.responsavel}
           />
           {errors.responsavel ? (
@@ -977,63 +1052,13 @@ export default function LavagemForm({
             }}
             leftIcon={tipoVeiculo === 'equipamento' ? 'wrench' : 'car'}
             searchable
+            freeSolo
             disabled={!!placa}
             error={!!errors.veiculo}
           />
           {errors.veiculo ? (
             <Text style={styles.errorText}>{errors.veiculo}</Text>
           ) : null}
-
-          {!placa && (
-            <TouchableOpacity
-              style={styles.customPlateToggle}
-              onPress={() => setShowCustomPlate(p => !p)}
-              activeOpacity={0.7}>
-              <Icon
-                name={showCustomPlate ? 'chevron-up' : 'plus-circle-outline'}
-                size={16}
-                color={customTheme.colors.primary}
-              />
-              <Text style={styles.customPlateToggleText}>
-                {showCustomPlate
-                  ? 'Cancelar'
-                  : 'Não está na lista? Adicionar manualmente'}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {showCustomPlate && (
-            <View style={styles.customPlateRow}>
-              <PaperInput
-                mode="outlined"
-                label="Digite a placa"
-                value={customPlateInput}
-                onChangeText={t => setCustomPlateInput(t.toUpperCase())}
-                style={styles.customPlateInput}
-                autoCapitalize="characters"
-                dense
-              />
-              <TouchableOpacity
-                style={styles.customPlateAddBtn}
-                onPress={() => {
-                  const val = customPlateInput.trim().toUpperCase();
-                  if (!val) return;
-                  const tipo = detectTipoVeiculo(val);
-                  setCustomVeiculos(p => [
-                    ...p,
-                    {value: val, label: `${val} — Manual`, tipo},
-                  ]);
-                  setVeiculo(val);
-                  setTipoVeiculo(tipo);
-                  setShowEquipmentNumber(tipo === 'equipamento');
-                  setCustomPlateInput('');
-                  setShowCustomPlate(false);
-                  setErrors(e => ({...e, veiculo: ''}));
-                }}>
-                <Icon name="check" size={20} color={customTheme.colors.onPrimary} />
-              </TouchableOpacity>
-            </View>
-          )}
 
           {showEquipmentNumber && (
             <>
@@ -1397,29 +1422,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Custom Plate
-  customPlateToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 10,
-  },
-  customPlateToggleText: {fontSize: 13, color: customTheme.colors.primary},
-  customPlateRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
-    alignItems: 'center',
-  },
-  customPlateInput: {flex: 1, backgroundColor: customTheme.colors.surface},
-  customPlateAddBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: customTheme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   // Products
   emptyText: {

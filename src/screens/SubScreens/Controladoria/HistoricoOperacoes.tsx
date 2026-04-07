@@ -10,13 +10,12 @@ import {
 import {Container, ProgramacaoEquipamento} from './types/logisticTypes';
 import {Dialog, Portal, Surface, Text} from 'react-native-paper';
 import React, {useEffect, useState} from 'react';
-import {getDatabase, onValue, ref, remove} from 'firebase/database';
 
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {NavigationProp} from '@react-navigation/native';
 import {customTheme} from '../../../theme/theme';
-import {dbRealTime} from '../../../../firebase';
+import {ecoApi} from '../../../api/ecoApi';
 import {showGlobalToast} from '../../../helpers/GlobalApi';
 import {useUser} from '../../../contexts/userContext';
 
@@ -53,33 +52,13 @@ const HistoricoOperacoes = ({
 
   const buscarHistorico = async () => {
     try {
-      // Busca todos os registros do histórico
-      const snapshot = await new Promise((resolve, reject) => {
-        onValue(ref(dbRealTime(), 'historico'), snap => resolve(snap), reject);
-      });
+      const data: ProgramacaoEquipamento[] = await ecoApi.list('historico');
 
-      const data = (snapshot as any)?.val();
+      const historicoOrdenado = data.sort((a, b) =>
+        new Date(b.dataConclusao ?? 0).getTime() - new Date(a.dataConclusao ?? 0).getTime()
+      );
 
-      if (data) {
-        const historicoArray = Object.entries(data).map(
-          ([key, value]: [string, any]) => ({
-            firebaseKey: key,
-            ...value,
-          }),
-        );
-
-        // Ordena por data de conclusão, mais recente primeiro
-        const historicoOrdenado = historicoArray.sort((a, b) => {
-          return (
-            new Date(b.dataConclusao).getTime() -
-            new Date(a.dataConclusao).getTime()
-          );
-        });
-
-        setOperacoes(historicoOrdenado);
-      } else {
-        setOperacoes([]);
-      }
+      setOperacoes(historicoOrdenado);
     } catch (error) {
       console.error('Erro ao buscar histórico:', error);
     } finally {
@@ -92,15 +71,10 @@ const HistoricoOperacoes = ({
     if (!selectedOperacao) return;
 
     try {
-      await remove(
-        ref(dbRealTime(), `historico/${selectedOperacao.firebaseKey}`),
-      );
+      await ecoApi.delete('historico', selectedOperacao.id);
 
-      // Atualiza a lista local
       setOperacoes(prevOperacoes =>
-        prevOperacoes.filter(
-          op => op.firebaseKey !== selectedOperacao.firebaseKey,
-        ),
+        prevOperacoes.filter(op => op.id !== selectedOperacao.id),
       );
 
       showGlobalToast(

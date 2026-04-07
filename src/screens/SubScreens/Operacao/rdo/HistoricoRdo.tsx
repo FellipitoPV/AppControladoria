@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Surface, Text, Card, Chip } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore from '@react-native-firebase/firestore';
+import { ecoApi, ecoStorage, BASE_URL } from '../../../../api/ecoApi';
 import ConfirmationModal from '../../../../assets/components/ConfirmationModal';
 import ModernHeader from '../../../../assets/components/ModernHeader';
 import { useUser } from '../../../../contexts/userContext';
@@ -20,7 +20,6 @@ import { customTheme } from '../../../../theme/theme';
 import { hasAccess } from '../../../Adm/types/admTypes';
 import DetalheRdoModal from './Components/DetalheRdoModal';
 import { FormDataInterface } from './Types/rdoTypes';
-import storage from '@react-native-firebase/storage';
 
 interface HistoricoRdoProps {
     navigation: any;
@@ -50,53 +49,45 @@ export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
         try {
             setLoading(true);
 
-            const snapshot = await firestore()
-                .collection('relatoriosRDO')
-                .orderBy('createdAt', 'desc')
-                .get();
+            const allData = await ecoApi.list('relatoriosRDO');
 
-            // console.log(`Quantidade de relatórios: ${snapshot.size}`);
-
-            const dados = snapshot.docs.map(doc => {
-                const data = doc.data() as FormDataInterface;
-                return {
-                    id: doc.id,
-                    numeroRdo: data.numeroRdo || doc.id,
-                    cliente: data.cliente || '',
-                    clienteNome: data.clienteNome || '',
-                    servico: data.servico || '',
-                    responsavel: data.responsavel || '',
-                    material: data.material || '',
-                    funcao: data.funcao || '',
-                    inicioOperacao: data.inicioOperacao || '',
-                    terminoOperacao: data.terminoOperacao || '',
-                    data: data.data || '',
-                    condicaoTempo: data.condicaoTempo || { manha: '', tarde: '', noite: '' },
-                    diaSemana: data.diaSemana || '',
-                    profissionais: data.profissionais || [],
-                    equipamentos: data.equipamentos || [],
-                    atividades: data.atividades || [],
-                    ocorrencias: data.ocorrencias || [],
-                    comentarioGeral: data.comentarioGeral || '',
-                    createdAt: data.createdAt || null,
-                    createdBy: data.createdBy || '',
-                    photos: Array.isArray(data.photos)
-                        ? data.photos.map(photo => ({
-                            uri: photo.uri || '',
-                            id: photo.id || '',
-                            filename: photo.filename || ''
-                        }))
-                        : [],
-                    pdfUrl: data.pdfUrl,
-                    lastPdfGenerated: data.lastPdfGenerated,
-                    updatedAt: data.updatedAt,
-                } as FormDataInterface;
-            });
+            const dados = allData.map((data: any) => ({
+                id: data._id || data.id,
+                numeroRdo: data.numeroRdo || data._id || data.id,
+                cliente: data.cliente || '',
+                clienteNome: data.clienteNome || '',
+                servico: data.servico || '',
+                responsavel: data.responsavel || '',
+                material: data.material || '',
+                funcao: data.funcao || '',
+                inicioOperacao: data.inicioOperacao || '',
+                terminoOperacao: data.terminoOperacao || '',
+                data: data.data || '',
+                condicaoTempo: data.condicaoTempo || { manha: '', tarde: '', noite: '' },
+                diaSemana: data.diaSemana || '',
+                profissionais: data.profissionais || [],
+                equipamentos: data.equipamentos || [],
+                atividades: data.atividades || [],
+                ocorrencias: data.ocorrencias || [],
+                comentarioGeral: data.comentarioGeral || '',
+                createdAt: data.createdAt || null,
+                createdBy: data.createdBy || '',
+                photos: Array.isArray(data.photos)
+                    ? data.photos.map((photo: any) => ({
+                        uri: photo.uri || '',
+                        id: photo.id || '',
+                        filename: photo.filename || ''
+                    }))
+                    : [],
+                pdfUrl: data.pdfUrl,
+                lastPdfGenerated: data.lastPdfGenerated,
+                updatedAt: data.updatedAt,
+            } as FormDataInterface));
 
             // Ordenar por data de criação (mais recente primeiro)
-            const dadosOrdenados = dados.sort((a, b) => {
-                const dataA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
-                const dataB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
+            const dadosOrdenados = dados.sort((a: FormDataInterface, b: FormDataInterface) => {
+                const dataA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const dataB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                 return dataB - dataA;
             });
 
@@ -136,45 +127,30 @@ export default function HistoricoRdo({ navigation }: HistoricoRdoProps) {
 
     const handleDelete = async (id: string) => {
         try {
-            // Primeiro, obtenha a referência do documento para checar a URL do PDF
-            const docSnapshot = await firestore()
-                .collection('relatoriosRDO')
-                .doc(id)
-                .get();
+            const data = await ecoApi.getById('relatoriosRDO', id);
 
-            if (docSnapshot.exists) {
-                const data = docSnapshot.data();
-                const numeroRdo = data?.numeroRdo;
-
+            if (data) {
                 try {
                     // 1. Excluir PDF se existir
-                    if (data?.pdfUrl) {
-                        const fileRef = storage().ref(`RelatoriosRDO/${numeroRdo}.pdf`);
-                        await fileRef.delete();
+                    if (data.pdfUrl) {
+                        const filename = data.pdfUrl.replace(`${BASE_URL}/storage/files/`, '');
+                        await ecoStorage.delete(filename);
                     }
 
-                    // 2. Listar todos os arquivos na pasta de fotos
-                    const photosRef = storage().ref(`relatoriosPhotos/${numeroRdo}/fotos`);
-                    const photosList = await photosRef.listAll();
-
-                    // 3. Excluir cada arquivo encontrado
-                    const deletePromises = photosList.items.map(itemRef => itemRef.delete());
-                    await Promise.all(deletePromises);
-
-                    console.log(`Todos os arquivos em relatorios/${numeroRdo}/fotos foram excluídos`);
+                    // 2. Excluir fotos individualmente pelos filenames
+                    if (Array.isArray(data.photos)) {
+                        await Promise.all(
+                            data.photos
+                                .filter((p: any) => p.filename)
+                                .map((p: any) => ecoStorage.delete(p.filename))
+                        );
+                    }
                 } catch (storageError) {
                     console.error('Erro ao excluir arquivos:', storageError);
                 }
-
-                // 4. Excluir o documento do Firestore
-                await firestore().collection('relatoriosRDO').doc(id).delete();
             }
 
-            // Depois exclua o documento
-            await firestore()
-                .collection('relatoriosRDO')
-                .doc(id)
-                .delete();
+            await ecoApi.delete('relatoriosRDO', id);
 
             showGlobalToast('success', 'Sucesso', 'Relatório excluído com sucesso', 3000);
             onRefresh();

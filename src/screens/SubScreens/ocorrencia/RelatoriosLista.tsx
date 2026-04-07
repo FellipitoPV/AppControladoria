@@ -18,7 +18,7 @@ import {
     Divider,
 } from 'react-native-paper';
 import { customTheme } from '../../../theme/theme';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import { ecoApi } from '../../../api/ecoApi';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
@@ -40,7 +40,7 @@ interface RelatorioOcorrencia {
     obs?: string;
     pdfUrl: string;
     storagePath: string;
-    createdAt: FirebaseFirestoreTypes.Timestamp;
+    createdAt: string;
 }
 
 const RelatorioOcorrenciaList: React.FC = () => {
@@ -65,14 +65,10 @@ const RelatorioOcorrenciaList: React.FC = () => {
             setLoading(true);
             console.log('Iniciando busca com filtros:', dateFilter);
 
-            let queryRef: FirebaseFirestoreTypes.Query = firestore()
-                .collection('relatoriosOcorrencia')
-                .orderBy('data', isDescending ? 'desc' : 'asc');
+            const allData = await ecoApi.list('relatoriosOcorrencia');
+            console.log('Número de documentos encontrados:', allData.length);
 
-            const snapshot = await queryRef.get();
-            console.log('Número de documentos encontrados:', snapshot.size);
-
-            if (snapshot.empty) {
+            if (allData.length === 0) {
                 console.log('Nenhum documento encontrado');
                 setRelatorios([]);
                 setDisplayedRelatorios([]);
@@ -80,13 +76,7 @@ const RelatorioOcorrenciaList: React.FC = () => {
                 return;
             }
 
-            let dados = snapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data
-                } as RelatorioOcorrencia;
-            });
+            let dados = allData as RelatorioOcorrencia[];
 
             // Aplicar filtro de data localmente
             if (dateFilter) {

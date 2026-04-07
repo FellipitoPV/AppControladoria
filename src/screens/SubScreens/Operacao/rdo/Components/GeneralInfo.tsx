@@ -4,7 +4,6 @@ import {Text, TextInput, ActivityIndicator} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {Dropdown} from 'react-native-element-dropdown';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import {collection, getDocs} from 'firebase/firestore';
 import {customTheme} from '../../../../../theme/theme';
 import {
   DropdownRef,
@@ -14,7 +13,6 @@ import {
   SERVICOS,
 } from '../Types/rdoTypes';
 import {formatDate} from '../Utils/formUtils';
-import {db} from '../../../../../../firebase';
 import {useBackgroundSync} from '../../../../../contexts/backgroundSyncContext';
 
 interface GeneralInfoProps {

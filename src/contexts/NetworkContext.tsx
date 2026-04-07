@@ -1,16 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
-    checkForDuplicate,
     checkInternetConnection,
     sendDataToFirebase,
     showGlobalToast
 } from '../helpers/GlobalApi';
-import { collection, getDocs, query, where } from 'firebase/firestore';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Compostagem } from '../helpers/Types';
 import NetInfo from "@react-native-community/netinfo";
-import { db } from '../../firebase';
+import { ecoApi } from '../api/ecoApi';
 
 // Tipos
 interface NetworkContextData {
@@ -132,35 +130,22 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 if (!item || !item.data) continue;
     
                 try {
-                    // Primeiro, verifica se já existe no Firebase
-                    const q = query(
-                        collection(db(), 'compostagens'),
-                        where('data', '==', item.data),
-                    );
-                    const existingDoc = await getDocs(q);
-    
-                    if (!existingDoc.empty) {
-                        // Se já existe no Firebase, considera como sucesso
-                        console.log('Documento já existe no Firebase - removendo dos pendentes');
+                    // Verifica se já existe na API
+                    const existing = await ecoApi.list('compostagens', { data: item.data });
+
+                    if (existing.length > 0) {
+                        console.log('Documento já existe na API - removendo dos pendentes');
                         successCount++;
-                        continue; // Não adiciona aos remainingItems
+                        continue;
                     }
-    
+
                     // Se não existe, tenta enviar
                     const success = await sendDataToFirebase(item);
-    
+
                     if (success) {
-                        // Confirma se foi salvo
-                        const confirmQuery = await getDocs(q);
-    
-                        if (!confirmQuery.empty) {
-                            console.log('Documento enviado e confirmado no Firebase');
-                            successCount++;
-                            continue; // Não adiciona aos remainingItems
-                        } else {
-                            console.error('Documento não encontrado após envio');
-                            throw new Error('Falha na confirmação do envio');
-                        }
+                        console.log('Documento enviado e confirmado');
+                        successCount++;
+                        continue;
                     }
     
                     // Se chegou aqui, não foi sucesso

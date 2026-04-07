@@ -14,7 +14,7 @@ import {
 import { Surface, Text } from 'react-native-paper';
 import React, { useEffect, useRef, useState } from 'react';
 import { BASE_URL, ecoApi, ecoStorage } from '../../../api/ecoApi';
-import { getTipoLavagemDetails, getTipoVeiculoColor, getTipoVeiculoIcon, getTipoVeiculoLabel } from './Components/utils/lavagemUtils';
+import { getVeiculoInfo, getTipoLavagemDetails } from './Components/utils/lavagemUtils';
 
 import ConfirmationModal from '../../../assets/components/ConfirmationModal';
 import DetalheLavagemModal from './Components/DetalheLavagemModal';
@@ -277,8 +277,8 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
     };
 
     const renderLavagemCard = (lavagem: LavagemInterface, index: number) => {
-        const tipoInfo = getTipoLavagemDetails(lavagem.tipoLavagem, lavagem.veiculo?.tipo);
-        const veiculoColor = getTipoVeiculoColor(lavagem.veiculo?.tipo);
+        const tipoInfo = getTipoLavagemDetails(lavagem.tipoLavagem);
+        const veiculoInfo = getVeiculoInfo(lavagem.veiculo?.tipo);
         const dataFormatada = formatarData(lavagem.data, lavagem.hora);
         const produtosValidos = (lavagem.produtos || []).filter(p => p.nome && !isNaN(p.quantidade));
         const todasFotos = [
@@ -322,11 +322,11 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
 
                         {/* ── Linha 2: veículo (destaque) ───────────────── */}
                         <View style={styles.veiculoRow}>
-                            <View style={[styles.veiculoIconBox, { backgroundColor: `${veiculoColor}18` }]}>
+                            <View style={[styles.veiculoIconBox, { backgroundColor: `${veiculoInfo.color}18` }]}>
                                 <MaterialCommunityIcons
-                                    name={getTipoVeiculoIcon(lavagem.veiculo?.tipo)}
+                                    name={veiculoInfo.icon}
                                     size={22}
-                                    color={veiculoColor}
+                                    color={veiculoInfo.color}
                                 />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -337,7 +337,7 @@ export default function HistoricoLavagem({ navigation }: HistoricoLavagemProps) 
                                         : ''}
                                 </Text>
                                 <Text style={styles.veiculoTipo}>
-                                    {getTipoVeiculoLabel(lavagem.veiculo?.tipo)}
+                                    {veiculoInfo.label}
                                 </Text>
                             </View>
                         </View>

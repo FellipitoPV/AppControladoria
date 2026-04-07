@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     StyleSheet,
     View,
@@ -16,13 +16,7 @@ import {
     Surface,
 } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {
-    collection,
-    query,
-    orderBy,
-    onSnapshot,
-} from 'firebase/firestore';
-import { db } from '../../../../../firebase';
+import { ecoApi } from '../../../../api/ecoApi';
 import {
     ControleDocumento,
     AreaDocumento,
@@ -60,33 +54,30 @@ const ControleDocumentosScreen: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTab, setSelectedTab] = useState<TabValue>('todos');
     const [selectedArea, setSelectedArea] = useState<AreaDocumento | null>(null);
+    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    const fetchDocumentos = useCallback(async () => {
+        try {
+            const data: ControleDocumento[] = await ecoApi.list('controleDocumentos');
+            data.sort((a, b) =>
+                new Date(b.dataCriacao ?? 0).getTime() - new Date(a.dataCriacao ?? 0).getTime()
+            );
+            setList(data);
+        } catch (error) {
+            console.error('Erro ao carregar documentos:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
 
     useEffect(() => {
-        const q = query(
-            collection(db(), 'controleDocumentos'),
-            orderBy('dataCriacao', 'desc'),
-        );
-
-        const unsubscribe = onSnapshot(
-            q,
-            snapshot => {
-                const data: ControleDocumento[] = snapshot.docs.map(d => ({
-                    id: d.id,
-                    ...d.data(),
-                } as ControleDocumento));
-                setList(data);
-                setLoading(false);
-                setRefreshing(false);
-            },
-            error => {
-                console.error('Erro ao carregar documentos:', error);
-                setLoading(false);
-                setRefreshing(false);
-            },
-        );
-
-        return () => unsubscribe();
-    }, []);
+        fetchDocumentos();
+        pollIntervalRef.current = setInterval(fetchDocumentos, 60000);
+        return () => {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        };
+    }, [fetchDocumentos]);
 
     const filterList = useCallback(() => {
         let filtered = [...list];
@@ -261,7 +252,7 @@ const ControleDocumentosScreen: React.FC = () => {
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
-                        onRefresh={() => setRefreshing(true)}
+                        onRefresh={() => { setRefreshing(true); fetchDocumentos(); }}
                         colors={[customTheme.colors.primary]}
                     />
                 }

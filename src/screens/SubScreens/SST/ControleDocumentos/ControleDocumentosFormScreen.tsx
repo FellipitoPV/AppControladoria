@@ -11,15 +11,7 @@ import {
 import { Text, Surface } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import {
-    collection,
-    addDoc,
-    doc,
-    updateDoc,
-    deleteDoc,
-    serverTimestamp,
-} from 'firebase/firestore';
-import { db } from '../../../../../firebase';
+import { ecoApi } from '../../../../api/ecoApi';
 import {
     ControleDocumento,
     AreaDocumento,
@@ -86,11 +78,11 @@ const ControleDocumentosFormScreen: React.FC = () => {
         setSaving(true);
         try {
             if (item?.id) {
-                await updateDoc(doc(db(), 'controleDocumentos', item.id), { ...form });
+                await ecoApi.update('controleDocumentos', item.id, { ...form });
             } else {
-                await addDoc(collection(db(), 'controleDocumentos'), {
+                await ecoApi.create('controleDocumentos', {
                     ...form,
-                    dataCriacao: serverTimestamp(),
+                    dataCriacao: new Date().toISOString(),
                 });
             }
             navigation.goBack();
@@ -114,7 +106,7 @@ const ControleDocumentosFormScreen: React.FC = () => {
                     onPress: async () => {
                         if (!item?.id) return;
                         try {
-                            await deleteDoc(doc(db(), 'controleDocumentos', item.id));
+                            await ecoApi.delete('controleDocumentos', item.id);
                             navigation.goBack();
                         } catch (error) {
                             console.error('Erro ao excluir:', error);

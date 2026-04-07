@@ -67,21 +67,15 @@ export interface FormDataInterface {
     atividades?: Atividade[];
     ocorrencias?: Ocorrencia[];
     comentarioGeral?: string;
-    createdAt: any;
+    createdAt: string;
     createdBy: string;
     photos: Photo[];
     updatedBy: string;
-    updatedAt: any;
+    updatedAt: string;
 
     pdfUrl?: string;
-    lastPdfGenerated?: {
-        seconds: number;
-        nanoseconds: number;
-    };
-    lastUpdated?: {
-        seconds: number;
-        nanoseconds: number;
-    };
+    lastPdfGenerated?: string;
+    lastUpdated?: string;
 }
 
 export type RootStackParamList = {

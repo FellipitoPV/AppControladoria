@@ -15,7 +15,7 @@ import {
     Surface,
     Text
 } from 'react-native-paper';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 
 import FilterCard from './Components/Filtros/FilterCard';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -37,31 +37,7 @@ const RelatorioLavagens = ({ navigation }: { navigation: any }) => {
     const [lavagens, setLavagens] = useState<LavagemInterface[]>([]);
     const [loading, setLoading] = useState(false);
     const [placasFiltradas, setPlacasFiltradas] = useState<string[]>([]);
-    const [placasDisponiveis, setPlacasDisponiveis] = useState<Array<{
-        placa: string;
-        tipo: 'veiculo' | 'equipamento';
-        numeroEquipamento?: string;
-    }>>([]);
     const [firstTimeSearch, setFirstTimeSearch] = useState(true);
-
-    useEffect(() => {
-        carregarPlacasDisponiveis();
-    }, []);
-
-    const carregarPlacasDisponiveis = async () => {
-        try {
-            const data = await ecoApi.list('veiculos');
-            const placas = data.map((item: any) => ({
-                placa: item.placa,
-                tipo: item.tipo || 'veiculo',
-                numeroEquipamento: item.numeroEquipamento,
-            }));
-            setPlacasDisponiveis(placas);
-        } catch (error) {
-            console.error('Erro ao carregar placas:', error);
-            showGlobalToast('error', 'Erro', 'Não foi possível carregar as placas disponíveis', 4000);
-        }
-    };
 
     const formatarData = (data: Date) => {
         const dia = String(data.getDate()).padStart(2, '0');

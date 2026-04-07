@@ -27,11 +27,9 @@ import { showGlobalToast } from '../../../helpers/GlobalApi';
 import { clientes, RelatorioData } from '../../../helpers/Types';
 import api, { generateWordDocument } from '../../../helpers/generateApi';
 import { Asset, launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import { getStorage, ref, uploadBytes, getDownloadURL, uploadString } from '@react-native-firebase/storage';
-import firestore from '@react-native-firebase/firestore';
 import ImageResizer from 'react-native-image-resizer';
 import RNFS from 'react-native-fs';
-import storage from '@react-native-firebase/storage';
+import { ecoApi, ecoStorage } from '../../../api/ecoApi';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Share from 'react-native-share';
 import { Dropdown } from 'react-native-element-dropdown';
@@ -452,66 +450,32 @@ export default function FormularioOcorrencia() {
     };
 
     // Parte para salvar no storage e chamar API
-    const uploadImageToFirebase = async (imageUri: string, fileName: string) => {
+    const uploadImageToFirebase = async (imageUri: string, fileName: string): Promise<{ url: string; filename: string }> => {
         try {
-            const timestamp = new Date().getTime();
-            const fileNameSafe = `relatorio-images/${timestamp}-${fileName}`;
-            const reference = storage().ref(fileNameSafe);
-
-            // Upload do arquivo diretamente da URI
-            await reference.putFile(imageUri);
-
-            // Obter a URL de download
-            const downloadURL = await reference.getDownloadURL();
-
-            console.log('URL de download:', downloadURL);
-            return downloadURL;
-
+            const file = { uri: imageUri, type: 'image/jpeg', name: fileName };
+            const result = await ecoStorage.upload(file);
+            console.log('URL de download:', result.url);
+            return { url: result.url, filename: result.filename };
         } catch (error: any) {
             console.error('Erro detalhado no upload:', error);
             throw new Error(`Falha ao fazer upload da imagem: ${error.message}`);
         }
     };
 
-    const deleteImagesFolder = async () => {
+    const deleteImagesFolder = async (filenames: string[]) => {
         try {
-            // Referência para a pasta de imagens
-            const folderRef = storage().ref('relatorio-images');
-
-            // Listar todos os itens na pasta
-            const items = await folderRef.listAll();
-
-            // Deletar cada item
-            await Promise.all(items.items.map(item => item.delete()));
-
-            console.log('Pasta de imagens limpa com sucesso');
+            await Promise.all(filenames.map(filename => ecoStorage.delete(filename)));
+            console.log('Imagens temporárias removidas com sucesso');
         } catch (error) {
-            console.error('Erro ao limpar pasta de imagens:', error);
+            console.error('Erro ao remover imagens temporárias:', error);
         }
     };
 
     const uploadPDFToFirebase = async (pdfPath: string, fileName: string) => {
         try {
-            // Criamos um nome único com timestamp para evitar conflitos
-            const timestamp = new Date().getTime();
-            const cleanClientName = cliente.replace(/\s*\([^)]*\)/, '').trim();
-            const storagePath = `relatorios/${cleanClientName}/RO-${numero}-${timestamp}.pdf`;
-
-            // Cria a referência no storage
-            const reference = storage().ref(storagePath);
-
-            // Faz o upload do arquivo
-            await reference.putFile(pdfPath);
-
-            // Obtém a URL do documento
-            const downloadURL = await reference.getDownloadURL();
-
-            return {
-                url: downloadURL,
-                path: storagePath,
-                fileName: fileName
-            };
-
+            const file = { uri: pdfPath, type: 'application/pdf', name: fileName };
+            const result = await ecoStorage.upload(file);
+            return { url: result.url, path: result.filename, fileName };
         } catch (error) {
             console.error('Erro ao fazer upload do PDF:', error);
             throw new Error(`Falha ao fazer upload do documento: ${error}`);
@@ -600,13 +564,8 @@ export default function FormularioOcorrencia() {
 
             // Fazer upload de cada foto e obter as URLs
             const uploadedPhotos = await Promise.all(photos.map(async photo => {
-                // Aqui precisamos da URI da imagem, não do base64
-                // Se você tiver acesso à URI original da foto, use ela aqui
-                const downloadURL = await uploadImageToFirebase(photo.img, photo.imgName);
-                return {
-                    image: downloadURL,
-                    name: photo.imgName
-                };
+                const { url, filename } = await uploadImageToFirebase(photo.img, photo.imgName);
+                return { image: url, name: photo.imgName, filename };
             }));
 
             showGlobalToast(
@@ -650,8 +609,8 @@ export default function FormularioOcorrencia() {
 
             const uploadedPDF = await uploadPDFToFirebase(localDocumentPath, fileName);
 
-            // Salvando informações do PDF no firebase
-            await firestore().collection('relatoriosOcorrencia').add({
+            // Salvando informações do PDF na API
+            await ecoApi.create('relatoriosOcorrencia', {
                 numeroRO: numero,
                 cliente: cleanClientName,
                 resp: userInfo?.user || '',
@@ -659,7 +618,7 @@ export default function FormularioOcorrencia() {
                 data: formatDate(data),
                 pdfUrl: uploadedPDF.url,
                 storagePath: uploadedPDF.path,
-                createdAt: firestore.FieldValue.serverTimestamp()
+                createdAt: new Date().toISOString(),
             });
 
             showGlobalToast(
@@ -671,7 +630,7 @@ export default function FormularioOcorrencia() {
 
             // Continua com o compartilhamento e limpeza
             await handleShare(localDocumentPath);
-            await deleteImagesFolder();
+            await deleteImagesFolder(uploadedPhotos.map(p => p.filename));
 
             // Opcionalmente, navegue para a tela inicial
             // navigation.navigate('Home');

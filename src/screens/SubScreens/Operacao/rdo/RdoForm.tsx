@@ -4,9 +4,8 @@ import { Surface, Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
-import firestore from '@react-native-firebase/firestore';
 import { debounce } from 'lodash';
-import storage from '@react-native-firebase/storage';
+import { ecoApi, ecoStorage } from '../../../../api/ecoApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import types and utils
@@ -99,11 +98,11 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         equipamentos: [],
         atividades: [], // Inicializar com uma atividade vazia
         ocorrencias: [], // Inicializar com array vazio
-        createdAt: null,
+        createdAt: '',
         createdBy: '',
         comentarioGeral: '',
         updatedBy: '',
-        updatedAt: null,
+        updatedAt: '',
         photos: [],
     });
 
@@ -247,7 +246,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         setSelectedPhoto(null);
     };
 
-    // Upload de imagens para o Firebase
+    // Upload de imagens para a API
     const uploadImagesToFirebase = async (photos: Photo[], relatorioId: string): Promise<Photo[]> => {
         try {
             const uploadedPhotos: Photo[] = [];
@@ -256,8 +255,8 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             for (const photo of photos) {
                 currentPhotoIndex++;
 
-                // Pular fotos que já são URLs do Firebase
-                if (photo?.uri?.startsWith('https://firebasestorage.googleapis.com')) {
+                // Pular fotos que já foram enviadas (já são URLs remotas)
+                if (photo?.uri && !photo.uri.startsWith('file://') && !photo.uri.startsWith('content://')) {
                     uploadedPhotos.push(photo);
                     continue;
                 }
@@ -266,23 +265,16 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                 if (photo?.uri?.startsWith('file://') || photo?.uri?.startsWith('content://')) {
                     const filename = photo.filename || photo.uri.substring(photo.uri.lastIndexOf('/') + 1);
                     const uniqueFilename = `${Date.now()}_${filename}`;
-                    const storageRef = storage().ref(`relatoriosPhotos/${relatorioId}/fotos/${uniqueFilename}`);
 
-                    const task = storageRef.putFile(photo.uri);
+                    const file = { uri: photo.uri, type: 'image/jpeg', name: uniqueFilename };
+                    const result = await ecoStorage.upload(file);
 
-                    // Monitorar progresso
-                    task.on('state_changed', snapshot => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        console.log(`Upload da imagem ${currentPhotoIndex}/${photos.length}: ${progress.toFixed(0)}%`);
-                    });
-
-                    await task;
-                    const downloadURL = await storageRef.getDownloadURL();
+                    console.log(`Upload da imagem ${currentPhotoIndex}/${photos.length} concluído`);
 
                     uploadedPhotos.push({
                         id: photo.id || Date.now().toString(),
-                        uri: downloadURL,
-                        filename: uniqueFilename
+                        uri: result.url,
+                        filename: result.filename
                     });
                 }
             }
@@ -290,21 +282,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             return uploadedPhotos;
         } catch (error: any) {
             console.error('Erro ao fazer upload das imagens:', error);
-
-            let errorMsg = 'Erro ao fazer upload das imagens.';
-            if (error.code === 'storage/unauthorized') {
-                errorMsg = 'Permissão negada para upload de imagens.';
-            } else if (error.code === 'storage/canceled') {
-                errorMsg = 'Upload de imagens cancelado.';
-            } else if (error.code === 'storage/retry-limit-exceeded') {
-                errorMsg = 'Tempo de upload excedido. Verifique sua conexão.';
-            } else if (error.code === 'storage/invalid-checksum') {
-                errorMsg = 'Erro no arquivo de imagem. Tente novamente.';
-            } else if (error.code === 'storage/unknown') {
-                errorMsg = 'Erro desconhecido durante o upload. Tente novamente.';
-            }
-
-            showGlobalToast('error', 'Erro', errorMsg, 4000);
+            showGlobalToast('error', 'Erro', 'Erro ao fazer upload das imagens.', 4000);
             throw error;
         }
     };
@@ -404,7 +382,7 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                 if (relatorioData.createdAt) {
                     rdo.createdAt = relatorioData.createdAt;
                 } else {
-                    rdo.createdAt = firestore.Timestamp.now();
+                    rdo.createdAt = new Date().toISOString();
                 }
 
                 if (relatorioData.createdBy) {
@@ -413,12 +391,11 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
                     rdo.createdBy = userInfo?.user || '';
                 }
 
-                // Sempre definir updatedAt e updatedBy para valores conhecidos
-                rdo.updatedAt = firestore.Timestamp.now();
+                rdo.updatedAt = new Date().toISOString();
                 rdo.updatedBy = userInfo?.id || '';
             } else {
                 // Para novos documentos
-                rdo.createdAt = firestore.Timestamp.now();
+                rdo.createdAt = new Date().toISOString();
                 rdo.createdBy = userInfo?.id || '';
                 rdo.updatedAt = null;
                 rdo.updatedBy = '';
@@ -448,22 +425,13 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
             // Limpar o objeto para garantir que não haja undefined
             rdo = cleanObject(rdo);
 
-            // Salvar no Firestore
             if (isEditMode && relatorioId) {
                 console.log("Atualizando documento existente");
-                await firestore()
-                    .collection('relatoriosRDO')
-                    .doc(relatorioId)
-                    .update(rdo);
-
+                await ecoApi.update('relatoriosRDO', relatorioId, rdo);
                 showGlobalToast('success', 'Sucesso', 'Relatório atualizado com sucesso', 4000);
             } else {
                 console.log("Criando novo documento");
-                await firestore()
-                    .collection('relatoriosRDO')
-                    .doc(numeroRdo)
-                    .set(rdo);
-
+                await ecoApi.create('relatoriosRDO', rdo);
                 showGlobalToast('success', 'Sucesso', 'Relatório registrado com sucesso', 4000);
             }
 
@@ -498,18 +466,15 @@ export default function RdoForm({ navigation, route }: RdoFormProps) {
         if (!isEditMode) {
             const gerarNumeroRdo = async () => {
                 try {
-                    const snapshot = await firestore()
-                        .collection('relatoriosRDO')
-                        .orderBy('numeroRdo', 'desc')
-                        .limit(1)
-                        .get();
+                    const allData = await ecoApi.list('relatoriosRDO');
 
                     let proximoNumero = 1;
-                    if (!snapshot.empty) {
-                        const ultimoRdo = snapshot.docs[0].data();
-                        if (ultimoRdo.numeroRdo) {
-                            proximoNumero = parseInt(ultimoRdo.numeroRdo) + 1;
-                        }
+                    if (allData.length > 0) {
+                        const maxNumero = allData.reduce((max: number, rdo: any) => {
+                            const num = parseInt(rdo.numeroRdo) || 0;
+                            return num > max ? num : max;
+                        }, 0);
+                        proximoNumero = maxNumero + 1;
                     }
 
                     const numeroFormatado = proximoNumero.toString().padStart(3, '0');

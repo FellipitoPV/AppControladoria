@@ -89,17 +89,17 @@ const QuickActionsGrid = () => {
           minLevel: 1, // Nível básico para acesso
         },
       },
-      {
-        id: '5',
-        title: 'Logística',
-        icon: 'truck-delivery',
-        color: customTheme.colors.primary,
-        route: 'LogisticaScreen',
-        access: {
-          moduleId: 'logistica',
-          minLevel: 1, // Nível básico para acesso
-        },
-      },
+      // {
+      //   id: '5',
+      //   title: 'Logística',
+      //   icon: 'truck-delivery',
+      //   color: customTheme.colors.primary,
+      //   route: 'LogisticaScreen',
+      //   access: {
+      //     moduleId: 'logistica',
+      //     minLevel: 1, // Nível básico para acesso
+      //   },
+      // },
       {
         id: '6',
         title: 'QSMS',

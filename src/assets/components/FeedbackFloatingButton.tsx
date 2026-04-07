@@ -18,7 +18,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useUser } from '../../contexts/userContext';
 import { showGlobalToast } from '../../helpers/GlobalApi';
 import { customTheme } from '../../theme/theme';
-import database from '@react-native-firebase/database';
+import { ecoApi } from '../../api/ecoApi';
 
 // Interface para o tipo de Feedback
 interface Feedback {
@@ -27,7 +27,7 @@ interface Feedback {
     type: 'improvement' | 'bug' | 'feature';
     description: string;
     app: string;
-    timestamp: any;
+    timestamp: string;
     isRead: boolean;
 }
 
@@ -82,13 +82,12 @@ export const FeedbackFloatingButton: React.FC = () => {
                 userName: userInfo.user,
                 type: feedbackType,
                 description: description.trim(),
-                timestamp: database.ServerValue.TIMESTAMP,
+                timestamp: new Date().toISOString(),
                 isRead: false,
                 app: 'Controladoria'
             };
 
-            // Enviar para o Firebase Realtime Database
-            await database().ref('/feedback').push(newFeedback);
+            await ecoApi.create('feedback', newFeedback);
 
             // Limpar estado e fechar modal
             setDescription('');

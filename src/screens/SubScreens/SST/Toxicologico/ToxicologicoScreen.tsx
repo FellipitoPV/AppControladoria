@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     StyleSheet,
     View,
@@ -14,13 +14,7 @@ import {
     Surface,
 } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {
-    collection,
-    query,
-    orderBy,
-    onSnapshot,
-} from 'firebase/firestore';
-import { db } from '../../../../../firebase';
+import { ecoApi } from '../../../../api/ecoApi';
 import { ToxicologicoInterface } from './ToxicologicoTypes';
 import { ToxicologicoCard } from './ToxicologicoCard';
 import ModernHeader from '../../../../assets/components/ModernHeader';
@@ -49,33 +43,30 @@ const ToxicologicoScreen: React.FC = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTab, setSelectedTab] = useState<TabValue>('todos');
+    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    const fetchList = useCallback(async () => {
+        try {
+            const data: ToxicologicoInterface[] = await ecoApi.list('toxicologico');
+            data.sort((a, b) =>
+                new Date(b.dataCriacao ?? 0).getTime() - new Date(a.dataCriacao ?? 0).getTime()
+            );
+            setList(data);
+        } catch (error) {
+            console.error('Erro ao carregar toxicológico:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
 
     useEffect(() => {
-        const q = query(
-            collection(db(), 'toxicologico'),
-            orderBy('dataCriacao', 'desc')
-        );
-
-        const unsubscribe = onSnapshot(
-            q,
-            snapshot => {
-                const data: ToxicologicoInterface[] = snapshot.docs.map(d => ({
-                    id: d.id,
-                    ...d.data(),
-                } as ToxicologicoInterface));
-                setList(data);
-                setLoading(false);
-                setRefreshing(false);
-            },
-            error => {
-                console.error('Erro ao carregar toxicológico:', error);
-                setLoading(false);
-                setRefreshing(false);
-            }
-        );
-
-        return () => unsubscribe();
-    }, []);
+        fetchList();
+        pollIntervalRef.current = setInterval(fetchList, 60000);
+        return () => {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        };
+    }, [fetchList]);
 
     useEffect(() => {
         filterList();
@@ -185,7 +176,7 @@ const ToxicologicoScreen: React.FC = () => {
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
-                        onRefresh={() => setRefreshing(true)}
+                        onRefresh={() => { setRefreshing(true); fetchList(); }}
                         colors={[customTheme.colors.primary]}
                     />
                 }

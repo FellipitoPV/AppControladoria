@@ -22,15 +22,7 @@ import {
 } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import {
-    collection,
-    addDoc,
-    updateDoc,
-    deleteDoc,
-    doc,
-    Timestamp,
-} from 'firebase/firestore';
-import { db } from '../../../../../firebase';
+import { ecoApi } from '../../../../api/ecoApi';
 import {
     DDSInterface,
     DDSFormData,
@@ -58,38 +50,20 @@ type RootStackParamList = {
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'DDSFormScreen'>;
 type RoutePropType = RouteProp<RootStackParamList, 'DDSFormScreen'>;
 
-const formatTimeValue = (time: Timestamp | string | any): string => {
+const formatTimeValue = (time: string): string => {
     if (!time) return '08:00';
 
     // Se já for string no formato HH:mm, retorna direto
-    if (typeof time === 'string' && /^\d{2}:\d{2}$/.test(time)) {
+    if (/^\d{2}:\d{2}$/.test(time)) {
         return time;
     }
 
-    // Se for Timestamp do Firebase
-    if (time instanceof Timestamp) {
-        const dateObj = time.toDate();
-        const hours = dateObj.getHours().toString().padStart(2, '0');
-        const minutes = dateObj.getMinutes().toString().padStart(2, '0');
-        return `${hours}:${minutes}`;
-    }
-
-    // Se for objeto com seconds (Timestamp serializado)
-    if (time && typeof time === 'object' && 'seconds' in time) {
-        const dateObj = new Date(time.seconds * 1000);
-        const hours = dateObj.getHours().toString().padStart(2, '0');
-        const minutes = dateObj.getMinutes().toString().padStart(2, '0');
-        return `${hours}:${minutes}`;
-    }
-
     // Se for string de data ISO
-    if (typeof time === 'string') {
-        const dateObj = new Date(time);
-        if (!isNaN(dateObj.getTime())) {
-            const hours = dateObj.getHours().toString().padStart(2, '0');
-            const minutes = dateObj.getMinutes().toString().padStart(2, '0');
-            return `${hours}:${minutes}`;
-        }
+    const dateObj = new Date(time);
+    if (!isNaN(dateObj.getTime())) {
+        const hours = dateObj.getHours().toString().padStart(2, '0');
+        const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+        return `${hours}:${minutes}`;
     }
 
     return '08:00';
@@ -141,11 +115,7 @@ const DDSFormScreen: React.FC = () => {
             setParticipantes(dds.participantes || []);
 
             if (dds.dataRealizacao) {
-                if (dds.dataRealizacao instanceof Timestamp) {
-                    setDataRealizacao(dds.dataRealizacao.toDate());
-                } else if (typeof dds.dataRealizacao === 'string') {
-                    setDataRealizacao(new Date(dds.dataRealizacao));
-                }
+                setDataRealizacao(new Date(dds.dataRealizacao));
             }
         }
     }, [dds]);
@@ -220,7 +190,7 @@ const DDSFormScreen: React.FC = () => {
                 titulo: titulo.trim(),
                 instrutor: instrutor.trim(),
                 funcao: funcao.trim(),
-                dataRealizacao: Timestamp.fromDate(dataRealizacao),
+                dataRealizacao: dataRealizacao.toISOString(),
                 horaInicio,
                 horaFim,
                 status,
@@ -230,15 +200,14 @@ const DDSFormScreen: React.FC = () => {
                 participantes,
                 dataCriacao: isEditMode && dds?.dataCriacao
                     ? dds.dataCriacao
-                    : Timestamp.now(),
+                    : new Date().toISOString(),
             };
 
             if (isEditMode && dds?.id) {
-                const docRef = doc(db(), 'dds', dds.id);
-                await updateDoc(docRef, ddsData);
+                await ecoApi.update('dds', dds.id, ddsData);
                 showGlobalToast('success', 'Sucesso', 'DDS atualizado com sucesso!');
             } else {
-                await addDoc(collection(db(), 'dds'), ddsData);
+                await ecoApi.create('dds', ddsData);
                 showGlobalToast('success', 'Sucesso', 'DDS criado com sucesso!');
             }
 
@@ -265,7 +234,7 @@ const DDSFormScreen: React.FC = () => {
 
                         setDeleteLoading(true);
                         try {
-                            await deleteDoc(doc(db(), 'dds', dds.id));
+                            await ecoApi.delete('dds', dds.id);
                             showGlobalToast('success', 'Sucesso', 'DDS excluído com sucesso!');
                             navigation.goBack();
                         } catch (error) {

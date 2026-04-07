@@ -1,5 +1,3 @@
-import { Timestamp } from 'firebase/firestore';
-
 export type DDSStatus = 'Planejado' | 'Realizado' | 'Cancelado';
 
 export interface Participante {
@@ -15,7 +13,7 @@ export interface DDSInterface {
     titulo: string;
     instrutor: string;
     funcao?: string;
-    dataRealizacao: Timestamp | string;
+    dataRealizacao: string;
     horaInicio: string;
     horaFim: string;
     status: DDSStatus;
@@ -25,7 +23,7 @@ export interface DDSInterface {
     anexos?: string[];
     documentoUrl?: string;
     observacoes?: string;
-    dataCriacao?: Timestamp | string;
+    dataCriacao?: string;
     createdBy?: string;
 }
 

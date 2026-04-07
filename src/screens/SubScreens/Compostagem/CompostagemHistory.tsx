@@ -12,9 +12,7 @@ import {
 } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 import React, { useCallback, useEffect, useState } from 'react';
-import { collection, deleteDoc, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
-import { db, dbStorage } from '../../../../firebase';
-import { deleteObject, ref } from 'firebase/storage';
+import { BASE_URL, ecoApi, ecoStorage } from '../../../api/ecoApi';
 
 import { Compostagem } from '../../../helpers/Types';
 import FullScreenImage from '../../../assets/components/FullScreenImage';
@@ -58,55 +56,27 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
 
     const fetchCompostagens = async () => {
         try {
-            let compostagemQuery = query(collection(db(), 'compostagens'));
+            const allData: Compostagem[] = await ecoApi.list('compostagens');
 
-            if (dateFilter) {
-                compostagemQuery = query(
-                    compostagemQuery,
-                    where('data', '>=', dateFilter.startDate),
-                    where('data', '<=', dateFilter.endDate)
-                );
-            }
-
-            const snapshot = await getDocs(compostagemQuery);
-
-            if (snapshot.empty) {
-                setCompostagens([]);
-                setDisplayedCompostagens([]);
-                setHasMoreData(false);
-                setLoading(false);
-                return;
-            }
-
-            let dados = snapshot.docs
-                .map(doc => {
-                    const data = doc.data() as Compostagem;
-                    let timestamp: string;
-
-                    if (data.createdAt) {
-                        timestamp = data.createdAt;
-                    } else {
-                        const dateStr = data.data || '1970-01-01';
-                        const timeStr = data.hora || '00:00';
-                        timestamp = `${dateStr}T${timeStr}:00.000Z`;
-                    }
-
-                    return {
-                        id: doc.id,
-                        ...data,
-                        timestamp,
-                    } as Compostagem & { timestamp: string };
+            let dados = allData
+                .map(item => {
+                    const timestamp = item.createdAt
+                        ? item.createdAt
+                        : `${item.data || '1970-01-01'}T${item.hora || '00:00'}:00.000Z`;
+                    return { ...item, timestamp } as Compostagem & { timestamp: string };
                 })
                 .filter(compostagem => {
+                    if (dateFilter) {
+                        if (compostagem.data < dateFilter.startDate || compostagem.data > dateFilter.endDate) return false;
+                    }
                     return showRotina
                         ? compostagem.isMedicaoRotina === true
                         : compostagem.isMedicaoRotina === false || compostagem.isMedicaoRotina === undefined;
                 })
-                .sort((a, b) => {
-                    return isDescending
-                        ? b.timestamp.localeCompare(a.timestamp)
-                        : a.timestamp.localeCompare(b.timestamp);
-                });
+                .sort((a, b) => isDescending
+                    ? b.timestamp.localeCompare(a.timestamp)
+                    : a.timestamp.localeCompare(b.timestamp)
+                );
 
             setCompostagens(dados);
             setDisplayedCompostagens(dados.slice(0, ITEMS_PER_PAGE));
@@ -134,41 +104,31 @@ const CompostagemHistory: React.FC<{ navigation: any }> = ({ navigation }) => {
                         style: "destructive",
                         onPress: async () => {
                             try {
+                                if (!compostagem.id) {
+                                    throw new Error('Compostagem ID is undefined');
+                                }
+
                                 if (compostagem.photoUrls && compostagem.photoUrls.length > 0) {
                                     for (const photoUrl of compostagem.photoUrls) {
                                         try {
-                                            const photoRef = ref(dbStorage(), photoUrl.replace(/^https?:\/\/[^\/]+\/[^\/]+\/[^\/]+\//, ''));
-                                            await deleteObject(photoRef);
-                                            console.log('Foto deletada com sucesso:', photoUrl);
+                                            const filename = photoUrl.replace(`${BASE_URL}/storage/files/`, '');
+                                            await ecoStorage.delete(filename);
+                                            console.log('Foto deletada com sucesso:', filename);
                                         } catch (photoError) {
                                             console.error('Erro ao deletar foto:', photoError);
                                         }
                                     }
                                 }
 
-                                if (!compostagem.id) {
-                                    throw new Error('Compostagem ID is undefined');
-                                }
-                                const compostagemDoc = await getDoc(doc(db(), 'compostagens', compostagem.id));
-
-                                if (compostagemDoc.exists()) {
-                                    await deleteDoc(doc(db(), 'compostagens', compostagem.id));
-                                    setCompostagens(prevCompostagens =>
-                                        prevCompostagens.filter(item => item.id !== compostagem.id)
-                                    );
-                                    setDisplayedCompostagens(prevDisplayed =>
-                                        prevDisplayed.filter(item => item.id !== compostagem.id)
-                                    );
-                                    handleRefresh();
-                                    showGlobalToast(
-                                        'success',
-                                        'Exclusão Concluída',
-                                        'Registro de compostagem e suas imagens foram excluídos com sucesso',
-                                        3000
-                                    );
-                                } else {
-                                    throw new Error('Compostagem não encontrada');
-                                }
+                                await ecoApi.delete('compostagens', compostagem.id);
+                                setCompostagens(prev => prev.filter(item => item.id !== compostagem.id));
+                                setDisplayedCompostagens(prev => prev.filter(item => item.id !== compostagem.id));
+                                showGlobalToast(
+                                    'success',
+                                    'Exclusão Concluída',
+                                    'Registro de compostagem e suas imagens foram excluídos com sucesso',
+                                    3000
+                                );
                             } catch (deleteError) {
                                 console.error('Erro ao excluir compostagem:', deleteError);
                                 Alert.alert(

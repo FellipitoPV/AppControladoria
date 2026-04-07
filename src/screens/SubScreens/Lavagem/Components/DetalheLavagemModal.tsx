@@ -1,4 +1,5 @@
 import {
+    ActivityIndicator,
     Animated,
     Dimensions,
     FlatList,
@@ -11,12 +12,13 @@ import {
 } from 'react-native';
 import { Chip, Divider, Surface, Text } from 'react-native-paper';
 import React, { useEffect, useRef, useState } from 'react';
-import { getTipoLavagemDetails, getTipoVeiculoColor, getTipoVeiculoIcon, getTipoVeiculoLabel } from './utils/lavagemUtils';
+import { getVeiculoInfo, getTipoLavagemDetails } from './utils/lavagemUtils';
 
 import FullScreenImage from '../../../../assets/components/FullScreenImage';
 import { LavagemInterface } from './lavagemTypes';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../../theme/theme';
+import { useUser } from '../../../../contexts/userContext';
 
 interface Photo {
     uri: string;
@@ -116,6 +118,8 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
     lavagem,
     onEdit
 }) => {
+    const { userInfo } = useUser();
+    const isAdmin = userInfo?.cargo === 'Administrador';
     const [isEditLoading, setIsEditLoading] = useState(false);
 
     const [viewerPhotos, setViewerPhotos] = useState<Photo[]>([]);
@@ -181,6 +185,7 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
     }
 
     const tipoLavagemInfo = getTipoLavagemDetails(lavagem.tipoLavagem);
+    const veiculoInfo = getVeiculoInfo(lavagem.veiculo?.tipo);
 
     return (
         <Modal
@@ -310,18 +315,15 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
                                 {/* Informações Básicas */}
                                 <View style={styles.sectionContainer}>
                                     <SectionHeader
-                                        icon={getTipoVeiculoIcon(lavagem.veiculo.tipo)}
-                                        title={
-                                            lavagem.veiculo.tipo === 'equipamento' ? 'Equipamento' :
-                                                lavagem.veiculo.tipo === 'outros' ? 'Outro Item' : 'Veículo'
-                                        }
+                                        icon={veiculoInfo.icon}
+                                        title={veiculoInfo.label}
                                     />
 
                                     <View style={styles.veiculoCardContainer}>
                                         <MaterialCommunityIcons
-                                            name={getTipoVeiculoIcon(lavagem.veiculo.tipo)}
+                                            name={veiculoInfo.icon}
                                             size={40}
-                                            color={getTipoVeiculoColor(lavagem.veiculo.tipo)}
+                                            color={veiculoInfo.color}
                                             style={styles.veiculoCardIcon}
                                         />
 
@@ -331,7 +333,7 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
                                             </Text>
 
                                             <Text style={styles.veiculoTipo}>
-                                                {getTipoVeiculoLabel(lavagem.veiculo.tipo)}
+                                                {veiculoInfo.label}
                                             </Text>
 
                                             {lavagem.veiculo.numeroEquipamento && (
@@ -396,7 +398,7 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
                                 {lavagem.fotosDepois && lavagem.fotosDepois.length > 0 && (
                                     <PhotoSection
                                         title="Fotos Depois"
-                                        icon="camera-check"
+                                        icon="camera-enhance"
                                         accentColor="#2196F3"
                                         fotos={lavagem.fotosDepois}
                                         onOpenPhoto={handleOpenPhoto}
@@ -428,8 +430,8 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
                                     </View>
                                 )}
 
-                                {/* Informações do sistema */}
-                                <View style={styles.sectionContainer}>
+                                {/* Informações do sistema — apenas admins */}
+                                {isAdmin && <View style={styles.sectionContainer}>
                                     <View style={styles.sysInfoContainer}>
                                         <Text style={styles.sysInfoTitle}>Informações do Sistema</Text>
                                         <Divider style={styles.divider} />
@@ -462,7 +464,7 @@ const DetalheLavagemModal: React.FC<DetalheLavagemModalProps> = ({
                                             </View>
                                         )}
                                     </View>
-                                </View>
+                                </View>}
                             </View>
 
                         </ScrollView>

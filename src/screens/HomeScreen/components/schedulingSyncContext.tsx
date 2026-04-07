@@ -1,11 +1,10 @@
 // schedulingSyncContext.tsx
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { db } from '../../../../firebase';
+import { ecoApi } from '../../../api/ecoApi';
 
 // Tipos
 interface AgendamentoLavagem {
@@ -36,7 +35,7 @@ export function SchedulingSyncProvider({ children }: { children: React.ReactNode
     const [agendamentos, setAgendamentos] = useState<AgendamentoLavagem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
-    const [firestoreUnsubscribe, setFirestoreUnsubscribe] = useState<(() => void) | null>(null);
+    const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Função para salvar dados localmente
     const saveLocally = async (data: AgendamentoLavagem[]) => {
@@ -62,44 +61,34 @@ export function SchedulingSyncProvider({ children }: { children: React.ReactNode
         }
     };
 
-    // Função para iniciar sincronização com Firestore
-    const startFirestoreSync = () => {
-        console.log('Iniciando sincronização com Firestore');
+    // Busca agendamentos da API
+    const fetchAgendamentos = async () => {
+        console.log('Buscando agendamentos da API');
         setSyncStatus('syncing');
+        try {
+            const data: AgendamentoLavagem[] = await ecoApi.list('agendamentos');
+            console.log('Dados recebidos da API:', data.length);
+            setAgendamentos(data);
+            await saveLocally(data);
+            setSyncStatus('idle');
+        } catch (error) {
+            console.error('Erro ao buscar agendamentos:', error);
+            setSyncStatus('error');
+        }
+    };
 
-        const unsubscribe = onSnapshot(collection(db(), 'agendamentos'), {
-            next: async (snapshot) => {
-                try {
-                    const agendamentosData: AgendamentoLavagem[] = [];
+    // Inicia polling a cada 60 segundos
+    const startPolling = () => {
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        fetchAgendamentos();
+        pollIntervalRef.current = setInterval(fetchAgendamentos, 60000);
+    };
 
-                    snapshot.forEach(doc => {
-                        const data = doc.data();
-                        agendamentosData.push({
-                            id: doc.id,
-                            placa: data.placa || '',
-                            tipoLavagem: data.tipoLavagem || '',
-                            data: data.data || '',
-                            concluido: Boolean(data.concluido)
-                        });
-                    });
-
-                    console.log('Dados recebidos do Firestore:', agendamentosData.length);
-
-                    setAgendamentos(agendamentosData);
-                    await saveLocally(agendamentosData);
-                    setSyncStatus('idle');
-                } catch (error) {
-                    console.error('Erro ao processar dados do Firestore:', error);
-                    setSyncStatus('error');
-                }
-            },
-            error: (error) => {
-                console.error('Erro na sincronização:', error);
-                setSyncStatus('error');
-            }
-        });
-
-        setFirestoreUnsubscribe(() => unsubscribe);
+    const stopPolling = () => {
+        if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+        }
     };
 
     // Marcar agendamento como concluído
@@ -114,11 +103,9 @@ export function SchedulingSyncProvider({ children }: { children: React.ReactNode
             setAgendamentos(updatedAgendamentos);
             await saveLocally(updatedAgendamentos);
 
-            // Se estiver online, atualiza no Firestore
+            // Se estiver online, atualiza na API
             if (netInfo.isConnected) {
-                await updateDoc(doc(db(), 'agendamentos', agendamentoId), {
-                    concluido: true
-                });
+                await ecoApi.update('agendamentos', agendamentoId, { concluido: true });
             }
         } catch (error) {
             console.error('Erro ao marcar como concluído:', error);
@@ -130,7 +117,7 @@ export function SchedulingSyncProvider({ children }: { children: React.ReactNode
     const forceSync = async () => {
         const netInfo = await NetInfo.fetch();
         if (netInfo.isConnected) {
-            startFirestoreSync();
+            await fetchAgendamentos();
         }
     };
 
@@ -176,7 +163,7 @@ export function SchedulingSyncProvider({ children }: { children: React.ReactNode
                 // Depois inicia sincronização se houver conexão
                 const netInfo = await NetInfo.fetch();
                 if (netInfo.isConnected) {
-                    startFirestoreSync();
+                    startPolling();
                 }
             } catch (error) {
                 console.error('Erro na inicialização:', error);
@@ -191,15 +178,15 @@ export function SchedulingSyncProvider({ children }: { children: React.ReactNode
         // Monitora mudanças de conectividade
         const unsubscribeNetInfo = NetInfo.addEventListener(state => {
             if (state.isConnected) {
-                startFirestoreSync();
+                startPolling();
+            } else {
+                stopPolling();
             }
         });
 
         return () => {
             unsubscribeNetInfo();
-            if (firestoreUnsubscribe) {
-                firestoreUnsubscribe();
-            }
+            stopPolling();
         };
     }, []);
 

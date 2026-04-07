@@ -16,7 +16,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
-import firestore from '@react-native-firebase/firestore';
+import { ecoApi } from '../../../api/ecoApi';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import ActionButton from '../../../assets/components/ActionButton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -78,75 +78,40 @@ export default function OperacaoScreen({ navigation }: any) {
             const inicioSemana = getStartOfWeek();
             const inicioMes = getStartOfMonth();
 
-            // Buscar todos os registros da coleção relatoriosRDO
-            const snapshot = await firestore()
-                .collection('relatoriosRDO')
-                .get();
+            const allData = await ecoApi.list('relatoriosRDO');
 
             let statsHoje = 0;
             let statsSemana = 0;
             let statsMes = 0;
 
-            // Função auxiliar para processar documentos
-            const processarDocumento = (doc: any) => {
-                const dados = doc.data();
-
-                // Verifica se o documento tem o campo data
-                if (!dados || !dados.data) {
-                    console.warn('Documento sem data encontrado:', doc.id);
-                    return;
-                }
-
-                let dataRelatorio: Date;
+            allData.forEach((dados: any) => {
+                if (!dados?.data) return;
 
                 try {
-                    // Tenta primeiro parsear como string DD/MM/YYYY
+                    let dataRelatorio: Date;
+
                     if (typeof dados.data === 'string' && dados.data.includes('/')) {
                         const [dia, mes, ano] = dados.data.split('/');
                         dataRelatorio = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-                    }
-                    // Se for um timestamp do Firestore
-                    else if (dados.data && dados.data.toDate) {
-                        dataRelatorio = dados.data.toDate();
-                    }
-                    // Se for uma data JavaScript
-                    else if (dados.data instanceof Date) {
+                    } else if (typeof dados.data === 'string' && dados.data.length > 0) {
+                        dataRelatorio = new Date(dados.data);
+                    } else if (dados.data instanceof Date) {
                         dataRelatorio = dados.data;
-                    }
-                    else {
-                        console.warn('Formato de data não reconhecido:', dados.data);
+                    } else {
                         return;
                     }
 
-                    // Normaliza a hora para meia-noite
                     dataRelatorio.setHours(0, 0, 0, 0);
 
-                    // Comparar usando timestamps
-                    if (dataRelatorio.getTime() === hoje.getTime()) {
-                        statsHoje++;
-                    }
-                    if (dataRelatorio >= inicioSemana) {
-                        statsSemana++;
-                    }
-                    if (dataRelatorio >= inicioMes) {
-                        statsMes++;
-                    }
+                    if (dataRelatorio.getTime() === hoje.getTime()) statsHoje++;
+                    if (dataRelatorio >= inicioSemana) statsSemana++;
+                    if (dataRelatorio >= inicioMes) statsMes++;
                 } catch (error) {
-                    console.warn('Erro ao processar data do documento:', doc.id, error);
+                    console.warn('Erro ao processar data:', dados.data, error);
                 }
-            };
+            });
 
-            // Processar todos os documentos
-            snapshot.docs.forEach(processarDocumento);
-
-            const total = snapshot.size;
-
-            return {
-                hoje: statsHoje,
-                semana: statsSemana,
-                mes: statsMes,
-                total
-            };
+            return { hoje: statsHoje, semana: statsSemana, mes: statsMes, total: allData.length };
         } catch (error) {
             console.error('Erro ao buscar estatísticas de relatórios:', error);
             return {

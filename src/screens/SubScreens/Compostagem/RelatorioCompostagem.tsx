@@ -13,7 +13,6 @@ import {
     Surface,
     Text
 } from 'react-native-paper';
-import { collection, getDocs, query } from 'firebase/firestore';
 import { showGlobalToast, verificarConectividadeAPI } from '../../../helpers/GlobalApi';
 import { useEffect, useState } from 'react';
 
@@ -26,7 +25,7 @@ import RelatorioCompostagemContent from './components/RelatorioCompostagemConten
 import Share from 'react-native-share';
 import { customTheme } from '../../../theme/theme';
 import dayjs from 'dayjs';
-import { db } from '../../../../firebase';
+import { ecoApi } from '../../../api/ecoApi';
 import isBetween from 'dayjs/plugin/isBetween';
 
 dayjs.extend(isBetween);
@@ -47,10 +46,10 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
 
     const carregarLeirasDisponiveis = async () => {
         try {
-            const querySnapshot = await getDocs(collection(db(), 'compostagens'));
-            const leiras = querySnapshot.docs
-                .map(doc => doc.data().leira)
-                .filter((leira, index, self) =>
+            const allData = await ecoApi.list('compostagens');
+            const leiras = allData
+                .map((item: any) => item.leira)
+                .filter((leira: string, index: number, self: string[]) =>
                     leira && self.indexOf(leira) === index
                 )
                 .sort();
@@ -80,29 +79,15 @@ export default function RelatorioCompostagem({ navigation }: { navigation: any }
                 return;
             }
 
-            const compostagemQuery = query(collection(db(), 'compostagens'));
+            const allData: Compostagem[] = await ecoApi.list('compostagens');
+            console.log(`Total de documentos encontrados: ${allData.length}`);
 
-            const snapshot = await getDocs(compostagemQuery);
-            console.log(`Total de documentos encontrados: ${snapshot.docs.length}`);
-
-            let dados = snapshot.docs
-                .map(doc => {
-                    const data = doc.data() as Compostagem;
-                    let timestamp: string;
-
-                    if (data.createdAt) {
-                        timestamp = data.createdAt;
-                    } else {
-                        const dateStr = data.data || '1970-01-01';
-                        const timeStr = data.hora || '00:00';
-                        timestamp = `${dateStr}T${timeStr}:00.000Z`;
-                    }
-
-                    return {
-                        id: doc.id,
-                        ...data,
-                        timestamp,
-                    } as Compostagem & { timestamp: string };
+            let dados = allData
+                .map(item => {
+                    const timestamp = item.createdAt
+                        ? item.createdAt
+                        : `${item.data || '1970-01-01'}T${item.hora || '00:00'}:00.000Z`;
+                    return { ...item, timestamp } as Compostagem & { timestamp: string };
                 })
                 .filter(compostagem => {
                     const isRotinaMatch = showRotina

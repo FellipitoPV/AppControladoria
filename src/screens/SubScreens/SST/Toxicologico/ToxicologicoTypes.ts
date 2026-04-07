@@ -1,5 +1,3 @@
-import { Timestamp } from 'firebase/firestore';
-
 export type TipoTeste = 'Programada' | 'Sorteio' | 'Aleatório';
 export type ResultadoTeste = 'Negativo' | 'Positivo';
 export type SituacaoRecusa = 'Não houve recusa' | 'Houve recusa injustificada';
@@ -14,7 +12,7 @@ export interface ToxicologicoInterface {
     // Identificação
     colaborador: string;
     encarregado: string;
-    data: Timestamp | string | any;
+    data: string;
     hora: string;
     // Tipo de Teste
     tipoTeste: TipoTeste;
@@ -32,7 +30,7 @@ export interface ToxicologicoInterface {
     assinaturaColaborador: AssinaturaField;
     assinaturaTestemunha?: AssinaturaField; // apenas se houveRecusa
     // Metadados
-    dataCriacao: Timestamp;
+    dataCriacao: string;
     criadoPor?: string;
 }
 

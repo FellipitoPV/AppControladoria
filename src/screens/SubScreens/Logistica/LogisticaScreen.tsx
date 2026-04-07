@@ -11,11 +11,10 @@ import {
 } from 'react-native-paper';
 import { customTheme } from '../../../theme/theme';
 import ModernHeader from '../../../assets/components/ModernHeader';
-import firestore from '@react-native-firebase/firestore';
 import { useUser } from '../../../contexts/userContext';
 import { hasAccess } from '../../Adm/types/admTypes';
 import { useNetwork } from '../../../contexts/NetworkContext';
-import database from '@react-native-firebase/database';
+import { ecoApi } from '../../../api/ecoApi';
 import ActionButton from '../../../assets/components/ActionButton';
 
 const { width } = Dimensions.get('window');
@@ -62,27 +61,8 @@ export default function LogisticaScreen({ navigation }: any) {
                 return;
             }
 
-            const snapshot = await database()
-                .ref('programacoes')
-                .once('value');
-
-            const data = snapshot.val();
-
-            if (!data) {
-                setProgramacoesPendentes(0);
-                return;
-            }
-
-            // Converter os dados em um array 
-            const programacoesArray = Object.entries(data)
-                .map(([key, value]: [string, any]) => ({
-                    firebaseKey: key,
-                    ...value
-                }));
-
-            // Filtra apenas programações pendentes
-            const pendentes = programacoesArray.filter(prog => !prog.status || prog.status === 'pendente');
-
+            const data = await ecoApi.list('programacoes');
+            const pendentes = data.filter((prog: any) => !prog.status || prog.status === 'pendente');
             setProgramacoesPendentes(pendentes.length);
         } catch (error) {
             console.error('Erro ao buscar programações pendentes:', error);

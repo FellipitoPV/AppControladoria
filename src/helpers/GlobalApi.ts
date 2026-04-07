@@ -1,22 +1,5 @@
-import {
-    DocumentReference,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    query,
-    setDoc,
-    updateDoc,
-    where
-} from 'firebase/firestore';
 import { MessageOptions, hideMessage, showMessage } from "react-native-flash-message";
-import { db, dbStorage } from "../../firebase";
-import {
-    getDownloadURL,
-    ref,
-    uploadBytes
-} from 'firebase/storage';
+import { ecoApi, ecoStorage } from "../api/ecoApi";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Compostagem } from "./Types";
@@ -74,7 +57,6 @@ export const showNotification = ({
 
 
 // Modificação na assinatura da função para aceitar o cargo
-// Repsonsavel pelo ID final salvo no firebase
 export const saveCompostagemData = async (
     compostagemData: Compostagem,
     cargo?: string
@@ -134,11 +116,7 @@ export const saveCompostagemData = async (
 };
 
 export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<boolean> => {
-    const abortController = new AbortController();
-    let docRef: DocumentReference | null = null;
-
     try {
-        // Verifica conexão inicial
         const initialConnection = await checkInternetConnection();
         if (!initialConnection) {
             console.log('Sem conexão inicial detectada');
@@ -149,71 +127,45 @@ export const sendDataToFirebase = async (compostagemData: Compostagem): Promise<
             throw new Error('ID da compostagem não definido');
         }
 
-        // Usa o ID customizado ao criar o documento
-        docRef = doc(db(), 'compostagens', compostagemData.id);
-
-        // Cria o documento com o ID específico
-        await setDoc(docRef, {
+        const result = await ecoApi.create('compostagens', {
             ...compostagemData,
             photoUrls: [],
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
         });
 
-        console.log('Documento criado com ID:', compostagemData.id);
+        const docId = result._id || result.id;
+        console.log('Compostagem criada com ID:', docId);
 
-        // Upload de imagens se houver
         if (compostagemData.photoUris?.length) {
             try {
-                const imageUrls = await uploadImages(compostagemData.id, compostagemData.photoUris);
+                const imageUrls = await uploadImages(compostagemData.photoUris);
                 if (imageUrls.length > 0) {
-                    await updateDoc(docRef, { photoUrls: imageUrls });
+                    await ecoApi.update('compostagens', docId, { photoUrls: imageUrls });
                 }
             } catch (imageError) {
                 console.error('Erro no upload de imagens:', imageError);
-                // Continua mesmo se falhar o upload de imagens
             }
         }
 
-        // Confirma se o documento existe
-        const confirmDoc = await getDoc(docRef);
-        if (!confirmDoc.exists()) {
-            throw new Error('Documento não encontrado após criação');
-        }
-
-        console.log('Documento confirmado com sucesso');
+        console.log('Compostagem confirmada com sucesso');
         return true;
 
     } catch (error) {
         console.error('Erro no processo de salvamento:', error);
-
-        if (docRef) {
-            try {
-                await deleteDoc(docRef);
-                console.log('Documento excluído após erro');
-            } catch (deleteError) {
-                console.error('Erro ao excluir documento após falha:', deleteError);
-            }
-        }
-
         return false;
     }
 };
 
 // Funções Auxiliares
-const uploadImages = async (docId: string, photoUris: string[]): Promise<string[]> => {
+const uploadImages = async (photoUris: string[]): Promise<string[]> => {
     const imageUrls: string[] = [];
 
     for (const [index, uri] of photoUris.entries()) {
         try {
-            const fileName = `compostagens/${docId}_${index}.jpg`;
-            const reference = ref(dbStorage(), fileName);
-
-            const response = await fetch(uri);
-            const blob = await response.blob();
-            await uploadBytes(reference, blob);
-            const url = await getDownloadURL(reference);
-            imageUrls.push(url);
-
+            const filename = uri.split('/').pop() || `image_${index}.jpg`;
+            const file = { uri, type: 'image/jpeg', name: filename };
+            const result = await ecoStorage.upload(file);
+            imageUrls.push(result.url);
             console.log(`Imagem ${index + 1} enviada com sucesso`);
         } catch (error) {
             console.error(`Erro no upload da imagem ${index + 1}:`, error);
@@ -226,17 +178,10 @@ const uploadImages = async (docId: string, photoUris: string[]): Promise<string[
 
 export const checkForDuplicate = async (compostagemData: Compostagem): Promise<boolean> => {
     try {
-        // Verifica no Firestore
-        const q = query(
-            collection(db(), 'compostagens'),
-            where('data', '==', compostagemData.data)
-        );
+        const existing = await ecoApi.list('compostagens', { data: compostagemData.data });
 
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-            console.log('Registro duplicado encontrado no Firestore');
-            // Importante: Remover das pendências de forma síncrona
+        if (existing.length > 0) {
+            console.log('Registro duplicado encontrado na API');
             await removeDuplicateFromPending(compostagemData);
             return true;
         }

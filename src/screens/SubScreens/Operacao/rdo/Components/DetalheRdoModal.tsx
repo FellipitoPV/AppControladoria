@@ -34,10 +34,7 @@ import {
 } from '../../../../../helpers/GlobalApi';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
-import {ref, set, onValue, off} from 'firebase/database';
-import {doc, updateDoc, serverTimestamp} from 'firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import {db, dbRealTime} from '../../../../../../firebase';
+import {ecoApi, ecoStorage} from '../../../../../api/ecoApi';
 
 interface DetalheRdoModalProps {
   visible: boolean;
@@ -199,18 +196,15 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
           // Salvar localmente
           await RNFS.writeFile(filePath, base64data, 'base64');
 
-          // Upload para Firebase Storage
-          const storageRef = storage().ref(`RelatoriosRDO/${fileName}`);
-          await storageRef.putFile(filePath);
+          // Upload para Storage
+          const file = { uri: `file://${filePath}`, type: 'application/pdf', name: fileName };
+          const uploadResult = await ecoStorage.upload(file);
+          const pdfUrl = uploadResult.url;
 
-          // Pegar URL de download
-          const pdfUrl = await storageRef.getDownloadURL();
-
-          // Atualizar Firestore
-          const rdoDocRef = doc(db(), 'relatoriosRDO', relatorio.id);
-          await updateDoc(rdoDocRef, {
-            pdfUrl: pdfUrl,
-            lastPdfGenerated: serverTimestamp(),
+          // Atualizar registro na API
+          await ecoApi.update('relatoriosRDO', relatorio.id, {
+            pdfUrl,
+            lastPdfGenerated: new Date().toISOString(),
           });
 
           // Compartilhar PDF
@@ -250,13 +244,13 @@ const DetalheRdoModal: React.FC<DetalheRdoModalProps> = ({
   useEffect(() => {
     if (relatorio?.pdfUrl) {
       const lastPdfGenerated = relatorio.lastPdfGenerated
-        ? new Date(relatorio.lastPdfGenerated.seconds * 1000)
+        ? new Date(relatorio.lastPdfGenerated)
         : null;
 
       const lastUpdated = relatorio.updatedAt
-        ? new Date(relatorio.updatedAt.seconds * 1000)
+        ? new Date(relatorio.updatedAt)
         : relatorio.createdAt
-        ? new Date(relatorio.createdAt.seconds * 1000)
+        ? new Date(relatorio.createdAt)
         : null;
 
       console.log('===== DEBUG DATAS PDF =====');

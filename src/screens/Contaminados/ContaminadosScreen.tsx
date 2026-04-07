@@ -13,12 +13,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import {Button, Chip, Text, TextInput} from 'react-native-paper';
+import {Chip, Text, TextInput} from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import {useNavigation} from '@react-navigation/native';
 
 import ModernHeader from '../../assets/components/ModernHeader';
+import SaveButton from '../../assets/components/SaveButton';
 import {showGlobalToast} from '../../helpers/GlobalApi';
 import {useNetwork} from '../../contexts/NetworkContext';
 import {useUser} from '../../contexts/userContext';
@@ -31,6 +32,23 @@ import {
 } from './types/contaminadoTypes';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
+
+const formatDate = (value: any): string => {
+  if (!value) return '—';
+  if (typeof value === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(value)) return value;
+  const d = new Date(value);
+  if (!isNaN(d.getTime())) {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${d.getFullYear()}`;
+  }
+  return String(value);
+};
+
+const withAlpha = (hex: string, alpha: number): string => {
+  const a = Math.round(alpha * 255).toString(16).padStart(2, '0');
+  return `${hex}${a}`;
+};
 
 type FilterType = 'Todos' | 'Aguardando' | 'Destinado';
 
@@ -72,6 +90,9 @@ const ContaminadosScreen = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [newEditPhotoUris, setNewEditPhotoUris] = useState<string[]>([]);
   const detailSlideAnim = useRef(new Animated.Value(500)).current;
+
+  // Delete confirmation
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
 
   // Photo viewer
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -427,54 +448,35 @@ const ContaminadosScreen = () => {
 
   const handleDelete = () => {
     if (!selectedItem?.id) return;
+    setDeleteConfirmVisible(true);
+  };
 
-    Alert.alert(
-      'Confirmar Exclusão',
-      `Deseja excluir o registro de "${selectedItem.empresa}"?`,
-      [
-        {text: 'Cancelar', style: 'cancel'},
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: async () => {
-            if (!isOnline) {
-              showGlobalToast(
-                'info',
-                'Modo Offline',
-                'É necessário estar online',
-                4000,
-              );
-              return;
-            }
-
-            setIsDeleting(true);
-            try {
-              await ecoApi.delete('contaminados', selectedItem.id!);
-
-              // Tenta deletar todas as fotos do Storage (best effort)
-              const photos = getItemPhotos(selectedItem);
-              for (const url of photos) {
-                try {
-                  const filename = url.replace(`${BASE_URL}/storage/files/`, '');
-                  await ecoStorage.delete(filename);
-                } catch {
-                  // ignora se não conseguir deletar
-                }
-              }
-
-              showGlobalToast('success', 'Registro excluído', '', 4000);
-              closeDetailModal();
-              loadContaminados();
-            } catch (error) {
-              console.error('Erro ao excluir:', error);
-              showGlobalToast('error', 'Erro ao excluir', 'Tente novamente', 4000);
-            } finally {
-              setIsDeleting(false);
-            }
-          },
-        },
-      ],
-    );
+  const confirmDelete = async () => {
+    if (!selectedItem?.id) return;
+    if (!isOnline) {
+      showGlobalToast('info', 'Modo Offline', 'É necessário estar online', 4000);
+      return;
+    }
+    setDeleteConfirmVisible(false);
+    setIsDeleting(true);
+    try {
+      await ecoApi.delete('contaminados', selectedItem.id!);
+      const photos = getItemPhotos(selectedItem);
+      for (const url of photos) {
+        try {
+          const filename = url.replace(`${BASE_URL}/storage/files/`, '');
+          await ecoStorage.delete(filename);
+        } catch {}
+      }
+      showGlobalToast('success', 'Registro excluído', '', 4000);
+      closeDetailModal();
+      loadContaminados();
+    } catch (error) {
+      console.error('Erro ao excluir:', error);
+      showGlobalToast('error', 'Erro ao excluir', 'Tente novamente', 4000);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // ==================== DATE MASK ====================
@@ -541,7 +543,7 @@ const ContaminadosScreen = () => {
             <Text style={styles.cardEmpresa} numberOfLines={1}>
               {item.empresa}
             </Text>
-            <Text style={styles.cardData}>{item.data}</Text>
+            <Text style={styles.cardData}>{formatDate(item.data)}</Text>
             {item.mtr ? (
               <Text style={styles.cardDetail}>MTR: {item.mtr}</Text>
             ) : null}
@@ -554,12 +556,12 @@ const ContaminadosScreen = () => {
           <View
             style={[
               styles.statusBadge,
-              {backgroundColor: isAguardando ? '#FFF3E0' : '#E8F5E9'},
+              {backgroundColor: isAguardando ? withAlpha(customTheme.colors.warning, 0.12) : withAlpha(customTheme.colors.primary, 0.12)},
             ]}>
             <Text
               style={[
                 styles.statusText,
-                {color: isAguardando ? '#E65100' : '#2E7D32'},
+                {color: isAguardando ? customTheme.colors.warning : customTheme.colors.primary},
               ]}>
               {item.status}
             </Text>
@@ -709,8 +711,16 @@ const ContaminadosScreen = () => {
               styles.modalContainer,
               {transform: [{translateY: newSlideAnim}]},
             ]}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Novo Contaminado</Text>
+            <View style={styles.modalAccentBar} />
+            <View style={styles.modalHeader}>
+              <View style={styles.modalIconBox}>
+                <Icon name="flask-plus-outline" size={20} color={customTheme.colors.primary} />
+              </View>
+              <View style={{flex: 1}}>
+                <Text variant="titleMedium" style={{color: customTheme.colors.onSurface}}>Novo Contaminado</Text>
+                <Text variant="bodySmall" style={{color: customTheme.colors.onSurfaceVariant}}>Preencha os dados do resíduo</Text>
+              </View>
+            </View>
 
             <ScrollView
               showsVerticalScrollIndicator={false}
@@ -812,22 +822,12 @@ const ContaminadosScreen = () => {
 
               {/* Buttons */}
               <View style={styles.modalButtons}>
-                <Button
-                  mode="outlined"
-                  onPress={closeNewModal}
-                  style={styles.cancelButton}
-                  textColor={customTheme.colors.onSurface}>
-                  Cancelar
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={handleSave}
-                  loading={isSaving}
-                  disabled={isSaving}
-                  style={styles.saveButton}
-                  buttonColor={customTheme.colors.primary}>
-                  Salvar
-                </Button>
+                <TouchableOpacity style={styles.btnCancel} onPress={closeNewModal}>
+                  <Text style={styles.btnCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <View style={{flex: 1}}>
+                  <SaveButton onPress={handleSave} text="Salvar" iconName="content-save" loading={isSaving} disabled={isSaving} />
+                </View>
               </View>
             </ScrollView>
           </Animated.View>
@@ -847,7 +847,7 @@ const ContaminadosScreen = () => {
               styles.detailModalContainer,
               {transform: [{translateY: detailSlideAnim}]},
             ]}>
-            <View style={styles.modalHandle} />
+            <View style={styles.modalAccentBar} />
 
             {selectedItem && (
               <ScrollView
@@ -855,7 +855,12 @@ const ContaminadosScreen = () => {
                 style={styles.modalScroll}>
                 {/* Header with delete */}
                 <View style={styles.detailHeader}>
-                  <Text style={styles.modalTitle}>Detalhes</Text>
+                  <View style={{flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1}}>
+                    <View style={styles.modalIconBox}>
+                      <Icon name="flask-outline" size={20} color={customTheme.colors.primary} />
+                    </View>
+                    <Text variant="titleMedium" style={{color: customTheme.colors.onSurface}}>Detalhes</Text>
+                  </View>
                   {userLevel >= 2 && (
                     <TouchableOpacity
                       onPress={handleDelete}
@@ -954,7 +959,7 @@ const ContaminadosScreen = () => {
                   </View>
                   <View style={styles.detailInfoItem}>
                     <Text style={styles.detailLabel}>Data</Text>
-                    <Text style={styles.detailValue}>{selectedItem.data}</Text>
+                    <Text style={styles.detailValue}>{formatDate(selectedItem.data)}</Text>
                   </View>
                 </View>
 
@@ -968,8 +973,8 @@ const ContaminadosScreen = () => {
                         {
                           backgroundColor:
                             selectedItem.status === 'Aguardando'
-                              ? '#FFF3E0'
-                              : '#E8F5E9',
+                              ? withAlpha(customTheme.colors.warning, 0.12)
+                              : withAlpha(customTheme.colors.primary, 0.12),
                           alignSelf: 'flex-start',
                         },
                       ]}>
@@ -979,8 +984,8 @@ const ContaminadosScreen = () => {
                           {
                             color:
                               selectedItem.status === 'Aguardando'
-                                ? '#E65100'
-                                : '#2E7D32',
+                                ? customTheme.colors.warning
+                                : customTheme.colors.primary,
                           },
                         ]}>
                         {selectedItem.status}
@@ -1014,32 +1019,50 @@ const ContaminadosScreen = () => {
 
                 {/* Action buttons */}
                 <View style={styles.modalButtons}>
-                  <Button
-                    mode="outlined"
-                    onPress={handleUpdate}
-                    loading={isUpdating}
-                    disabled={isUpdating || isDeleting}
-                    style={styles.cancelButton}
-                    textColor={customTheme.colors.primary}>
-                    Salvar Alterações
-                  </Button>
-
-                  {selectedItem.status === 'Aguardando' && (
-                    <Button
-                      mode="contained"
-                      onPress={handleMarkDestinado}
-                      loading={isUpdating}
-                      disabled={isUpdating || isDeleting}
-                      style={styles.saveButton}
-                      buttonColor={customTheme.colors.primary}
-                      icon="check-circle">
-                      Destinado
-                    </Button>
-                  )}
+                  <TouchableOpacity style={styles.btnCancel} onPress={closeDetailModal}>
+                    <Text style={styles.btnCancelText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <View style={{flex: 1, gap: 8}}>
+                    <SaveButton onPress={handleUpdate} text="Salvar Alterações" iconName="content-save" loading={isUpdating} disabled={isUpdating || isDeleting} />
+                    {selectedItem.status === 'Aguardando' && (
+                      <SaveButton onPress={handleMarkDestinado} text="Marcar como Destinado" iconName="check-circle-outline" loading={isUpdating} disabled={isUpdating || isDeleting} />
+                    )}
+                  </View>
                 </View>
               </ScrollView>
             )}
           </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal visible={deleteConfirmVisible} transparent animationType="fade" onRequestClose={() => setDeleteConfirmVisible(false)}>
+        <View style={styles.deleteModalBackdrop}>
+          <View style={styles.deleteModalContainer}>
+            <View style={[styles.modalAccentBar, {backgroundColor: customTheme.colors.error}]} />
+            <View style={styles.modalHeader}>
+              <View style={[styles.modalIconBox, {backgroundColor: withAlpha(customTheme.colors.error, 0.1)}]}>
+                <Icon name="alert-outline" size={20} color={customTheme.colors.error} />
+              </View>
+              <View style={{flex: 1}}>
+                <Text variant="titleMedium" style={{color: customTheme.colors.onSurface}}>Confirmar Exclusão</Text>
+                <Text variant="bodySmall" style={{color: customTheme.colors.onSurfaceVariant}}>Esta ação não pode ser desfeita</Text>
+              </View>
+            </View>
+            <View style={styles.deleteModalBody}>
+              <Text variant="bodyMedium" style={{color: customTheme.colors.onSurfaceVariant}}>
+                Deseja excluir o registro de "{selectedItem?.empresa}"? Todas as fotos associadas serão removidas permanentemente.
+              </Text>
+            </View>
+            <View style={styles.deleteModalFooter}>
+              <TouchableOpacity style={styles.btnCancel} onPress={() => setDeleteConfirmVisible(false)}>
+                <Text style={styles.btnCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <View style={{flex: 1}}>
+                <SaveButton onPress={confirmDelete} text="Excluir" iconName="trash-can-outline" style={{backgroundColor: customTheme.colors.error}} />
+              </View>
+            </View>
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -1099,6 +1122,8 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.1,
     shadowRadius: 3,
+    borderWidth: 1,
+    borderColor: customTheme.colors.surfaceVariant,
   },
   cardRow: {
     flexDirection: 'row',
@@ -1158,7 +1183,7 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 6,
   },
   statusText: {
     fontSize: 11,
@@ -1181,25 +1206,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 30,
     maxHeight: '85%',
+    overflow: 'hidden',
   },
   detailModalContainer: {
     maxHeight: '90%',
   },
-  modalHandle: {
-    width: 40,
+  modalAccentBar: {
     height: 4,
-    backgroundColor: customTheme.colors.onSurfaceVariant,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 16,
-    opacity: 0.4,
+    backgroundColor: customTheme.colors.primary,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: customTheme.colors.onSurface,
-    marginBottom: 16,
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    paddingBottom: 8,
+  },
+  modalIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: customTheme.colors.primaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnCancel: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  btnCancelText: {
+    color: customTheme.colors.onSurfaceVariant,
+    fontWeight: '500',
+    fontSize: 15,
+  },
+  deleteModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  deleteModalContainer: {
+    width: '100%',
+    backgroundColor: customTheme.colors.surface,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 8,
+  },
+  deleteModalBody: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  deleteModalFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: customTheme.colors.surfaceVariant,
   },
   modalScroll: {
     flexGrow: 0,
@@ -1295,6 +1361,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 0,
+    padding: 16,
+    paddingBottom: 8,
   },
   detailInfoRow: {
     flexDirection: 'row',

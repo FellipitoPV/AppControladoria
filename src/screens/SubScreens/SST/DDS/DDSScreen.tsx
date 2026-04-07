@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     StyleSheet,
     View,
@@ -14,14 +14,7 @@ import {
     Surface,
 } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {
-    collection,
-    query,
-    orderBy,
-    onSnapshot,
-    Timestamp,
-} from 'firebase/firestore';
-import { db } from '../../../../../firebase';
+import { ecoApi } from '../../../../api/ecoApi';
 import { DDSInterface } from './DDSTypes';
 import { DDSCard } from './DDSCard';
 import ModernHeader from '../../../../assets/components/ModernHeader';
@@ -36,25 +29,13 @@ type RootStackParamList = {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const isDatePast = (date: Timestamp | string | any): boolean => {
+const isDatePast = (date: string): boolean => {
     if (!date) return false;
-
-    let dateObj: Date;
-
-    if (date instanceof Timestamp) {
-        dateObj = date.toDate();
-    } else if (date && typeof date === 'object' && 'seconds' in date) {
-        dateObj = new Date(date.seconds * 1000);
-    } else if (typeof date === 'string') {
-        dateObj = new Date(date);
-    } else {
-        return false;
-    }
-
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     dateObj.setHours(0, 0, 0, 0);
-
     return dateObj < today;
 };
 
@@ -66,34 +47,30 @@ const DDSScreen: React.FC = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTab, setSelectedTab] = useState<'agendados' | 'realizados'>('agendados');
+    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    const fetchDDS = useCallback(async () => {
+        try {
+            const data: DDSInterface[] = await ecoApi.list('dds');
+            data.sort((a, b) =>
+                new Date(b.dataRealizacao ?? 0).getTime() - new Date(a.dataRealizacao ?? 0).getTime()
+            );
+            setDdsList(data);
+        } catch (error) {
+            console.error('Erro ao carregar DDS:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
 
     useEffect(() => {
-        const ddsCollection = collection(db(), 'dds');
-        const q = query(ddsCollection, orderBy('dataRealizacao', 'desc'));
-
-        const unsubscribe = onSnapshot(
-            q,
-            (snapshot) => {
-                const ddsData: DDSInterface[] = [];
-                snapshot.forEach((doc) => {
-                    ddsData.push({
-                        id: doc.id,
-                        ...doc.data(),
-                    } as DDSInterface);
-                });
-                setDdsList(ddsData);
-                setLoading(false);
-                setRefreshing(false);
-            },
-            (error) => {
-                console.error('Erro ao carregar DDS:', error);
-                setLoading(false);
-                setRefreshing(false);
-            }
-        );
-
-        return () => unsubscribe();
-    }, []);
+        fetchDDS();
+        pollIntervalRef.current = setInterval(fetchDDS, 60000);
+        return () => {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        };
+    }, [fetchDDS]);
 
     useEffect(() => {
         filterDDS();
@@ -128,6 +105,7 @@ const DDSScreen: React.FC = () => {
 
     const handleRefresh = () => {
         setRefreshing(true);
+        fetchDDS();
     };
 
     const handleAddDDS = () => {

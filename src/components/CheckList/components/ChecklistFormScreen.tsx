@@ -72,8 +72,9 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   const {userInfo} = useUser();
 
   const isWeekly = checklistFrequency === 'Semanal';
-  const year = selectedMonth.getFullYear();
-  const currentMonth = selectedMonth.getMonth() + 1; // Mês fixo vindo da tela anterior
+  const selectedMonthDate = new Date(selectedMonth);
+  const year = selectedMonthDate.getFullYear();
+  const currentMonth = selectedMonthDate.getMonth() + 1; // Mês fixo vindo da tela anterior
 
   const [selectedPeriod, setSelectedPeriod] = useState(isWeekly ? 1 : currentMonth);
   const [loading, setLoading] = useState(true);
@@ -96,6 +97,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   const initialFormData = useRef<FormData>({periods: {}});
   const hasUnsavedChanges = useRef(false);
   const firebaseListenerRef = useRef<any>(null);
+  const yearDocMongoId = useRef<string | null>(null);
 
   // Gerar semanas do ano (igual ao web)
   const getYearWeeks = (year: number): YearWeek[] => {
@@ -241,15 +243,13 @@ export default function ChecklistFormScreen({route, navigation}: any) {
       const cacheKey = `@checklist_questions_${checklistId}`;
 
       try {
-        const results = await ecoApi.list('checklistsConfig', {checklistId});
+        const results = await ecoApi.list('checklists-config');
+        const checklistData = results.find((item: any) => item.id === checklistId);
 
-        if (results.length > 0) {
-          const checklistData = results[0];
+        if (checklistData) {
           const questionsData = checklistData.questions || [];
           setQuestions(questionsData);
           await AsyncStorage.setItem(cacheKey, JSON.stringify(questionsData));
-
-          // Extrair configuração de prova do mesmo resultado
           applyProofConfig(checklistData);
         } else {
           const cached = await AsyncStorage.getItem(cacheKey);
@@ -287,8 +287,9 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   // Carregar configuração de comprovação de NC (fallback isolado)
   const loadProofConfig = async () => {
     try {
-      const results = await ecoApi.list('checklistsConfig', {checklistId});
-      if (results.length > 0) applyProofConfig(results[0]);
+      const results = await ecoApi.list('checklists-config');
+      const checklistData = results.find((item: any) => item.id === checklistId);
+      if (checklistData) applyProofConfig(checklistData);
     } catch (error) {
       console.error('Erro ao carregar configuração de prova:', error);
     }
@@ -309,16 +310,14 @@ export default function ChecklistFormScreen({route, navigation}: any) {
       console.log('Sem cache disponível');
     }
 
-    // Buscar da API
+    // Buscar da API — um documento por ano
     try {
-      const results = await ecoApi.list('checklists', {
-        year: yearStr,
-        checklistId,
-        locationId: location.id,
-      });
+      const results = await ecoApi.list('checklists');
+      const yearDoc = results.find((d: any) => d._firebaseId === yearStr);
 
-      if (results.length > 0) {
-        const data = results[0].respostas ?? null;
+      if (yearDoc) {
+        yearDocMongoId.current = yearDoc._id;
+        const data = yearDoc[checklistId]?.[location.id] ?? null;
         if (data) {
           await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
           if (!hasUnsavedChanges.current) {
@@ -341,12 +340,12 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
       Object.entries(data.monthlyFormData).forEach(
         ([period, periodData]: [string, any]) => {
+          if (!periodData) return;
           periods[parseInt(period)] = {
             items: periodData.items || {},
             observacoes: periodData.observacoes || '',
           };
 
-          // Carregar ncProofs se existirem
           if (periodData.ncProofs) {
             loadedNcProofs[parseInt(period)] = periodData.ncProofs;
           }
@@ -419,15 +418,42 @@ export default function ChecklistFormScreen({route, navigation}: any) {
       // Verificar conectividade e salvar na API
       const netState = await NetInfo.fetch();
       if (netState.isConnected) {
-        const existing = await ecoApi.list('checklists', {
-          year: yearStr,
-          checklistId,
-          locationId: location.id,
-        });
-        if (existing.length > 0) {
-          await ecoApi.update('checklists', existing[0]._id ?? existing[0].id, {respostas: saveData});
+        const mongoId = yearDocMongoId.current;
+
+        if (mongoId) {
+          // Documento do ano já existe — fazer merge somente da location alterada
+          const existing = await ecoApi.list('checklists');
+          const yearDoc = existing.find((d: any) => d._id === mongoId);
+          const updatedYearDoc = {
+            _firebaseId: yearStr,
+            ...(yearDoc || {}),
+            [checklistId]: {
+              ...(yearDoc?.[checklistId] || {}),
+              [location.id]: saveData,
+            },
+          };
+          await ecoApi.update('checklists', mongoId, updatedYearDoc);
         } else {
-          await ecoApi.create('checklists', {year: yearStr, checklistId, locationId: location.id, respostas: saveData});
+          // Primeiro save do ano — buscar doc existente ou criar
+          const existing = await ecoApi.list('checklists');
+          const yearDoc = existing.find((d: any) => d._firebaseId === yearStr);
+          if (yearDoc) {
+            yearDocMongoId.current = yearDoc._id;
+            const updatedYearDoc = {
+              ...yearDoc,
+              [checklistId]: {
+                ...(yearDoc[checklistId] || {}),
+                [location.id]: saveData,
+              },
+            };
+            await ecoApi.update('checklists', yearDoc._id, updatedYearDoc);
+          } else {
+            const result = await ecoApi.create('checklists', {
+              _firebaseId: yearStr,
+              [checklistId]: {[location.id]: saveData},
+            });
+            yearDocMongoId.current = result._id ?? result.id;
+          }
         }
         console.log('Checklist salvo na API');
       } else {
@@ -435,7 +461,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
         const pendingKey = '@checklist_pending_saves';
         const pendingStr = await AsyncStorage.getItem(pendingKey);
         const pending = pendingStr ? JSON.parse(pendingStr) : [];
-        pending.push({year: yearStr, checklistId, locationId: location.id, respostas: saveData, timestamp: Date.now()});
+        pending.push({year: yearStr, checklistId, locationId: location.id, saveData, timestamp: Date.now()});
         await AsyncStorage.setItem(pendingKey, JSON.stringify(pending));
         console.log('Checklist salvo offline, aguardando sincronização');
       }

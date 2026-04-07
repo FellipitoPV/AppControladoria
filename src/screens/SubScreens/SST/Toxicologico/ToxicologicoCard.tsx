@@ -2,7 +2,6 @@ import React from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Timestamp } from 'firebase/firestore';
 import {
     ToxicologicoInterface,
     getResultadoColor,
@@ -16,18 +15,10 @@ interface ToxicologicoCardProps {
     onEdit?: () => void;
 }
 
-const formatDate = (date: Timestamp | string | any): string => {
+const formatDate = (date: string): string => {
     if (!date) return '';
-    let dateObj: Date;
-    if (date instanceof Timestamp) {
-        dateObj = date.toDate();
-    } else if (date && typeof date === 'object' && 'seconds' in date) {
-        dateObj = new Date(date.seconds * 1000);
-    } else if (typeof date === 'string') {
-        dateObj = new Date(date);
-    } else {
-        return '';
-    }
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) return '';
     return dateObj.toLocaleDateString('pt-BR', {
         day: '2-digit',
         month: '2-digit',

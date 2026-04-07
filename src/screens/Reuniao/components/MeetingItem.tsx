@@ -1,12 +1,11 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 import React, { memo, useEffect, useState } from 'react';
-import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 
 import { Card } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../theme/theme';
 import dayjs from 'dayjs';
-import { db } from '../../../../firebase';
+import { ecoApi } from '../../../api/ecoApi';
 
 interface Meeting {
     id: string;
@@ -62,34 +61,19 @@ const MeetingItemComponent = ({ meeting, onPress, isUserMeeting }: MeetingItemPr
         let isMounted = true;
         const fetchUserPhoto = async () => {
             try {
-                const usersSnapshot = await getDocs(
-                    query(
-                        collection(db(), 'users'),
-                        where('user', '==', meeting.name),
-                        limit(1)
-                    )
-                );
-    
+                const results = await ecoApi.list('users', { user: meeting.name });
+
                 if (!isMounted) return;
-    
-                if (!usersSnapshot.empty) {
-                    const userData = usersSnapshot.docs[0].data();
-                    if (userData.photoURL) {
-                        // Atualizar o cache e o estado
-                        photoURLCache[meeting.name] = userData.photoURL;
-                        setUserPhotoURL(userData.photoURL);
-                    } else {
-                        // Marcar no cache que não há foto
-                        photoURLCache[meeting.name] = null;
-                    }
+
+                if (results.length > 0 && results[0].photoURL) {
+                    photoURLCache[meeting.name] = results[0].photoURL;
+                    setUserPhotoURL(results[0].photoURL);
                 } else {
-                    // Marcar no cache que não há foto
                     photoURLCache[meeting.name] = null;
                 }
             } catch (error) {
                 console.error('Erro ao buscar foto do usuário:', error);
                 if (isMounted) {
-                    // Marcar no cache que houve erro
                     photoURLCache[meeting.name] = null;
                 }
             }

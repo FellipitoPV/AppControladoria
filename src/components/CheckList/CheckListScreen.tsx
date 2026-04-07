@@ -171,7 +171,7 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
   const loadChecklistDefinitions = async () => {
     try {
       const {ecoApi} = require('../../api/ecoApi');
-      const results = await ecoApi.list('checklistsConfig', {category});
+      const results = await ecoApi.list('checklists-config', {category});
 
       const filteredChecklists = results.map((item: any) => item as ChecklistDefinition);
       setChecklists(filteredChecklists);
@@ -275,17 +275,20 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
   const loadSavedData = async (year: string) => {
     try {
       const {ecoApi} = require('../../api/ecoApi');
-      const results = await ecoApi.list('checklists', {year, category});
+      const results = await ecoApi.list('checklists');
+      const yearDoc = results.find((d: any) => d._firebaseId === year);
 
-      const data: any = {};
-      results.forEach((item: any) => {
-        const {checklistId, locationId, respostas} = item;
-        if (!data[checklistId]) data[checklistId] = {};
-        data[checklistId][locationId] = respostas;
-      });
-
-      setSavedData(prev => ({...prev, [year]: data}));
-      cacheSavedData(year, data);
+      if (yearDoc) {
+        const yearData: Record<string, Record<string, any>> = {};
+        Object.entries(yearDoc).forEach(([key, value]) => {
+          if (key === '_id' || key === '_firebaseId') return;
+          yearData[key] = value as Record<string, any>;
+        });
+        setSavedData(prev => ({...prev, [year]: yearData}));
+        cacheSavedData(year, yearData);
+      } else {
+        setSavedData(prev => ({...prev, [year]: {}}));
+      }
     } catch (error) {
       console.error('Erro ao carregar dados salvos da API:', error);
     } finally {
@@ -499,7 +502,7 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
             checklistIcon,
             checklistFrequency,
             location,
-            selectedMonth,
+            selectedMonth: selectedMonth.toISOString(),
           });
         }}>
         <View style={styles.locationContent}>

@@ -1,4 +1,3 @@
-import 'react-native-get-random-values';
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -14,7 +13,7 @@ import { Text, Surface, TextInput, Dialog } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Dropdown } from 'react-native-element-dropdown';
-import database from '@react-native-firebase/database';
+import { ecoApi } from '../../../../api/ecoApi';
 import { useUser } from '../../../../contexts/userContext';
 import { ClienteInterface, Container, Equipment, ProgramacaoEquipamento } from '../../Controladoria/types/logisticTypes';
 import { showGlobalToast } from '../../../../helpers/GlobalApi';
@@ -120,10 +119,7 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
                 createdBy: userInfo?.user || '',
             };
 
-            // Salvar no Firebase Realtime Database
-            await database()
-                .ref('programacoes')
-                .push(novaProgramacao);
+            await ecoApi.create('programacoes', novaProgramacao);
 
             // Só atualiza o status se tivermos equipamentos/containers selecionados
             if (equipamentosSelecionados.length || containersSelecionados.length) {
@@ -154,25 +150,22 @@ const FormularioProgramacao = ({ navigation }: { navigation: any }) => {
     // Agora vamos corrigir a função atualizarStatusEquipamentos
     const atualizarStatusEquipamentos = async () => {
         try {
-            const updates: Record<string, any> = {};
+            const updatePromises: Promise<any>[] = [];
 
-            // Atualizar status dos equipamentos
             equipamentosSelecionados.forEach(equipamento => {
-                if (equipamento && equipamento.id) {
-                    updates[`/equipamentos/${equipamento.id}/status`] = 'em_uso';
+                if (equipamento?.id) {
+                    updatePromises.push(ecoApi.update('equipamentos', equipamento.id, { status: 'em_uso' }));
                 }
             });
 
-            // Atualizar status dos containers
             containersSelecionados.forEach(container => {
-                if (container && container.id) {
-                    updates[`/containers/${container.id}/status`] = 'em_uso';
+                if (container?.id) {
+                    updatePromises.push(ecoApi.update('containers', container.id, { status: 'em_uso' }));
                 }
             });
 
-            // Só faz o update se tiver alterações para fazer
-            if (Object.keys(updates).length > 0) {
-                await database().ref().update(updates);
+            if (updatePromises.length > 0) {
+                await Promise.all(updatePromises);
             }
         } catch (error) {
             console.error('Erro ao atualizar status:', error);

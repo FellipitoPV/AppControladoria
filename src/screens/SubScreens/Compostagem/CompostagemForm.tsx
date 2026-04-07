@@ -4,16 +4,13 @@ import { FormConfig, FormSectionConfig, FormValues } from '../../../assets/compo
 import { PERMISSIONS, RESULTS, check, request } from 'react-native-permissions';
 import React, { useEffect, useState } from 'react';
 import dayjs, { Dayjs } from 'dayjs';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { saveCompostagemData, showGlobalToast } from '../../../helpers/GlobalApi';
 
 import { Compostagem } from '../../../helpers/Types';
 import FormularioComponent from '../../../assets/components/Fomulario/FormularioComponent';
 import ModernHeader from '../../../assets/components/ModernHeader';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Timestamp } from 'firebase/firestore';
 import { customTheme } from '../../../theme/theme';
-import { dbStorage } from '../../../../firebase';
 import { useUser } from '../../../contexts/userContext';
 
 type RootStackParamList = {
@@ -368,33 +365,11 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                 return;
             }
 
-            const photoUrls: string[] = [];
-            for (const photo of values.photos as { uri: string; id: string }[]) {
-                try {
-                    const fileName = `compostagem_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-                    const reference = ref(dbStorage(), `compostagem_photos/${fileName}`);
-                    const response = await fetch(photo.uri);
-                    const blob = await response.blob();
-                    await uploadBytes(reference, blob);
-                    const url = await getDownloadURL(reference);
-                    photoUrls.push(url);
-                    showGlobalToast(
-                        'info',
-                        `Fazendo upload das imagens`,
-                        `Carregando ${photoUrls.length} de ${(values.photos as { uri: string; id: string }[]).length} image${(values.photos as { uri: string; id: string }[]).length === 1 ? 'm' : 'ns'}`,
-                        25000
-                    );
-                } catch (uploadError) {
-                    console.error('Erro no upload da foto:', uploadError);
-                    showGlobalToast('error', 'Erro no Upload', 'Falha ao fazer upload de uma das fotos', 7500);
-                }
-            }
-
             const compostagemData: Compostagem = {
                 data: dayjs(values.dataEHora as Dayjs).format('YYYY-MM-DD'),
                 responsavel: userInfo?.user ?? '',
                 leira: values.leira as string,
-                timestamp: Timestamp.now(),
+                timestamp: new Date().toISOString(),
                 isMedicaoRotina,
                 tempAmb: isMedicaoRotina ? '' : (values.tempAmb as string),
                 tempBase: isMedicaoRotina ? '' : (values.tempBase as string),
@@ -406,7 +381,7 @@ const CompostagemForm: React.FC<Props> = ({ navigation }) => {
                 odor: isMedicaoRotina ? null : (values.odor as string),
                 observacao: values.observacao as string,
                 photoUris: (values.photos as { uri: string; id: string; }[]).map((photo) => photo.uri),
-                photoUrls,
+                photoUrls: [],
                 createdAt: undefined,
                 hora: ''
             };
