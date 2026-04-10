@@ -4,6 +4,7 @@ import Toast, {ToastConfig} from 'react-native-toast-message';
 
 import AgendamentoLavagem from './src/screens/SubScreens/Lavagem/AgendamentoLavagem';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from './src/api/ecoApi';
 import {BackgroundSyncProvider} from './src/contexts/backgroundSyncContext';
 import CompostagemForm from './src/screens/SubScreens/Compostagem/CompostagemForm';
 import CompostagemHistory from './src/screens/SubScreens/Compostagem/CompostagemHistory';
@@ -170,7 +171,25 @@ export default function App() {
     const checkAuth = async () => {
       try {
         const token = await AsyncStorage.getItem('@authToken');
-        setIsLoggedIn(!!token);
+        if (!token) {
+          setIsLoggedIn(false);
+          return;
+        }
+
+        // Valida o token contra a API — se inválido (401/erro), limpa e manda pro Login
+        const res = await fetch(`${BASE_URL}/api/users`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          await AsyncStorage.multiRemove(['@authToken', 'userEmail', '@UserInfo', 'userName', 'rememberMe']);
+          setIsLoggedIn(false);
+        } else {
+          setIsLoggedIn(true);
+        }
       } catch {
         setIsLoggedIn(false);
       } finally {

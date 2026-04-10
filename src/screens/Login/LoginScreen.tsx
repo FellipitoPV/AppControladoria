@@ -113,11 +113,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             // Salva token e email (não salva senha)
             await AsyncStorage.setItem('@authToken', token);
             await AsyncStorage.setItem('userEmail', loginEmail.toLowerCase());
-            console.log('Token e email salvos no AsyncStorage');
 
             // Atualiza as informações do usuário
             await updateUserInfo();
-            console.log('updateUserInfo chamado com sucesso');
 
             // Verifica se userInfo foi salvo no AsyncStorage
             const savedUserInfo = await AsyncStorage.getItem('@UserInfo');
@@ -125,7 +123,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                 console.warn('Nenhuma informação de usuário salva em @UserInfo');
                 throw new Error('Falha ao carregar informações do usuário');
             }
-            console.log('userInfo salvo:', savedUserInfo);
 
             // Navega para a próxima tela
             setWelcomeIsOpen(false);
@@ -200,7 +197,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
     // Log para verificar o estado do email no momento do login manual
     const handleManualLogin = () => {
-        console.log('Estado atual do formulário:', { email, password });
         handleLogin(email, password);
     };
 
@@ -253,7 +249,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                         label="Email"
                         value={email}
                         onChangeText={(text) => {
-                            console.log('Email input alterado:', text);
                             setEmail(text);
                         }}
                         style={styles.input}
@@ -267,7 +262,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                         label="Senha"
                         value={password}
                         onChangeText={(text) => {
-                            console.log('Senha input alterado:', text);
                             setPassword(text);
                         }}
                         secureTextEntry={!showPassword}
