@@ -53,6 +53,8 @@ import ToxicologicoFormScreen from './src/screens/SubScreens/SST/Toxicologico/To
 import ControleDocumentosScreen from './src/screens/SubScreens/SST/ControleDocumentos/ControleDocumentosScreen';
 import ControleDocumentosFormScreen from './src/screens/SubScreens/SST/ControleDocumentos/ControleDocumentosFormScreen';
 import DevGuideScreen from './src/screens/DevGuide/DevGuideScreen';
+import ExtintoresScreen from './src/screens/SubScreens/SST/Extintores/ExtintoresScreen';
+import ExtintoresFormScreen from './src/screens/SubScreens/SST/Extintores/ExtintoresFormScreen';
 
 // Defina os tipos das rotas para o seu navegador
 interface RootStackParamList {
@@ -488,17 +490,17 @@ export default function App() {
                   options={{headerShown: false}}
                 />
 
-                {/* <Stack.Screen
-                  name="AuditoriasScreen"
-                  component={AuditoriasScreen}
-                  options={{headerShown: false}}
-                />
-
                 <Stack.Screen
                   name="ExtintoresScreen"
                   component={ExtintoresScreen}
                   options={{headerShown: false}}
-                /> */}
+                />
+
+                <Stack.Screen
+                  name="ExtintoresFormScreen"
+                  component={ExtintoresFormScreen}
+                  options={{headerShown: false}}
+                />
               </Stack.Navigator>
               <Toast config={toastConfig} position="top" />
               <FlashMessage position="top" />

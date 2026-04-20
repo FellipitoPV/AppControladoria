@@ -122,13 +122,13 @@ export default function QSMSScreen({ navigation }: any) {
                         disabled={!canAccessSST()}
                         disabledText="Requer acesso à SST nível 1"
                     />
-                    <ActionButton
-                        icon="fire-extinguisher"
-                        text="Extintores"
-                        onPress={() => navigation.navigate('ExtintoresScreen')}
-                        disabled={true}
-                        disabledText="Chegando na próxima atualização"
-                    />
+                     <ActionButton
+                         icon="fire-extinguisher"
+                         text="Extintores"
+                         onPress={() => navigation.navigate('ExtintoresScreen')}
+                         disabled={!canAccessSST()}
+                         disabledText="Requer acesso à SST nível 1"
+                     />
                 </CategoryCard>
 
                 {/* Card Meio Ambiente */}

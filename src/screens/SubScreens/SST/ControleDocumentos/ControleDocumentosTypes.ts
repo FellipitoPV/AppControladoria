@@ -77,7 +77,15 @@ export const STATUS_LABELS: Record<StatusDocumento, string> = {
 
 export const formatDate = (dateStr: string): string => {
     if (!dateStr) return '';
-    const d = new Date(dateStr + 'T12:00:00');
-    if (isNaN(d.getTime())) return dateStr;
+    const normalizedDate = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`;
+    const d = new Date(normalizedDate);
+    if (isNaN(d.getTime())) {
+        const dateOnly = dateStr.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+            const [year, month, day] = dateOnly.split('-');
+            return `${day}/${month}/${year}`;
+        }
+        return dateStr;
+    }
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };

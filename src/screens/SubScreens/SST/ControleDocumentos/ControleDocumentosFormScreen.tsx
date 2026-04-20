@@ -6,7 +6,6 @@ import {
     TouchableOpacity,
     Modal,
     TextInput,
-    Alert,
 } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -28,6 +27,9 @@ import {
 } from './ControleDocumentosTypes';
 import { customTheme } from '../../../../theme/theme';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import ModernHeader from '../../../../assets/components/ModernHeader';
+import SaveButton from '../../../../assets/components/SaveButton';
+import { showGlobalToast } from '../../../../helpers/GlobalApi';
 
 type RootStackParamList = {
     ControleDocumentosFormScreen: {
@@ -39,6 +41,11 @@ type RootStackParamList = {
 type FormRouteProp = RouteProp<RootStackParamList, 'ControleDocumentosFormScreen'>;
 
 type FormMode = 'create' | 'edit' | 'view';
+
+const withAlpha = (hex: string, alpha: number): string => {
+    const a = Math.round(alpha * 255).toString(16).padStart(2, '0');
+    return `${hex}${a}`;
+};
 
 const ControleDocumentosFormScreen: React.FC = () => {
     const navigation = useNavigation();
@@ -67,11 +74,11 @@ const ControleDocumentosFormScreen: React.FC = () => {
 
     const handleSave = async () => {
         if (!form.tipoPrograma.trim()) {
-            Alert.alert('Campo obrigatório', 'Informe o tipo ou nome do programa.');
+            showGlobalToast('error', 'Campo obrigatório', 'Informe o tipo ou nome do programa.');
             return;
         }
         if (!form.responsavel.trim()) {
-            Alert.alert('Campo obrigatório', 'Informe o responsável pelo documento.');
+            showGlobalToast('error', 'Campo obrigatório', 'Informe o responsável pelo documento.');
             return;
         }
 
@@ -79,43 +86,34 @@ const ControleDocumentosFormScreen: React.FC = () => {
         try {
             if (item?.id) {
                 await ecoApi.update('controleDocumentos', item.id, { ...form });
+                showGlobalToast('success', 'Sucesso', 'Documento atualizado com sucesso!');
             } else {
                 await ecoApi.create('controleDocumentos', {
                     ...form,
                     dataCriacao: new Date().toISOString(),
                 });
+                showGlobalToast('success', 'Sucesso', 'Documento cadastrado com sucesso!');
             }
             navigation.goBack();
         } catch (error) {
             console.error('Erro ao salvar documento:', error);
-            Alert.alert('Erro', 'Não foi possível salvar o documento. Tente novamente.');
+            showGlobalToast('error', 'Erro', 'Não foi possível salvar o documento. Tente novamente.');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = () => {
-        Alert.alert(
-            'Excluir documento',
-            `Deseja excluir "${item?.tipoPrograma}"? Esta ação não pode ser desfeita.`,
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Excluir',
-                    style: 'destructive',
-                    onPress: async () => {
-                        if (!item?.id) return;
-                        try {
-                            await ecoApi.delete('controleDocumentos', item.id);
-                            navigation.goBack();
-                        } catch (error) {
-                            console.error('Erro ao excluir:', error);
-                            Alert.alert('Erro', 'Não foi possível excluir o documento.');
-                        }
-                    },
-                },
-            ],
-        );
+        if (!item?.id) return;
+        ecoApi.delete('controleDocumentos', item.id)
+            .then(() => {
+                showGlobalToast('success', 'Sucesso', 'Documento excluído com sucesso!');
+                navigation.goBack();
+            })
+            .catch(error => {
+                console.error('Erro ao excluir:', error);
+                showGlobalToast('error', 'Erro', 'Não foi possível excluir o documento.');
+            });
     };
 
     const onDateChange = (_: any, date?: Date) => {
@@ -140,73 +138,15 @@ const ControleDocumentosFormScreen: React.FC = () => {
 
     return (
         <Surface style={styles.container}>
-            {/* Header customizado para suportar múltiplos botões */}
-            <Surface style={styles.header}>
-                <View style={styles.headerLeft}>
-                    <TouchableOpacity
-                        style={styles.headerIconBtn}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <MaterialCommunityIcons
-                            name="arrow-left"
-                            size={24}
-                            color={customTheme.colors.primary}
-                        />
-                    </TouchableOpacity>
-                    <View style={styles.headerTitleRow}>
-                        <View style={styles.headerIconContainer}>
-                            <MaterialCommunityIcons
-                                name="file-document-outline"
-                                size={20}
-                                color={customTheme.colors.primary}
-                            />
-                        </View>
-                        <Text style={styles.headerTitle} numberOfLines={1}>
-                            {headerTitle}
-                        </Text>
-                    </View>
-                </View>
-
-                <View style={styles.headerRight}>
-                    {mode === 'view' && (
-                        <TouchableOpacity
-                            style={styles.headerIconBtn}
-                            onPress={() => setMode('edit')}
-                        >
-                            <MaterialCommunityIcons
-                                name="pencil"
-                                size={22}
-                                color={customTheme.colors.primary}
-                            />
-                        </TouchableOpacity>
-                    )}
-                    {mode === 'edit' && item?.id && (
-                        <TouchableOpacity
-                            style={[styles.headerIconBtn, styles.deleteBtn]}
-                            onPress={handleDelete}
-                        >
-                            <MaterialCommunityIcons
-                                name="trash-can-outline"
-                                size={22}
-                                color="#c62828"
-                            />
-                        </TouchableOpacity>
-                    )}
-                    {(mode === 'create' || mode === 'edit') && (
-                        <TouchableOpacity
-                            style={[styles.headerIconBtn, styles.saveBtn]}
-                            onPress={handleSave}
-                            disabled={saving}
-                        >
-                            <MaterialCommunityIcons
-                                name="content-save"
-                                size={22}
-                                color="#fff"
-                            />
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </Surface>
+            <ModernHeader
+                title={headerTitle}
+                iconName="file-document-outline"
+                onBackPress={() => navigation.goBack()}
+                rightButton={mode === 'view' ? {
+                    icon: 'pencil-outline',
+                    onPress: () => setMode('edit'),
+                } : undefined}
+            />
 
             <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
                 {/* Status chip quando tem vencimento */}
@@ -214,7 +154,7 @@ const ControleDocumentosFormScreen: React.FC = () => {
                     <View
                         style={[
                             styles.statusBanner,
-                            { backgroundColor: STATUS_COLORS[currentStatus] + '15' },
+                            { backgroundColor: withAlpha(STATUS_COLORS[currentStatus], 0.12) },
                         ]}
                     >
                         <MaterialCommunityIcons
@@ -233,8 +173,19 @@ const ControleDocumentosFormScreen: React.FC = () => {
                     </View>
                 )}
 
-                {/* Seção: Informações do Documento */}
-                <View style={styles.section}>
+                {mode === 'edit' && item?.id && (
+                    <TouchableOpacity style={styles.deleteAction} onPress={handleDelete}>
+                        <MaterialCommunityIcons
+                            name="trash-can-outline"
+                            size={18}
+                            color={customTheme.colors.error}
+                        />
+                        <Text style={styles.deleteActionText}>Excluir documento</Text>
+                    </TouchableOpacity>
+                )}
+
+                <Surface style={styles.section} elevation={2}>
+                    <View style={styles.sectionBar} />
                     <Text style={styles.sectionTitle}>
                         Informações do Documento
                     </Text>
@@ -322,10 +273,10 @@ const ControleDocumentosFormScreen: React.FC = () => {
                             )}
                         </TouchableOpacity>
                     </View>
-                </View>
+                </Surface>
 
-                {/* Seção: Datas */}
-                <View style={styles.section}>
+                <Surface style={styles.section} elevation={2}>
+                    <View style={styles.sectionBar} />
                     <Text style={styles.sectionTitle}>Datas</Text>
 
                     {/* Data de Atualização */}
@@ -387,8 +338,19 @@ const ControleDocumentosFormScreen: React.FC = () => {
                             </Text>
                         </TouchableOpacity>
                     </View>
-                </View>
+                </Surface>
             </ScrollView>
+
+            {(mode === 'create' || mode === 'edit') && (
+                <SaveButton
+                    onPress={handleSave}
+                    text="Salvar"
+                    iconName="content-save"
+                    loading={saving}
+                    disabled={saving}
+                    style={styles.saveButton}
+                />
+            )}
 
             {/* DateTimePicker */}
             {datePicker.visible && (
@@ -413,47 +375,50 @@ const ControleDocumentosFormScreen: React.FC = () => {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Selecionar Área</Text>
-                        {AREAS.map(area => (
-                            <TouchableOpacity
-                                key={area}
-                                style={[
-                                    styles.modalOption,
-                                    form.area === area && {
-                                        backgroundColor: AREA_COLORS[area] + '15',
-                                    },
-                                ]}
-                                onPress={() => {
-                                    setForm(prev => ({ ...prev, area }));
-                                    setAreaModalVisible(false);
-                                }}
-                            >
-                                <MaterialCommunityIcons
-                                    name={AREA_ICONS[area]}
-                                    size={22}
-                                    color={AREA_COLORS[area]}
-                                />
-                                <Text
-                                    style={[styles.modalOptionText, { color: AREA_COLORS[area] }]}
+                        <View style={styles.modalBar} />
+                        <View style={styles.modalInner}>
+                            <Text style={styles.modalTitle}>Selecionar Área</Text>
+                            {AREAS.map(area => (
+                                <TouchableOpacity
+                                    key={area}
+                                    style={[
+                                        styles.modalOption,
+                                        form.area === area && {
+                                            backgroundColor: withAlpha(AREA_COLORS[area], 0.12),
+                                        },
+                                    ]}
+                                    onPress={() => {
+                                        setForm(prev => ({ ...prev, area }));
+                                        setAreaModalVisible(false);
+                                    }}
                                 >
-                                    {area}
-                                </Text>
-                                {form.area === area && (
                                     <MaterialCommunityIcons
-                                        name="check"
-                                        size={20}
+                                        name={AREA_ICONS[area]}
+                                        size={22}
                                         color={AREA_COLORS[area]}
-                                        style={styles.modalCheck}
                                     />
-                                )}
+                                    <Text
+                                        style={[styles.modalOptionText, { color: AREA_COLORS[area] }]}
+                                    >
+                                        {area}
+                                    </Text>
+                                    {form.area === area && (
+                                        <MaterialCommunityIcons
+                                            name="check"
+                                            size={20}
+                                            color={AREA_COLORS[area]}
+                                            style={styles.modalCheck}
+                                        />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity
+                                style={styles.modalCancelButton}
+                                onPress={() => setAreaModalVisible(false)}
+                            >
+                                <Text style={styles.modalCancelText}>Cancelar</Text>
                             </TouchableOpacity>
-                        ))}
-                        <TouchableOpacity
-                            style={styles.modalCancelButton}
-                            onPress={() => setAreaModalVisible(false)}
-                        >
-                            <Text style={styles.modalCancelText}>Cancelar</Text>
-                        </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -467,43 +432,46 @@ const ControleDocumentosFormScreen: React.FC = () => {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Alerta de Vencimento</Text>
-                        {ALERTA_OPTIONS.map(opt => (
-                            <TouchableOpacity
-                                key={opt.value}
-                                style={[
-                                    styles.modalOption,
-                                    form.alertaVencimento === opt.value && {
-                                        backgroundColor: customTheme.colors.primaryContainer,
-                                    },
-                                ]}
-                                onPress={() => {
-                                    setForm(prev => ({ ...prev, alertaVencimento: opt.value }));
-                                    setAlertaModalVisible(false);
-                                }}
-                            >
-                                <MaterialCommunityIcons
-                                    name="clock-alert-outline"
-                                    size={22}
-                                    color={customTheme.colors.primary}
-                                />
-                                <Text style={styles.modalOptionText}>{opt.label} antes do vencimento</Text>
-                                {form.alertaVencimento === opt.value && (
+                        <View style={styles.modalBar} />
+                        <View style={styles.modalInner}>
+                            <Text style={styles.modalTitle}>Alerta de Vencimento</Text>
+                            {ALERTA_OPTIONS.map(opt => (
+                                <TouchableOpacity
+                                    key={opt.value}
+                                    style={[
+                                        styles.modalOption,
+                                        form.alertaVencimento === opt.value && {
+                                            backgroundColor: withAlpha(customTheme.colors.primary, 0.12),
+                                        },
+                                    ]}
+                                    onPress={() => {
+                                        setForm(prev => ({ ...prev, alertaVencimento: opt.value }));
+                                        setAlertaModalVisible(false);
+                                    }}
+                                >
                                     <MaterialCommunityIcons
-                                        name="check"
-                                        size={20}
+                                        name="clock-alert-outline"
+                                        size={22}
                                         color={customTheme.colors.primary}
-                                        style={styles.modalCheck}
                                     />
-                                )}
+                                    <Text style={styles.modalOptionText}>{opt.label} antes do vencimento</Text>
+                                    {form.alertaVencimento === opt.value && (
+                                        <MaterialCommunityIcons
+                                            name="check"
+                                            size={20}
+                                            color={customTheme.colors.primary}
+                                            style={styles.modalCheck}
+                                        />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity
+                                style={styles.modalCancelButton}
+                                onPress={() => setAlertaModalVisible(false)}
+                            >
+                                <Text style={styles.modalCancelText}>Cancelar</Text>
                             </TouchableOpacity>
-                        ))}
-                        <TouchableOpacity
-                            style={styles.modalCancelButton}
-                            onPress={() => setAlertaModalVisible(false)}
-                        >
-                            <Text style={styles.modalCancelText}>Cancelar</Text>
-                        </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -516,105 +484,48 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: customTheme.colors.background,
     },
-    // Header
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        elevation: 2,
-        backgroundColor: customTheme.colors.surface,
-        borderBottomColor: customTheme.colors.surfaceVariant,
-        borderBottomWidth: 1,
-        minHeight: 56,
-    },
-    headerLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        minWidth: 0,
-    },
-    headerIconBtn: {
-        width: 40,
-        height: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 20,
-        backgroundColor: customTheme.colors.surfaceVariant,
-    },
-    headerTitleRow: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginLeft: 8,
-        minWidth: 0,
-    },
-    headerIconContainer: {
-        width: 32,
-        height: 32,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 16,
-        backgroundColor: customTheme.colors.primaryContainer,
-        marginRight: 8,
-    },
-    headerTitle: {
-        flex: 1,
-        color: customTheme.colors.onSurface,
-        fontWeight: '600',
-        fontSize: 16,
-    },
-    headerRight: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginLeft: 8,
-    },
-    deleteBtn: {
-        backgroundColor: '#c6282815',
-    },
-    saveBtn: {
-        backgroundColor: customTheme.colors.primary,
-    },
-    // Scroll
     scroll: {
         flex: 1,
     },
     scrollContent: {
         padding: 16,
-        paddingBottom: 40,
+        paddingBottom: 96,
     },
-    // Status banner
     statusBanner: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
         padding: 12,
-        borderRadius: 10,
+        borderRadius: 8,
         marginBottom: 16,
     },
     statusBannerText: {
-        fontSize: 15,
-        fontWeight: '700',
+        fontSize: 14,
+        fontWeight: '600',
     },
-    // Section
     section: {
         backgroundColor: customTheme.colors.surface,
         borderRadius: 12,
-        padding: 16,
         marginBottom: 16,
-        elevation: 1,
+        borderWidth: 1,
+        borderColor: customTheme.colors.surfaceVariant,
+        overflow: 'hidden',
+    },
+    sectionBar: {
+        height: 4,
+        backgroundColor: customTheme.colors.primary,
     },
     sectionTitle: {
         fontSize: 15,
-        fontWeight: '700',
-        color: customTheme.colors.primary,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
         marginBottom: 16,
+        paddingHorizontal: 16,
+        paddingTop: 14,
     },
-    // Fields
     field: {
         marginBottom: 14,
+        paddingHorizontal: 16,
     },
     fieldLabel: {
         fontSize: 13,
@@ -663,7 +574,6 @@ const styles = StyleSheet.create({
         color: customTheme.colors.outline,
         flex: 1,
     },
-    // Modals
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
@@ -673,6 +583,13 @@ const styles = StyleSheet.create({
         backgroundColor: customTheme.colors.surface,
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
+        overflow: 'hidden',
+    },
+    modalBar: {
+        height: 4,
+        backgroundColor: customTheme.colors.primary,
+    },
+    modalInner: {
         padding: 20,
         paddingBottom: 40,
     },
@@ -706,7 +623,28 @@ const styles = StyleSheet.create({
     },
     modalCancelText: {
         fontSize: 16,
-        color: customTheme.colors.outline,
+        color: customTheme.colors.onSurfaceVariant,
+    },
+    deleteAction: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginBottom: 12,
+        paddingVertical: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: customTheme.colors.error,
+        backgroundColor: withAlpha(customTheme.colors.error, 0.06),
+    },
+    deleteActionText: {
+        color: customTheme.colors.error,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    saveButton: {
+        marginHorizontal: 16,
+        marginBottom: 16,
     },
 });
 

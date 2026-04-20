@@ -14,6 +14,11 @@ import {
 } from './ControleDocumentosTypes';
 import { customTheme } from '../../../../theme/theme';
 
+const withAlpha = (hex: string, alpha: number): string => {
+    const a = Math.round(alpha * 255).toString(16).padStart(2, '0');
+    return `${hex}${a}`;
+};
+
 interface ControleDocumentosCardProps {
     item: ControleDocumento;
     onPress: () => void;
@@ -31,13 +36,13 @@ export const ControleDocumentosCard: React.FC<ControleDocumentosCardProps> = ({
     const statusLabel = STATUS_LABELS[status];
     const areaColor = item.area ? AREA_COLORS[item.area] : customTheme.colors.outline;
     const areaIcon = item.area ? AREA_ICONS[item.area] : 'file-document-outline';
+    const shouldShowDates = status !== 'vigente';
 
     return (
         <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
-            <Card style={styles.card}>
+            <Card style={styles.card} elevation={2}>
+                <View style={[styles.statusBar, { backgroundColor: statusColor }]} />
                 <Card.Content style={styles.content}>
-                    {/* Barra lateral colorida por status */}
-                    <View style={[styles.statusBar, { backgroundColor: statusColor }]} />
 
                     <View style={styles.mainContent}>
                         {/* Linha 1: tipoPrograma + badge status */}
@@ -45,9 +50,9 @@ export const ControleDocumentosCard: React.FC<ControleDocumentosCardProps> = ({
                             <Text style={styles.title} numberOfLines={1}>
                                 {item.tipoPrograma}
                             </Text>
-                            <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
+                            <View style={[styles.statusBadge, { backgroundColor: withAlpha(statusColor, 0.12) }]}>
                                 <MaterialCommunityIcons name={statusIcon} size={12} color={statusColor} />
-                                <Text style={[styles.statusText, { color: statusColor }]}>
+                                <Text style={[styles.statusText, { color: statusColor }]}> 
                                     {statusLabel}
                                 </Text>
                             </View>
@@ -59,26 +64,27 @@ export const ControleDocumentosCard: React.FC<ControleDocumentosCardProps> = ({
                             {'  '}{item.responsavel}
                         </Text>
 
-                        {/* Linha 3: datas */}
-                        <View style={styles.metaRow}>
-                            {item.dataAtualizacao ? (
-                                <View style={styles.metaChip}>
-                                    <MaterialCommunityIcons name="calendar-edit" size={12} color={customTheme.colors.outline} />
-                                    <Text style={styles.metaText}>Atualizado: {formatDate(item.dataAtualizacao)}</Text>
-                                </View>
-                            ) : null}
-                            {item.vencimento ? (
-                                <View style={styles.metaChip}>
-                                    <MaterialCommunityIcons name="calendar-clock" size={12} color={customTheme.colors.outline} />
-                                    <Text style={styles.metaText}>Vence: {formatDate(item.vencimento)}</Text>
-                                </View>
-                            ) : null}
-                        </View>
+                        {shouldShowDates && (
+                            <View style={styles.metaRow}>
+                                {item.vencimento ? (
+                                    <View style={styles.metaChip}>
+                                        <MaterialCommunityIcons name="calendar-clock" size={12} color={statusColor} />
+                                        <Text style={styles.metaText}>Vence: {formatDate(item.vencimento)}</Text>
+                                    </View>
+                                ) : null}
+                                {item.dataAtualizacao ? (
+                                    <View style={styles.metaChip}>
+                                        <MaterialCommunityIcons name="calendar-edit" size={12} color={customTheme.colors.outline} />
+                                        <Text style={styles.metaText}>Atualizado: {formatDate(item.dataAtualizacao)}</Text>
+                                    </View>
+                                ) : null}
+                            </View>
+                        )}
 
                         {/* Footer: área badge */}
                         {item.area && (
                             <View style={styles.footer}>
-                                <View style={[styles.areaBadge, { backgroundColor: areaColor + '18' }]}>
+                                <View style={[styles.areaBadge, { backgroundColor: withAlpha(areaColor, 0.12) }]}> 
                                     <MaterialCommunityIcons name={areaIcon} size={11} color={areaColor} />
                                     <Text style={[styles.areaText, { color: areaColor }]}>{item.area}</Text>
                                 </View>
@@ -109,18 +115,16 @@ const styles = StyleSheet.create({
         marginHorizontal: 16,
         marginVertical: 4,
         backgroundColor: customTheme.colors.surface,
-        borderRadius: 10,
-        elevation: 1,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: customTheme.colors.surfaceVariant,
         overflow: 'hidden',
     },
     content: {
         padding: 0,
-        flexDirection: 'row',
     },
     statusBar: {
-        width: 4,
-        borderTopLeftRadius: 10,
-        borderBottomLeftRadius: 10,
+        height: 4,
     },
     mainContent: {
         flex: 1,
@@ -145,18 +149,18 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 7,
-        paddingVertical: 2,
-        borderRadius: 10,
+        paddingVertical: 3,
+        borderRadius: 6,
         gap: 3,
     },
     statusText: {
         fontSize: 11,
-        fontWeight: '700',
+        fontWeight: '600',
     },
     responsavel: {
         fontSize: 12,
         color: customTheme.colors.outline,
-        marginBottom: 6,
+        marginBottom: 4,
     },
     metaRow: {
         flexDirection: 'row',
@@ -198,11 +202,11 @@ const styles = StyleSheet.create({
     },
     editButton: {
         position: 'absolute',
-        top: 8,
+        top: 12,
         right: 8,
         padding: 5,
         borderRadius: 14,
-        backgroundColor: customTheme.colors.primaryContainer,
+        backgroundColor: withAlpha(customTheme.colors.primary, 0.12),
     },
 });
 

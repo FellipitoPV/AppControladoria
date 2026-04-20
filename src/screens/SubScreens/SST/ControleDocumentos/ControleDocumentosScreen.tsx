@@ -165,7 +165,7 @@ const ControleDocumentosScreen: React.FC = () => {
                 onBackPress={() => navigation.goBack()}
             />
 
-            <Surface style={styles.filterContainer}>
+            <Surface style={styles.filterContainer} elevation={2}>
                 <Searchbar
                     placeholder="Buscar por documento, responsável..."
                     onChangeText={setSearchQuery}
@@ -288,9 +288,13 @@ const styles = StyleSheet.create({
         color: customTheme.colors.onSurfaceVariant,
     },
     filterContainer: {
-        padding: 16,
+        margin: 16,
+        marginBottom: 8,
+        padding: 12,
         backgroundColor: customTheme.colors.surface,
-        elevation: 1,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: customTheme.colors.surfaceVariant,
     },
     searchbar: {
         marginBottom: 12,
@@ -301,7 +305,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
     segmentedButtons: {
-        marginBottom: 12,
+        marginBottom: 10,
     },
     areaScroll: {
         flexDirection: 'row',
@@ -310,20 +314,22 @@ const styles = StyleSheet.create({
     areaChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
         marginRight: 8,
         backgroundColor: customTheme.colors.surfaceVariant,
+        borderWidth: 1,
+        borderColor: customTheme.colors.surfaceVariant,
         gap: 5,
     },
     areaChipText: {
-        fontSize: 13,
-        fontWeight: '500',
+        fontSize: 11,
+        fontWeight: '600',
         color: customTheme.colors.onSurfaceVariant,
     },
     listContent: {
-        paddingVertical: 8,
+        paddingTop: 0,
         paddingBottom: 100,
     },
     emptyContainer: {
