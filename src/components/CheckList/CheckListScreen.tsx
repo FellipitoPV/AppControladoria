@@ -31,6 +31,8 @@ interface ChecklistLocation {
     label: string;
     quantidade?: string;
     sectionTitle?: string;
+    subsectionTitle?: string;
+    peso?: 1 | 2 | 3;
   }>;
 }
 
@@ -41,11 +43,14 @@ interface ChecklistDefinition {
   icon: string;
   category: string;
   frequency: string;
+  responseMode?: 'conformidade' | 'conceito_iqpi';
   questions: Array<{
     id: string;
     label: string;
     quantidade?: string;
     sectionTitle?: string;
+    subsectionTitle?: string;
+    peso?: 1 | 2 | 3;
   }>;
   locations: ChecklistLocation[];
 }
@@ -476,6 +481,7 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
     checklistTitle,
     checklistIcon,
     checklistFrequency,
+    checklistResponseMode,
     questions,
   }: {
     location: ChecklistLocation;
@@ -483,13 +489,16 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
     checklistTitle: string;
     checklistIcon: string;
     checklistFrequency: string;
-    questions: Array<{id: string; label: string; sectionTitle?: string}>;
+    checklistResponseMode?: 'conformidade' | 'conceito_iqpi';
+    questions: Array<{id: string; label: string; sectionTitle?: string; subsectionTitle?: string}>;
   }) => {
     const currentMonth = selectedMonth.getMonth() + 1;
     const currentMonthStatus = location.monthlyStatus?.[currentMonth] || 'Pendente';
     const statusColor = getStatusColor(currentMonthStatus);
     const cardBackground = getCardBackgroundColor(currentMonthStatus);
-    const canGenerateReport = currentMonthStatus === 'Concluído' || currentMonthStatus === 'Concluído com NC';
+    const canGenerateReport =
+      checklistResponseMode !== 'conceito_iqpi' &&
+      (currentMonthStatus === 'Concluído' || currentMonthStatus === 'Concluído com NC');
 
     return (
       <TouchableOpacity
@@ -501,6 +510,7 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
             checklistTitle,
             checklistIcon,
             checklistFrequency,
+            checklistResponseMode,
             location,
             selectedMonth: selectedMonth.toISOString(),
           });
@@ -590,9 +600,10 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
                         checklistTitle={checklist.title}
                         checklistIcon={checklist.icon}
                         checklistFrequency={checklist.frequency}
+                        checklistResponseMode={checklist.responseMode}
                         questions={
                           location.useCustomQuestions && location.questions && location.questions.length > 0
-                            ? location.questions.map(q => ({id: q.id, label: q.label, sectionTitle: q.sectionTitle}))
+                            ? location.questions.map(q => ({id: q.id, label: q.label, sectionTitle: q.sectionTitle, subsectionTitle: q.subsectionTitle}))
                             : checklist.questions
                         }
                       />

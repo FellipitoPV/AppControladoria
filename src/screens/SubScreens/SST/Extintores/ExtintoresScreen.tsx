@@ -36,6 +36,7 @@ type RootStackParamList = {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ExtintoresScreen'>;
 type StatusTab = 'todos' | 'vencidos' | 'avencer' | 'validos';
+type UnidadeTab = 'todas' | 'Lote 03' | 'Lote 13';
 
 const ExtintoresScreen: React.FC = () => {
     const navigation = useNavigation<NavigationProp>();
@@ -43,6 +44,7 @@ const ExtintoresScreen: React.FC = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTab, setSelectedTab] = useState<StatusTab>('todos');
+    const [selectedUnidade, setSelectedUnidade] = useState<UnidadeTab>('todas');
     const [extintores, setExtintores] = useState<ExtintorInterface[]>([]);
     const [config, setConfig] = useState<ExtintoresConfig>(defaultExtintoresConfig);
 
@@ -100,6 +102,13 @@ const ExtintoresScreen: React.FC = () => {
                     return false;
                 }
 
+                const unidadeMatch =
+                    selectedUnidade === 'todas' || item.unidadeEcologika === selectedUnidade;
+
+                if (!unidadeMatch) {
+                    return false;
+                }
+
                 if (!normalizedQuery) {
                     return true;
                 }
@@ -114,7 +123,7 @@ const ExtintoresScreen: React.FC = () => {
                     getDiasCriticos(a, config.validadeHidrostatico) -
                     getDiasCriticos(b, config.validadeHidrostatico),
             );
-    }, [config.validadeHidrostatico, extintores, searchQuery, selectedTab]);
+    }, [config.validadeHidrostatico, extintores, searchQuery, selectedTab, selectedUnidade]);
 
     const handleRefresh = () => {
         setRefreshing(true);
@@ -208,6 +217,19 @@ const ExtintoresScreen: React.FC = () => {
                     ]}
                 />
 
+                <View style={styles.unitFilterContainer}>
+                    <Text style={styles.unitFilterLabel}>Unidade</Text>
+                    <SegmentedButtons
+                        value={selectedUnidade}
+                        onValueChange={value => setSelectedUnidade(value as UnidadeTab)}
+                        buttons={[
+                            { value: 'todas', label: 'Todas' },
+                            { value: 'Lote 03', label: 'Lote 03' },
+                            { value: 'Lote 13', label: 'Lote 13' },
+                        ]}
+                    />
+                </View>
+
                 <Text style={styles.summaryText}>
                     {filteredList.length} extintor(es) exibido(s)
                 </Text>
@@ -296,6 +318,15 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: customTheme.colors.onSurfaceVariant,
         textAlign: 'right',
+    },
+    unitFilterContainer: {
+        marginTop: 10,
+    },
+    unitFilterLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: customTheme.colors.onSurfaceVariant,
+        marginBottom: 6,
     },
     listContent: {
         paddingHorizontal: 16,

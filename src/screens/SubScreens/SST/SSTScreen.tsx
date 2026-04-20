@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
     View,
     ScrollView,
     StyleSheet,
-    TouchableOpacity,
 } from 'react-native';
 import {
     Surface,
@@ -20,50 +19,41 @@ interface CategoryCardProps {
     title: string;
     icon: string;
     color: string;
-    expanded: boolean;
-    onToggle: () => void;
     children: React.ReactNode;
     noGrid?: boolean;
 }
 
-const CategoryCard = ({ title, icon, color, expanded, onToggle, children, noGrid }: CategoryCardProps) => (
+const CategoryCard = ({ title, icon, color, children, noGrid }: CategoryCardProps) => (
     <View style={styles.categoryCard}>
-        <TouchableOpacity
-            style={[styles.categoryHeader, { borderLeftColor: color }]}
-            onPress={onToggle}
-            activeOpacity={0.7}
-        >
+        <View style={[styles.categoryHeader, { borderLeftColor: color }]}> 
             <View style={styles.categoryTitleContainer}>
                 <Icon name={icon} size={24} color={color} />
                 <Text style={styles.categoryTitle}>{title}</Text>
             </View>
-            <Icon
-                name={expanded ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color={customTheme.colors.onSurfaceVariant}
-            />
-        </TouchableOpacity>
-        {expanded && (
-            <View style={styles.categoryContent}>
-                {noGrid ? children : (
-                    <View style={styles.actionsGrid}>
-                        {children}
-                    </View>
-                )}
+            <View style={[styles.categoryBadge, { backgroundColor: `${color}18` }]}>
+                <Text style={[styles.categoryBadgeText, { color }]}>
+                    {React.Children.count(children)} item(ns)
+                </Text>
             </View>
-        )}
+        </View>
+        <View style={styles.categoryContent}>
+            {noGrid ? children : (
+                <View style={styles.actionsGrid}>
+                    {React.Children.map(children, child => {
+                        if (!React.isValidElement(child)) return child;
+
+                        return React.cloneElement(child as React.ReactElement<any>, {
+                            style: [styles.gridActionButton, child.props.style],
+                        });
+                    })}
+                </View>
+            )}
+        </View>
     </View>
 );
 
 export default function QSMSScreen({ navigation }: any) {
     const { userInfo } = useUser();
-
-    // Estado para controlar qual card está expandido (apenas um por vez)
-    const [expandedCard, setExpandedCard] = useState<string | null>();
-
-    const toggleCard = (cardId: string) => {
-        setExpandedCard(prev => prev === cardId ? null : cardId);
-    };
 
     // Funções de verificação de acesso
     const canAccessSST = () => {
@@ -98,8 +88,6 @@ export default function QSMSScreen({ navigation }: any) {
                     title="Saúde e Segurança do Trabalho"
                     icon="shield-account"
                     color="#E53935"
-                    expanded={expandedCard === 'sst'}
-                    onToggle={() => toggleCard('sst')}
                 >
                     <ActionButton
                         icon="account-group"
@@ -112,6 +100,18 @@ export default function QSMSScreen({ navigation }: any) {
                         icon="clipboard-check-outline"
                         text="Checklist"
                         onPress={() => navigation.navigate('ChecklistScreen')}
+                        disabled={!canAccessSST()}
+                        disabledText="Requer acesso à SST nível 1"
+                    />
+                    <ActionButton
+                        icon="clipboard-list-outline"
+                        text="OCP"
+                        onPress={() => navigation.navigate('ChecklistScreen', {
+                            category: 'OCP',
+                            title: 'Checklists OCP',
+                            headerIcon: 'clipboard-list-outline',
+                            reportVariant: 'sst',
+                        })}
                         disabled={!canAccessSST()}
                         disabledText="Requer acesso à SST nível 1"
                     />
@@ -136,8 +136,6 @@ export default function QSMSScreen({ navigation }: any) {
                     title="Meio Ambiente"
                     icon="leaf"
                     color="#43A047"
-                    expanded={expandedCard === 'meioambiente'}
-                    onToggle={() => toggleCard('meioambiente')}
                 >
                     <ActionButton
                         icon="clipboard-check-outline"
@@ -158,8 +156,6 @@ export default function QSMSScreen({ navigation }: any) {
                     title="ESG"
                     icon="earth"
                     color="#1E88E5"
-                    expanded={expandedCard === 'esg'}
-                    onToggle={() => toggleCard('esg')}
                     noGrid
                 >
                     <View style={styles.comingSoonContainer}>
@@ -174,8 +170,6 @@ export default function QSMSScreen({ navigation }: any) {
                     title="Atendimento ao Cliente"
                     icon="account-heart"
                     color="#8E24AA"
-                    expanded={expandedCard === 'atendimento'}
-                    onToggle={() => toggleCard('atendimento')}
                     noGrid
                 >
                     <View style={styles.comingSoonContainer}>
@@ -190,8 +184,6 @@ export default function QSMSScreen({ navigation }: any) {
                     title="Qualidade"
                     icon="certificate"
                     color="#FB8C00"
-                    expanded={expandedCard === 'qualidade'}
-                    onToggle={() => toggleCard('qualidade')}
                 >
                     <ActionButton
                         icon="clipboard-text-search-outline"
@@ -212,8 +204,6 @@ export default function QSMSScreen({ navigation }: any) {
                     title="Documentos Legais"
                     icon="file-document-multiple-outline"
                     color="#546E7A"
-                    expanded={expandedCard === 'documentos'}
-                    onToggle={() => toggleCard('documentos')}
                 >
                     <ActionButton
                         icon="file-document-outline"
@@ -257,6 +247,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 16,
         borderLeftWidth: 4,
+        paddingBottom: 12,
     },
     categoryTitleContainer: {
         flexDirection: 'row',
@@ -268,9 +259,18 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: customTheme.colors.onSurface,
     },
+    categoryBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 12,
+    },
+    categoryBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
     categoryContent: {
         padding: 16,
-        paddingTop: 8,
+        paddingTop: 0,
         borderTopWidth: 1,
         borderTopColor: customTheme.colors.surfaceVariant,
     },
@@ -279,6 +279,12 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         gap: 12,
         alignItems: 'stretch',
+        justifyContent: 'space-between',
+    },
+    gridActionButton: {
+        width: '30.5%',
+        minHeight: 116,
+        paddingHorizontal: 10,
     },
     comingSoonContainer: {
         alignItems: 'center',
