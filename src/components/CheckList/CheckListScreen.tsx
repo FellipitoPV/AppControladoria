@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform} from 'react-native';
-import {Surface, Text, Card, ActivityIndicator} from 'react-native-paper';
+import {Surface, Text, Card, ActivityIndicator, SegmentedButtons} from 'react-native-paper';
 import ModernHeader from '../../assets/components/ModernHeader';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {customTheme} from '../../theme/theme';
@@ -87,6 +87,8 @@ interface ReportModalData {
   questions: Array<{id: string; label: string; sectionTitle?: string}>;
 }
 
+type UnidadeTab = 'Ecologika' | 'LOG';
+
 export interface ChecklistScreenProps {
   navigation: any;
   route?: {
@@ -101,6 +103,7 @@ export interface ChecklistScreenProps {
 
 export default function ChecklistScreen({navigation, route}: ChecklistScreenProps) {
   const category = route?.params?.category || 'QSMS - Geral';
+  const isQsmsGeral = category === 'QSMS - Geral';
   const screenTitle = route?.params?.title || 'Checklist SST';
   const headerIcon = route?.params?.headerIcon || 'shield-check';
   const reportVariant = route?.params?.reportVariant || 'sst';
@@ -113,6 +116,7 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
   const [savedData, setSavedData] = useState<SavedChecklistData>({});
   const [checklists, setChecklists] = useState<ChecklistDefinition[]>([]);
   const [loadingDefinitions, setLoadingDefinitions] = useState(true);
+  const [selectedUnidade, setSelectedUnidade] = useState<UnidadeTab>('Ecologika');
 
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportModalData, setReportModalData] = useState<ReportModalData | null>(null);
@@ -138,6 +142,18 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
     };
     return iconMap[lucideIcon] || 'clipboard-check';
   };
+
+  const getLocationGroup = (locationName?: string): UnidadeTab =>
+    locationName?.toUpperCase().includes('LOG') ? 'LOG' : 'Ecologika';
+
+  const visibleChecklists = checklists
+    .map(checklist => ({
+      ...checklist,
+      locations: isQsmsGeral
+        ? checklist.locations.filter(location => getLocationGroup(location.name) === selectedUnidade)
+        : checklist.locations,
+    }))
+    .filter(checklist => checklist.locations.length > 0);
 
   const cacheChecklistDefinitions = async (definitions: ChecklistDefinition[]) => {
     try {
@@ -560,14 +576,27 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
 
       <MonthNavigator />
 
+      {isQsmsGeral && (
+        <View style={styles.unitFilterContainer}>
+          <SegmentedButtons
+            value={selectedUnidade}
+            onValueChange={value => setSelectedUnidade(value as UnidadeTab)}
+            buttons={[
+              {value: 'Ecologika', label: 'Ecologika'},
+              {value: 'LOG', label: 'LOG'},
+            ]}
+          />
+        </View>
+      )}
+
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {checklists.length === 0 ? (
+        {visibleChecklists.length === 0 ? (
           <View style={styles.emptyContainer}>
             <MaterialCommunityIcons name="clipboard-alert-outline" size={64} color={customTheme.colors.outline} />
             <Text style={styles.emptyText}>Nenhum checklist encontrado</Text>
           </View>
         ) : (
-          checklists.map(checklist => {
+          visibleChecklists.map(checklist => {
             const completedCount = checklist.locations.filter(
               loc => loc.status === 'Concluído' || loc.status === 'Concluído com NC',
             ).length;
@@ -634,6 +663,11 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
 }
 
 const styles = StyleSheet.create({
+  unitFilterContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
   offlineBanner: {
     flexDirection: 'row',
     alignItems: 'center',

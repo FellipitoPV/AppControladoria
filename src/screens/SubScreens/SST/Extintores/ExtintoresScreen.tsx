@@ -36,7 +36,10 @@ type RootStackParamList = {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ExtintoresScreen'>;
 type StatusTab = 'todos' | 'vencidos' | 'avencer' | 'validos';
-type UnidadeTab = 'todas' | 'Lote 03' | 'Lote 13';
+type UnidadeTab = 'Ecologika' | 'LOG';
+
+const getUnidadeGroup = (unidadeEcologika?: string): UnidadeTab =>
+    unidadeEcologika === 'LOG' ? 'LOG' : 'Ecologika';
 
 const ExtintoresScreen: React.FC = () => {
     const navigation = useNavigation<NavigationProp>();
@@ -44,7 +47,7 @@ const ExtintoresScreen: React.FC = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTab, setSelectedTab] = useState<StatusTab>('todos');
-    const [selectedUnidade, setSelectedUnidade] = useState<UnidadeTab>('todas');
+    const [selectedUnidade, setSelectedUnidade] = useState<UnidadeTab>('Ecologika');
     const [extintores, setExtintores] = useState<ExtintorInterface[]>([]);
     const [config, setConfig] = useState<ExtintoresConfig>(defaultExtintoresConfig);
 
@@ -102,8 +105,7 @@ const ExtintoresScreen: React.FC = () => {
                     return false;
                 }
 
-                const unidadeMatch =
-                    selectedUnidade === 'todas' || item.unidadeEcologika === selectedUnidade;
+                const unidadeMatch = getUnidadeGroup(item.unidadeEcologika) === selectedUnidade;
 
                 if (!unidadeMatch) {
                     return false;
@@ -223,9 +225,8 @@ const ExtintoresScreen: React.FC = () => {
                         value={selectedUnidade}
                         onValueChange={value => setSelectedUnidade(value as UnidadeTab)}
                         buttons={[
-                            { value: 'todas', label: 'Todas' },
-                            { value: 'Lote 03', label: 'Lote 03' },
-                            { value: 'Lote 13', label: 'Lote 13' },
+                            { value: 'Ecologika', label: 'Ecologika' },
+                            { value: 'LOG', label: 'LOG' },
                         ]}
                     />
                 </View>

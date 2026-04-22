@@ -31,6 +31,7 @@ import {
     ExtintoresConfig,
     formatMonthYear,
     formatYear,
+    logLocations,
     unidadeOptions,
 } from './ExtintoresTypes';
 
@@ -62,10 +63,25 @@ const ExtintoresFormScreen: React.FC = () => {
     const [form, setForm] = useState<ExtintorInterface>(extintor || emptyExtintor(config));
     const [showDatePicker, setShowDatePicker] = useState<DateField>(null);
 
-    const availableLocations = useMemo(() => config.localizacoes || [], [config.localizacoes]);
+    const availableLocations = useMemo(
+        () => (form.unidadeEcologika === 'LOG' ? logLocations : config.localizacoes || []),
+        [config.localizacoes, form.unidadeEcologika],
+    );
 
     const updateField = (field: keyof ExtintorInterface, value: string | number | boolean) => {
-        setForm(prev => ({ ...prev, [field]: value }));
+        setForm(prev => {
+            if (field === 'unidadeEcologika') {
+                const nextLocations = value === 'LOG' ? logLocations : config.localizacoes || [];
+
+                return {
+                    ...prev,
+                    [field]: value,
+                    localizacao: nextLocations.includes(prev.localizacao) ? prev.localizacao : '',
+                };
+            }
+
+            return { ...prev, [field]: value };
+        });
     };
 
     const validateForm = () => {

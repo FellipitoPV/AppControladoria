@@ -38,7 +38,17 @@ export const defaultExtintoresConfig: ExtintoresConfig = {
     localizacoes: [],
 };
 
-export const unidadeOptions = ['Lote 03', 'Lote 13'];
+export const unidadeOptions = ['Lote 03', 'Lote 13', 'LOG'];
+
+export const logLocations = [
+    'Administrativo',
+    'Mecânica',
+    'Pintura',
+    'Calderaria',
+    'Entrada',
+    'Manutenção',
+    'Galpao Manutenção',
+];
 
 export const emptyExtintor = (
     config: ExtintoresConfig = defaultExtintoresConfig,

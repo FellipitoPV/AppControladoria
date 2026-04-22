@@ -54,7 +54,11 @@ export const ExtintorCard: React.FC<ExtintorCardProps> = ({
                     <View style={styles.headerRow}>
                         <View style={styles.titleWrap}>
                             <Text style={styles.title}>Extintor #{extintor.numero || 'Sem numero'}</Text>
-                            <Text style={styles.subtitle}>{extintor.unidadeEcologika || 'Unidade nao informada'}</Text>
+                            <Text style={styles.subtitle} numberOfLines={1} ellipsizeMode="tail">
+                                {extintor.unidadeEcologika || 'Unidade nao informada'}
+                                {' - '}
+                                {extintor.localizacao || 'Localizacao nao informada'}
+                            </Text>
                         </View>
                         <View style={styles.actionsRow}>
                             <Chip compact icon={statusMeta.icon} textStyle={[styles.statusText, { color: statusMeta.color }]} style={[styles.chip, { backgroundColor: withAlpha(statusMeta.color, 0.12) }]}> 
