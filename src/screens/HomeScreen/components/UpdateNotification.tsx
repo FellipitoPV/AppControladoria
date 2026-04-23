@@ -1,6 +1,7 @@
 // components/UpdateNotification.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
+    ActivityIndicator,
     View,
     StyleSheet,
     TouchableOpacity,
@@ -21,11 +22,16 @@ interface UpdateNotificationProps {
         data_lancamento: string;
         tamanho_mb: number;
     } | null;
+    updateState?: {
+        downloading: boolean;
+        installInProgress: boolean;
+        progress: number;
+    };
     onUpdate: () => void;
     onDismiss?: () => void;
 }
 
-const UpdateNotification = ({ updateInfo, onUpdate, onDismiss }: UpdateNotificationProps) => {
+const UpdateNotification = ({ updateInfo, updateState, onUpdate, onDismiss }: UpdateNotificationProps) => {
     const [modalVisible, setModalVisible] = useState(false);
     const [notificationVisible, setNotificationVisible] = useState(false);
     const notificationAnim = useRef(new Animated.Value(0)).current;
@@ -53,19 +59,6 @@ const UpdateNotification = ({ updateInfo, onUpdate, onDismiss }: UpdateNotificat
         return null;
     }
 
-    const handleDismiss = () => {
-        if (!updateInfo.obrigatoria && onDismiss) {
-            Animated.timing(notificationAnim, {
-                toValue: 0,
-                duration: 300,
-                useNativeDriver: true
-            }).start(() => {
-                setNotificationVisible(false);
-                onDismiss();
-            });
-        }
-    };
-
     const formatDate = (dateString: string) => {
         try {
             const date = new Date(dateString);
@@ -87,6 +80,14 @@ const UpdateNotification = ({ updateInfo, onUpdate, onDismiss }: UpdateNotificat
             </View>
         ));
     };
+
+    const isBusy = Boolean(updateState?.downloading || updateState?.installInProgress);
+    const updateButtonLabel = updateState?.downloading
+        ? `Baixando${updateState.progress > 0 ? ` (${updateState.progress}%)` : '...'}`
+        : updateState?.installInProgress
+            ? 'Abrindo instalador...'
+            : 'Atualizar Agora';
+    const progressWidth = `${Math.min(100, Math.max(0, updateState?.progress ?? 0))}%`;
 
     return (
         <>
@@ -136,7 +137,7 @@ const UpdateNotification = ({ updateInfo, onUpdate, onDismiss }: UpdateNotificat
                 transparent={true}
                 visible={modalVisible}
                 onRequestClose={() => {
-                    if (!updateInfo.obrigatoria) {
+                    if (!updateInfo.obrigatoria && !isBusy) {
                         setModalVisible(false);
                     }
                 }}
@@ -155,6 +156,7 @@ const UpdateNotification = ({ updateInfo, onUpdate, onDismiss }: UpdateNotificat
                             {!updateInfo.obrigatoria && (
                                 <TouchableOpacity 
                                     style={styles.closeButton} 
+                                    disabled={isBusy}
                                     onPress={() => setModalVisible(false)}
                                 >
                                     <Icon name="close" size={24} color={customTheme.colors.onSurface} />
@@ -179,28 +181,54 @@ const UpdateNotification = ({ updateInfo, onUpdate, onDismiss }: UpdateNotificat
                             {renderChanges()}
                         </ScrollView>
 
+                        {isBusy && (
+                            <View style={styles.downloadStatusContainer}>
+                                <View style={styles.downloadStatusHeader}>
+                                    <ActivityIndicator size="small" color={customTheme.colors.primary} />
+                                    <Text style={styles.downloadStatusTitle}>
+                                        {updateState?.installInProgress
+                                            ? 'Preparando instalador do app'
+                                            : 'Baixando atualizacao'}
+                                    </Text>
+                                </View>
+
+                                <Text style={styles.downloadStatusText}>
+                                    {updateState?.installInProgress
+                                        ? 'O Android vai abrir a tela de instalacao em instantes.'
+                                        : `Progresso do download: ${updateState?.progress ?? 0}%`}
+                                </Text>
+
+                                <View style={styles.progressTrack}>
+                                    <View style={[styles.progressFill, { width: progressWidth }]} />
+                                </View>
+                            </View>
+                        )}
+
                         <View style={styles.actionsContainer}>
                             <Button 
                                 mode="contained"
                                 style={styles.updateButton}
+                                disabled={isBusy}
                                 onPress={() => {
-                                    setModalVisible(false);
                                     onUpdate();
                                 }}
                             >
-                                Atualizar Agora
+                                {updateButtonLabel}
                             </Button>
                             
                             {!updateInfo.obrigatoria && (
                                 <Button 
                                     mode="outlined"
                                     style={styles.laterButton}
+                                    disabled={isBusy}
                                     onPress={() => {
                                         setModalVisible(false);
-                                        handleDismiss();
+                                        if (onDismiss) {
+                                            onDismiss();
+                                        }
                                     }}
                                 >
-                                    Mais Tarde
+                                    Abrir no Navegador
                                 </Button>
                             )}
                         </View>
@@ -334,6 +362,40 @@ const styles = StyleSheet.create({
     changesContainer: {
         paddingHorizontal: 16,
         maxHeight: 200,
+    },
+    downloadStatusContainer: {
+        marginHorizontal: 16,
+        marginBottom: 8,
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: customTheme.colors.surfaceVariant,
+    },
+    downloadStatusHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    downloadStatusTitle: {
+        marginLeft: 8,
+        fontSize: 14,
+        fontWeight: '600',
+        color: customTheme.colors.onSurface,
+    },
+    downloadStatusText: {
+        fontSize: 13,
+        color: customTheme.colors.onSurfaceVariant,
+        marginBottom: 10,
+    },
+    progressTrack: {
+        height: 8,
+        borderRadius: 999,
+        backgroundColor: customTheme.colors.backdrop,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        borderRadius: 999,
+        backgroundColor: customTheme.colors.primary,
     },
     changeItem: {
         flexDirection: 'row',

@@ -62,7 +62,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         updateInfo,
         updateState,
         checkForUpdates,
-        downloadAndInstall
+        downloadAndInstall,
+        openInBrowser,
     } = useAppUpdater();
 
     useEffect(() => {
@@ -342,8 +343,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 {updateInfo && (
                     <UpdateNotification
                         updateInfo={updateInfo}
+                        updateState={updateState}
                         onUpdate={downloadAndInstall}
-                        onDismiss={() => setUpdateModalVisible(false)}
+                        onDismiss={openInBrowser}
                     />
                 )}
 

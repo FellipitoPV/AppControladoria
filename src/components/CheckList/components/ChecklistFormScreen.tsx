@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect, useRef, useMemo} from 'react';
 import {
   View,
   ScrollView,
@@ -55,10 +55,16 @@ interface PeriodData {
   iqpiItems?: Record<string, IQPIItemData>;
   observacoes: string;
   ncProofs?: Record<string, NCProofData>;
+  questionsSnapshot?: Question[];
 }
 
 interface FormData {
   periods: Record<number, PeriodData>;
+}
+
+interface SavedChecklistResponse {
+  questionsSnapshot?: Question[];
+  monthlyFormData?: Record<string, any>;
 }
 
 interface YearWeek {
@@ -94,6 +100,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [legacyQuestionsSnapshot, setLegacyQuestionsSnapshot] = useState<Question[] | null>(null);
   const [yearWeeks, setYearWeeks] = useState<YearWeek[]>([]);
   const [isOnline, setIsOnline] = useState(true);
 
@@ -268,6 +275,35 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     return () => unsubscribe();
   }, []);
 
+  const hasPeriodAnswers = (periodData?: PeriodData) => {
+    const conformityAnswers = Object.values(periodData?.items || {}).some(value => value !== '');
+    const iqpiAnswers = Object.values(periodData?.iqpiItems || {}).some(
+      item => item?.conceito || item?.descricaoDesvio,
+    );
+
+    return conformityAnswers || iqpiAnswers;
+  };
+
+  const getQuestionsForPeriod = (period: number): Question[] => {
+    const savedPeriodData = formData.periods[period];
+    const periodSnapshot = (savedPeriodData as PeriodData & {questionsSnapshot?: Question[]})?.questionsSnapshot;
+
+    if (periodSnapshot?.length) {
+      return periodSnapshot;
+    }
+
+    if (legacyQuestionsSnapshot?.length && hasPeriodAnswers(savedPeriodData)) {
+      return legacyQuestionsSnapshot;
+    }
+
+    return questions;
+  };
+
+  const currentQuestions = useMemo(
+    () => getQuestionsForPeriod(selectedPeriod),
+    [selectedPeriod, formData.periods, legacyQuestionsSnapshot, questions],
+  );
+
   useEffect(() => {
     // Aguarda a animação de navegação terminar antes de carregar dados
     const interactionPromise = InteractionManager.runAfterInteractions(() => {
@@ -407,6 +443,12 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
   // Aplicar dados ao formulário
   const applyDataToForm = (data: any) => {
+    const typedData = data as SavedChecklistResponse;
+
+    if (typedData.questionsSnapshot?.length) {
+      setLegacyQuestionsSnapshot(typedData.questionsSnapshot);
+    }
+
     if (data?.monthlyFormData) {
       const periods: Record<number, PeriodData> = {};
       const loadedNcProofs: Record<number, Record<string, NCProofData>> = {};
@@ -418,6 +460,9 @@ export default function ChecklistFormScreen({route, navigation}: any) {
             items: periodData.items || {},
             iqpiItems: periodData.iqpiItems || {},
             observacoes: periodData.observacoes || '',
+            ...(periodData.questionsSnapshot?.length && {
+              questionsSnapshot: periodData.questionsSnapshot,
+            }),
           };
 
           if (periodData.ncProofs) {
@@ -450,14 +495,26 @@ export default function ChecklistFormScreen({route, navigation}: any) {
       const periodStatus: Record<number, string> = {};
 
       for (let period = 1; period <= maxPeriods; period++) {
+        const periodQuestions = getQuestionsForPeriod(period);
         const periodData = formData.periods[period] || {
-          items: questions.reduce((acc, q) => ({...acc, [q.id]: ''}), {}),
+          items: periodQuestions.reduce((acc, q) => ({...acc, [q.id]: ''}), {}),
           iqpiItems: {},
           observacoes: '',
         };
 
-        const status = calculatePeriodStatus(periodData);
+        const status = calculatePeriodStatus(periodData, periodQuestions);
         const periodNcProofs = ncProofs[period] || {};
+        const shouldPersistSnapshot =
+          Boolean((periodData as PeriodData & {questionsSnapshot?: Question[]}).questionsSnapshot?.length) ||
+          (Boolean(legacyQuestionsSnapshot?.length) && hasPeriodAnswers(periodData)) ||
+          hasPeriodAnswers(periodData);
+        const questionsSnapshot =
+          (periodData as PeriodData & {questionsSnapshot?: Question[]}).questionsSnapshot ||
+          (legacyQuestionsSnapshot?.length && hasPeriodAnswers(periodData)
+            ? legacyQuestionsSnapshot
+            : shouldPersistSnapshot
+            ? periodQuestions
+            : undefined);
 
         allPeriodsData[period] = isIQPI
           ? {
@@ -465,12 +522,14 @@ export default function ChecklistFormScreen({route, navigation}: any) {
               observacoes: periodData.observacoes,
               status,
               responsavel: userInfo?.user || 'Desconhecido',
+              ...(questionsSnapshot && {questionsSnapshot}),
             }
           : {
               items: periodData.items,
               observacoes: periodData.observacoes,
               status: status,
               responsavel: userInfo?.user || 'Desconhecido',
+              ...(questionsSnapshot && {questionsSnapshot}),
               ...(Object.keys(periodNcProofs).length > 0 && {ncProofs: periodNcProofs}),
             };
 
@@ -572,14 +631,15 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
   const calculatePeriodStatus = (
     periodData: PeriodData,
+    periodQuestions: Question[] = currentQuestions,
   ): 'Pendente' | 'Em Andamento' | 'Concluído' | 'Concluído com NC' => {
     if (isIQPI) {
       const iqpiItems = periodData.iqpiItems || {};
-      const concepts = questions.map(question => iqpiItems[question.id]?.conceito || '');
+      const concepts = periodQuestions.map(question => iqpiItems[question.id]?.conceito || '');
       const filled = concepts.filter(Boolean).length;
 
       if (filled === 0) return 'Pendente';
-      if (filled < questions.length) return 'Em Andamento';
+      if (filled < periodQuestions.length) return 'Em Andamento';
 
       const hasDeviation = concepts.some(concept =>
         ['insatisfatorio', 'fraco', 'regular'].includes(concept),
@@ -591,7 +651,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
     const items = Object.values(periodData.items);
     if (items.length === 0) return 'Pendente';
 
-    const totalItems = questions.length;
+    const totalItems = periodQuestions.length;
     const completedItems = items.filter(
       i => i === 'C' || i === 'NC' || i === 'NA',
     ).length;
@@ -653,7 +713,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
   const handleIQPIConceptChange = (questionId: string, conceito: IQPIConcept) => {
     hasUnsavedChanges.current = true;
-    const question = questions.find(item => item.id === questionId);
+    const question = currentQuestions.find(item => item.id === questionId);
     setFormData(prev => {
       const currentPeriod = prev.periods[selectedPeriod] || {
         items: {},
@@ -684,7 +744,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
   const handleIQPIDescricaoChange = (questionId: string, descricaoDesvio: string) => {
     hasUnsavedChanges.current = true;
-    const question = questions.find(item => item.id === questionId);
+    const question = currentQuestions.find(item => item.id === questionId);
     setFormData(prev => {
       const currentPeriod = prev.periods[selectedPeriod] || {
         items: {},
@@ -1298,7 +1358,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
   const hasNonConforming = Object.values(currentPeriod.items).includes('NC');
 
   const scrollToFirstUnanswered = () => {
-    const firstUnansweredIndex = questions.findIndex(question => {
+    const firstUnansweredIndex = currentQuestions.findIndex(question => {
       if (isIQPI) {
         return !(currentPeriod.iqpiItems?.[question.id]?.conceito);
       }
@@ -1410,7 +1470,7 @@ export default function ChecklistFormScreen({route, navigation}: any) {
 
       <FlatList
         ref={listRef}
-        data={questions}
+        data={currentQuestions}
         keyExtractor={item => item.id}
         renderItem={renderQuestionItem}
         style={styles.content}
