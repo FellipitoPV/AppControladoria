@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { FAB, Searchbar, SegmentedButtons, Surface, Text } from 'react-native-paper';
+import { Button, FAB, Searchbar, SegmentedButtons, Surface, Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import ModernHeader from '../../../../assets/components/ModernHeader';
 import { ecoApi } from '../../../../api/ecoApi';
@@ -18,16 +18,25 @@ import { customTheme } from '../../../../theme/theme';
 import ExtintorCard from './ExtintorCard';
 import {
     defaultExtintoresConfig,
+    EquipamentoTipo,
     ExtintorInterface,
     ExtintoresConfig,
     getDiasCriticos,
-    getExtintorStatus,
+    getEquipamentoLabelPlural,
+    getEquipamentoTipo,
     normalizeExtintor,
 } from './ExtintoresTypes';
 
 type RootStackParamList = {
+    ChecklistScreen: {
+        category?: string;
+        title?: string;
+        headerIcon?: string;
+        reportVariant?: 'sst' | 'meioAmbiente' | 'qualidade';
+    } | undefined;
     ExtintoresScreen: undefined;
     ExtintoresFormScreen: {
+        assetType?: EquipamentoTipo;
         extintor?: ExtintorInterface;
         config?: ExtintoresConfig;
         mode: 'create' | 'edit';
@@ -35,7 +44,6 @@ type RootStackParamList = {
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ExtintoresScreen'>;
-type StatusTab = 'todos' | 'vencidos' | 'avencer' | 'validos';
 type UnidadeTab = 'Ecologika' | 'LOG';
 
 const getUnidadeGroup = (unidadeEcologika?: string): UnidadeTab =>
@@ -46,10 +54,12 @@ const ExtintoresScreen: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedTab, setSelectedTab] = useState<StatusTab>('todos');
     const [selectedUnidade, setSelectedUnidade] = useState<UnidadeTab>('Ecologika');
+    const [selectedAssetType, setSelectedAssetType] = useState<EquipamentoTipo>('Extintor');
     const [extintores, setExtintores] = useState<ExtintorInterface[]>([]);
     const [config, setConfig] = useState<ExtintoresConfig>(defaultExtintoresConfig);
+    const currentAssetLabel = selectedAssetType;
+    const currentAssetLabelPlural = getEquipamentoLabelPlural(selectedAssetType);
 
     const loadData = useCallback(async () => {
         try {
@@ -94,14 +104,8 @@ const ExtintoresScreen: React.FC = () => {
 
         return [...extintores]
             .filter(item => {
-                const status = getExtintorStatus(item, config.validadeHidrostatico);
-                const statusMatch =
-                    selectedTab === 'todos' ||
-                    (selectedTab === 'vencidos' && status === 'Vencido') ||
-                    (selectedTab === 'avencer' && status === 'A Vencer') ||
-                    (selectedTab === 'validos' && status === 'Valido');
-
-                if (!statusMatch) {
+                const assetTypeMatch = getEquipamentoTipo(item) === selectedAssetType;
+                if (!assetTypeMatch) {
                     return false;
                 }
 
@@ -125,7 +129,7 @@ const ExtintoresScreen: React.FC = () => {
                     getDiasCriticos(a, config.validadeHidrostatico) -
                     getDiasCriticos(b, config.validadeHidrostatico),
             );
-    }, [config.validadeHidrostatico, extintores, searchQuery, selectedTab, selectedUnidade]);
+    }, [config.validadeHidrostatico, extintores, searchQuery, selectedAssetType, selectedUnidade]);
 
     const handleRefresh = () => {
         setRefreshing(true);
@@ -133,9 +137,10 @@ const ExtintoresScreen: React.FC = () => {
     };
 
     const handleDelete = (extintor: ExtintorInterface) => {
+        const assetType = getEquipamentoTipo(extintor);
         Alert.alert(
-            'Excluir extintor',
-            `Deseja excluir o extintor #${extintor.numero}?`,
+            `Excluir ${assetType.toLowerCase()}`,
+            `Deseja excluir o ${assetType.toLowerCase()} #${extintor.numero}?`,
             [
                 { text: 'Cancelar', style: 'cancel' },
                 {
@@ -149,11 +154,11 @@ const ExtintoresScreen: React.FC = () => {
                                 return;
                             }
                             await ecoApi.delete('hidrantes', id);
-                            showGlobalToast('success', 'Sucesso', 'Extintor excluido com sucesso');
+                            showGlobalToast('success', 'Sucesso', `${assetType} excluido com sucesso`);
                             loadData();
                         } catch (error) {
-                            console.error('Erro ao excluir extintor:', error);
-                            showGlobalToast('error', 'Erro', 'Nao foi possivel excluir o extintor');
+                            console.error(`Erro ao excluir ${assetType.toLowerCase()}:`, error);
+                            showGlobalToast('error', 'Erro', `Nao foi possivel excluir o ${assetType.toLowerCase()}`);
                         }
                     },
                 },
@@ -169,7 +174,7 @@ const ExtintoresScreen: React.FC = () => {
                 color={customTheme.colors.outline}
             />
             <Text style={styles.emptyText}>
-                {searchQuery ? 'Nenhum extintor encontrado para esta busca' : 'Nenhum extintor cadastrado'}
+                {searchQuery ? `Nenhum ${currentAssetLabel.toLowerCase()} encontrado para esta busca` : `Nenhum ${currentAssetLabel.toLowerCase()} cadastrado`}
             </Text>
         </View>
     );
@@ -178,13 +183,13 @@ const ExtintoresScreen: React.FC = () => {
         return (
             <View style={styles.container}>
                 <ModernHeader
-                    title="Extintores"
+                    title={currentAssetLabelPlural}
                     iconName="fire-extinguisher"
                     onBackPress={() => navigation.goBack()}
                 />
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={customTheme.colors.primary} />
-                    <Text style={styles.loadingText}>Carregando extintores...</Text>
+                    <Text style={styles.loadingText}>Carregando {currentAssetLabelPlural.toLowerCase()}...</Text>
                 </View>
             </View>
         );
@@ -193,12 +198,22 @@ const ExtintoresScreen: React.FC = () => {
     return (
         <View style={styles.container}>
             <ModernHeader
-                title="Extintores"
+                title={currentAssetLabelPlural}
                 iconName="fire-extinguisher"
                 onBackPress={() => navigation.goBack()}
             />
 
             <Surface style={styles.filtersContainer} elevation={2}>
+                <SegmentedButtons
+                    value={selectedAssetType}
+                    onValueChange={value => setSelectedAssetType(value as EquipamentoTipo)}
+                    buttons={[
+                        { value: 'Extintor', label: 'Extintores' },
+                        { value: 'Hidrante', label: 'Hidrantes' },
+                    ]}
+                    style={styles.assetTypeButtons}
+                />
+
                 <Searchbar
                     placeholder="Buscar por numero, localizacao ou tipo"
                     value={searchQuery}
@@ -208,16 +223,17 @@ const ExtintoresScreen: React.FC = () => {
                     iconColor={customTheme.colors.primary}
                 />
 
-                <SegmentedButtons
-                    value={selectedTab}
-                    onValueChange={value => setSelectedTab(value as StatusTab)}
-                    buttons={[
-                        { value: 'todos', label: 'Todos' },
-                        { value: 'vencidos', label: 'Vencidos' },
-                        { value: 'avencer', label: 'A vencer' },
-                        { value: 'validos', label: 'Validos' },
-                    ]}
-                />
+                {selectedAssetType === 'Hidrante' && (
+                    <Button
+                        mode="outlined"
+                        icon="clipboard-check-outline"
+                        onPress={() => navigation.navigate('ChecklistScreen')}
+                        style={styles.checklistButton}
+                        contentStyle={styles.checklistButtonContent}
+                    >
+                        Ir para checklist
+                    </Button>
+                )}
 
                 <View style={styles.unitFilterContainer}>
                     <Text style={styles.unitFilterLabel}>Unidade</Text>
@@ -232,7 +248,7 @@ const ExtintoresScreen: React.FC = () => {
                 </View>
 
                 <Text style={styles.summaryText}>
-                    {filteredList.length} extintor(es) exibido(s)
+                    {filteredList.length} {currentAssetLabel.toLowerCase()}(es) exibido(s)
                 </Text>
             </Surface>
 
@@ -250,9 +266,11 @@ const ExtintoresScreen: React.FC = () => {
                 renderItem={({ item }) => (
                     <ExtintorCard
                         extintor={item}
+                        assetType={getEquipamentoTipo(item)}
                         validadeHidrostatico={config.validadeHidrostatico}
                         onPress={() =>
                             navigation.navigate('ExtintoresFormScreen', {
+                                assetType: getEquipamentoTipo(item),
                                 extintor: item,
                                 config,
                                 mode: 'edit',
@@ -260,6 +278,7 @@ const ExtintoresScreen: React.FC = () => {
                         }
                         onEdit={() =>
                             navigation.navigate('ExtintoresFormScreen', {
+                                assetType: getEquipamentoTipo(item),
                                 extintor: item,
                                 config,
                                 mode: 'edit',
@@ -275,7 +294,7 @@ const ExtintoresScreen: React.FC = () => {
             <FAB
                 icon="plus"
                 style={styles.fab}
-                onPress={() => navigation.navigate('ExtintoresFormScreen', { mode: 'create', config })}
+                onPress={() => navigation.navigate('ExtintoresFormScreen', { mode: 'create', config, assetType: selectedAssetType })}
                 color={customTheme.colors.onPrimary}
             />
         </View>
@@ -306,10 +325,20 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: customTheme.colors.surfaceVariant,
     },
+    assetTypeButtons: {
+        marginBottom: 10,
+    },
     searchbar: {
         marginBottom: 10,
         backgroundColor: customTheme.colors.surfaceVariant,
         elevation: 0,
+    },
+    checklistButton: {
+        marginBottom: 10,
+        borderColor: customTheme.colors.outlineVariant,
+    },
+    checklistButtonContent: {
+        height: 42,
     },
     searchInput: {
         minHeight: 0,

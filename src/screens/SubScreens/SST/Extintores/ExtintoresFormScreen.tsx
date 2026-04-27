@@ -27,10 +27,12 @@ import { customTheme } from '../../../../theme/theme';
 import {
     defaultExtintoresConfig,
     emptyExtintor,
+    EquipamentoTipo,
     ExtintorInterface,
     ExtintoresConfig,
     formatMonthYear,
     formatYear,
+    getEquipamentoTipo,
     logLocations,
     unidadeOptions,
 } from './ExtintoresTypes';
@@ -38,6 +40,7 @@ import {
 type RootStackParamList = {
     ExtintoresScreen: undefined;
     ExtintoresFormScreen: {
+        assetType?: EquipamentoTipo;
         extintor?: ExtintorInterface;
         config?: ExtintoresConfig;
         mode: 'create' | 'edit';
@@ -53,15 +56,17 @@ const formatDateInput = (date: Date) => dayjs(date).format('YYYY-MM-DD');
 const ExtintoresFormScreen: React.FC = () => {
     const navigation = useNavigation<NavigationProp>();
     const route = useRoute<RoutePropType>();
-    const { extintor, mode, config = defaultExtintoresConfig } = route.params || {
+    const { extintor, mode, config = defaultExtintoresConfig, assetType = 'Extintor' } = route.params || {
         mode: 'create',
         config: defaultExtintoresConfig,
+        assetType: 'Extintor' as EquipamentoTipo,
     };
 
     const isEditMode = mode === 'edit';
     const [loading, setLoading] = useState(false);
-    const [form, setForm] = useState<ExtintorInterface>(extintor || emptyExtintor(config));
+    const [form, setForm] = useState<ExtintorInterface>(extintor || emptyExtintor(config, assetType));
     const [showDatePicker, setShowDatePicker] = useState<DateField>(null);
+    const currentAssetType = getEquipamentoTipo(form);
 
     const availableLocations = useMemo(
         () => (form.unidadeEcologika === 'LOG' ? logLocations : config.localizacoes || []),
@@ -80,21 +85,32 @@ const ExtintoresFormScreen: React.FC = () => {
                 };
             }
 
+            if (field === 'categoriaEquipamento') {
+                return {
+                    ...prev,
+                    categoriaEquipamento: value as EquipamentoTipo,
+                };
+            }
+
             return { ...prev, [field]: value };
         });
     };
 
     const validateForm = () => {
+        if (!form.categoriaEquipamento?.trim()) {
+            showGlobalToast('error', 'Erro', 'Informe o tipo de equipamento');
+            return false;
+        }
         if (!form.numero.trim()) {
-            showGlobalToast('error', 'Erro', 'Informe o numero do extintor');
+            showGlobalToast('error', 'Erro', 'Informe o numero do equipamento');
             return false;
         }
         if (!form.tipo.trim()) {
-            showGlobalToast('error', 'Erro', 'Informe o tipo do extintor');
+            showGlobalToast('error', 'Erro', 'Informe o tipo do equipamento');
             return false;
         }
         if (!form.carga.trim()) {
-            showGlobalToast('error', 'Erro', 'Informe a carga do extintor');
+            showGlobalToast('error', 'Erro', 'Informe a carga do equipamento');
             return false;
         }
         if (!form.unidadeEcologika.trim()) {
@@ -102,7 +118,7 @@ const ExtintoresFormScreen: React.FC = () => {
             return false;
         }
         if (!form.localizacao.trim()) {
-            showGlobalToast('error', 'Erro', 'Informe a localizacao do extintor');
+            showGlobalToast('error', 'Erro', 'Informe a localizacao do equipamento');
             return false;
         }
         if (!form.dataRecarga) {
@@ -125,21 +141,22 @@ const ExtintoresFormScreen: React.FC = () => {
         try {
             const payload = {
                 ...form,
+                categoriaEquipamento: currentAssetType,
                 validadeMeses: Number(form.validadeMeses || config.validade || 12),
             };
 
             if (isEditMode && (form.hidranteId || form.id)) {
                 await ecoApi.update('hidrantes', form.hidranteId || form.id || '', payload);
-                showGlobalToast('success', 'Sucesso', 'Extintor atualizado com sucesso!');
+                showGlobalToast('success', 'Sucesso', `${currentAssetType} atualizado com sucesso!`);
             } else {
                 await ecoApi.create('hidrantes', payload);
-                showGlobalToast('success', 'Sucesso', 'Extintor cadastrado com sucesso!');
+                showGlobalToast('success', 'Sucesso', `${currentAssetType} cadastrado com sucesso!`);
             }
 
             navigation.navigate('ExtintoresScreen');
         } catch (error) {
-            console.error('Erro ao salvar extintor:', error);
-            showGlobalToast('error', 'Erro', 'Nao foi possivel salvar o extintor');
+            console.error(`Erro ao salvar ${currentAssetType.toLowerCase()}:`, error);
+            showGlobalToast('error', 'Erro', `Nao foi possivel salvar o ${currentAssetType.toLowerCase()}`);
         } finally {
             setLoading(false);
         }
@@ -161,6 +178,7 @@ const ExtintoresFormScreen: React.FC = () => {
         onSelect: (value: string) => void,
         searchPlaceholder: string,
         fallbackInputLabel: string,
+        allowCustomValue = false,
     ) => {
         if (!values.length) {
             return (
@@ -198,6 +216,16 @@ const ExtintoresFormScreen: React.FC = () => {
                     value={selectedValue || null}
                     onChange={item => onSelect(item.value)}
                 />
+                {allowCustomValue && (
+                    <TextInput
+                        label={`Ou digite ${label.toLowerCase()}`}
+                        mode="outlined"
+                        value={selectedValue}
+                        onChangeText={onSelect}
+                        style={styles.freeSoloInput}
+                        dense
+                    />
+                )}
             </View>
         );
     };
@@ -205,7 +233,7 @@ const ExtintoresFormScreen: React.FC = () => {
     return (
         <View style={styles.container}>
             <ModernHeader
-                title={isEditMode ? 'Editar Extintor' : 'Novo Extintor'}
+                title={isEditMode ? `Editar ${currentAssetType}` : `Novo ${currentAssetType}`}
                 iconName="fire-extinguisher"
                 onBackPress={() => navigation.goBack()}
             />
@@ -218,8 +246,9 @@ const ExtintoresFormScreen: React.FC = () => {
                     <Surface style={styles.section} elevation={2}>
                         <View style={styles.sectionBar} />
                         <Text style={styles.sectionTitle}>Identificacao</Text>
+                        {renderDropdownField('Tipo de equipamento', ['Extintor', 'Hidrante'], currentAssetType, value => updateField('categoriaEquipamento', value), 'Buscar tipo...', 'Tipo de equipamento')}
                         <TextInput
-                            label="Numero do extintor"
+                            label={`Numero do ${currentAssetType.toLowerCase()}`}
                             mode="outlined"
                             value={form.numero}
                             onChangeText={value => updateField('numero', value)}
@@ -234,7 +263,7 @@ const ExtintoresFormScreen: React.FC = () => {
                         <View style={styles.sectionBar} />
                         <Text style={styles.sectionTitle}>Localizacao</Text>
                         {renderDropdownField('Unidade', unidadeOptions, form.unidadeEcologika, value => updateField('unidadeEcologika', value), 'Buscar unidade...', 'Unidade Ecologika')}
-                        {renderDropdownField('Localizacao', availableLocations, form.localizacao, value => updateField('localizacao', value), 'Buscar localizacao...', 'Localizacao')}
+                        {renderDropdownField(`Local do ${currentAssetType.toLowerCase()}`, availableLocations, form.localizacao, value => updateField('localizacao', value), 'Buscar localizacao...', 'Localizacao', true)}
                     </Surface>
 
                     <Surface style={styles.section} elevation={2}>
@@ -293,7 +322,7 @@ const ExtintoresFormScreen: React.FC = () => {
                     onPress={handleSave}
                     loading={loading}
                     disabled={loading}
-                    text={isEditMode ? 'Salvar alteracoes' : 'Cadastrar extintor'}
+                    text={isEditMode ? 'Salvar alteracoes' : `Cadastrar ${currentAssetType.toLowerCase()}`}
                     iconName="content-save"
                 />
             </KeyboardAvoidingView>
@@ -363,6 +392,10 @@ const styles = StyleSheet.create({
     dropdownContainer: {
         marginBottom: 8,
         paddingHorizontal: 14,
+    },
+    freeSoloInput: {
+        marginTop: 8,
+        backgroundColor: customTheme.colors.surface,
     },
     dropdownLabel: {
         fontSize: 12,

@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 export interface ExtintorInterface {
     id?: string;
     hidranteId?: string;
+    categoriaEquipamento?: 'Extintor' | 'Hidrante';
     numero: string;
     tipo: string;
     carga: string;
@@ -30,6 +31,8 @@ export interface ExtintorComStatus extends ExtintorInterface {
     diasCriticos: number;
 }
 
+export type EquipamentoTipo = 'Extintor' | 'Hidrante';
+
 export const defaultExtintoresConfig: ExtintoresConfig = {
     tipos: ['Agua', 'PQS', 'CO2'],
     capacidade: ['4 kg', '6 kg', '8 kg', '10 kg'],
@@ -52,7 +55,9 @@ export const logLocations = [
 
 export const emptyExtintor = (
     config: ExtintoresConfig = defaultExtintoresConfig,
+    categoriaEquipamento: EquipamentoTipo = 'Extintor',
 ): ExtintorInterface => ({
+    categoriaEquipamento,
     numero: '',
     tipo: '',
     carga: '',
@@ -70,12 +75,19 @@ export const emptyExtintor = (
 export const normalizeExtintor = (item: any): ExtintorInterface => ({
     ...emptyExtintor(),
     ...item,
+    categoriaEquipamento: item?.categoriaEquipamento === 'Hidrante' ? 'Hidrante' : 'Extintor',
     id: item?._id || item?.id || item?.hidranteId,
     hidranteId: item?._id || item?.id || item?.hidranteId,
     validadeMeses: Number(item?.validadeMeses || defaultExtintoresConfig.validade),
     statusTesteHidrostatico:
         item?.statusTesteHidrostatico === 'Aprovado' ? 'Aprovado' : 'Reprovado',
 });
+
+export const getEquipamentoTipo = (item?: ExtintorInterface): EquipamentoTipo =>
+    item?.categoriaEquipamento === 'Hidrante' ? 'Hidrante' : 'Extintor';
+
+export const getEquipamentoLabelPlural = (tipo: EquipamentoTipo): string =>
+    tipo === 'Hidrante' ? 'Hidrantes' : 'Extintores';
 
 export const getExtintorStatus = (
     extintor: ExtintorInterface,

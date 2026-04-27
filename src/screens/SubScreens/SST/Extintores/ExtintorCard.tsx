@@ -4,6 +4,7 @@ import { Card, Chip, IconButton, Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { customTheme } from '../../../../theme/theme';
 import {
+    EquipamentoTipo,
     ExtintorInterface,
     formatDate,
     formatMonthYear,
@@ -20,6 +21,7 @@ const withAlpha = (hex: string, alpha: number): string => {
 
 interface ExtintorCardProps {
     extintor: ExtintorInterface;
+    assetType: EquipamentoTipo;
     validadeHidrostatico: number;
     onPress: () => void;
     onEdit: () => void;
@@ -34,6 +36,7 @@ const statusMap = {
 
 export const ExtintorCard: React.FC<ExtintorCardProps> = ({
     extintor,
+    assetType,
     validadeHidrostatico,
     onPress,
     onEdit,
@@ -53,7 +56,7 @@ export const ExtintorCard: React.FC<ExtintorCardProps> = ({
                 <Card.Content style={styles.cardContent}>
                     <View style={styles.headerRow}>
                         <View style={styles.titleWrap}>
-                            <Text style={styles.title}>Extintor #{extintor.numero || 'Sem numero'}</Text>
+                            <Text style={styles.title}>{assetType} #{extintor.numero || 'Sem numero'}</Text>
                             <Text style={styles.subtitle} numberOfLines={1} ellipsizeMode="tail">
                                 {extintor.unidadeEcologika || 'Unidade nao informada'}
                                 {' - '}

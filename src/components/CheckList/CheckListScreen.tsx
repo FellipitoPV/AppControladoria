@@ -603,43 +603,45 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
             const totalCount = checklist.locations.length;
 
             return (
-              <Card key={checklist.id} style={styles.checklistCard}>
-                <Card.Content style={styles.cardContent}>
-                  <View style={styles.checklistHeader}>
-                    <View style={styles.checklistTitleRow}>
-                      <MaterialCommunityIcons
-                        name={getIconName(checklist.icon)}
-                        size={20}
-                        color={customTheme.colors.primary}
-                        style={styles.checklistIcon}
-                      />
-                      <Text style={styles.checklistTitle} numberOfLines={2}>{checklist.title}</Text>
+              <View key={checklist.id}>
+                <Card style={styles.checklistCard}>
+                  <Card.Content style={styles.cardContent}>
+                    <View style={styles.checklistHeader}>
+                      <View style={styles.checklistTitleRow}>
+                        <MaterialCommunityIcons
+                          name={getIconName(checklist.icon)}
+                          size={20}
+                          color={customTheme.colors.primary}
+                          style={styles.checklistIcon}
+                        />
+                        <Text style={styles.checklistTitle} numberOfLines={2}>{checklist.title}</Text>
+                      </View>
+                      <View style={styles.progressBadge}>
+                        <Text style={styles.progressText}>{completedCount}/{totalCount}</Text>
+                      </View>
                     </View>
-                    <View style={styles.progressBadge}>
-                      <Text style={styles.progressText}>{completedCount}/{totalCount}</Text>
-                    </View>
-                  </View>
 
-                  <View style={styles.locationsContainer}>
-                    {checklist.locations.map(location => (
-                      <LocationCard
-                        key={location.id}
-                        location={location}
-                        checklistId={checklist.id}
-                        checklistTitle={checklist.title}
-                        checklistIcon={checklist.icon}
-                        checklistFrequency={checklist.frequency}
-                        checklistResponseMode={checklist.responseMode}
-                        questions={
-                          location.useCustomQuestions && location.questions && location.questions.length > 0
-                            ? location.questions.map(q => ({id: q.id, label: q.label, sectionTitle: q.sectionTitle, subsectionTitle: q.subsectionTitle}))
-                            : checklist.questions
-                        }
-                      />
-                    ))}
-                  </View>
-                </Card.Content>
-              </Card>
+                    <View style={styles.locationsContainer}>
+                      {checklist.locations.map(location => (
+                        <LocationCard
+                          key={location.id}
+                          location={location}
+                          checklistId={checklist.id}
+                          checklistTitle={checklist.title}
+                          checklistIcon={checklist.icon}
+                          checklistFrequency={checklist.frequency}
+                          checklistResponseMode={checklist.responseMode}
+                          questions={
+                            location.useCustomQuestions && location.questions && location.questions.length > 0
+                              ? location.questions.map(q => ({id: q.id, label: q.label, sectionTitle: q.sectionTitle, subsectionTitle: q.subsectionTitle}))
+                              : checklist.questions
+                          }
+                        />
+                      ))}
+                    </View>
+                  </Card.Content>
+                </Card>
+              </View>
             );
           })
         )}
