@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, FAB, Searchbar, SegmentedButtons, Surface, Text } from 'react-native-paper';
+import { FAB, Searchbar, SegmentedButtons, Surface, Text } from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import ModernHeader from '../../../../assets/components/ModernHeader';
 import { ecoApi } from '../../../../api/ecoApi';
@@ -28,12 +28,6 @@ import {
 } from './ExtintoresTypes';
 
 type RootStackParamList = {
-    ChecklistScreen: {
-        category?: string;
-        title?: string;
-        headerIcon?: string;
-        reportVariant?: 'sst' | 'meioAmbiente' | 'qualidade';
-    } | undefined;
     ExtintoresScreen: undefined;
     ExtintoresFormScreen: {
         assetType?: EquipamentoTipo;
@@ -223,18 +217,6 @@ const ExtintoresScreen: React.FC = () => {
                     iconColor={customTheme.colors.primary}
                 />
 
-                {selectedAssetType === 'Hidrante' && (
-                    <Button
-                        mode="outlined"
-                        icon="clipboard-check-outline"
-                        onPress={() => navigation.navigate('ChecklistScreen')}
-                        style={styles.checklistButton}
-                        contentStyle={styles.checklistButtonContent}
-                    >
-                        Ir para checklist
-                    </Button>
-                )}
-
                 <View style={styles.unitFilterContainer}>
                     <Text style={styles.unitFilterLabel}>Unidade</Text>
                     <SegmentedButtons
@@ -332,13 +314,6 @@ const styles = StyleSheet.create({
         marginBottom: 10,
         backgroundColor: customTheme.colors.surfaceVariant,
         elevation: 0,
-    },
-    checklistButton: {
-        marginBottom: 10,
-        borderColor: customTheme.colors.outlineVariant,
-    },
-    checklistButtonContent: {
-        height: 42,
     },
     searchInput: {
         minHeight: 0,

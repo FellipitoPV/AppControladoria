@@ -1,4 +1,5 @@
 import React, {useState, useEffect} from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   View,
   StyleSheet,
@@ -40,6 +41,7 @@ interface ReportData {
   resultadoOpcao: 1 | 2 | 3 | 4;
   responsavelVerificacao: string;
   localResponsavel: string;
+  dataRealizacao?: string;
   assinaturaBase64?: string;
   variant?: ReportVariant;
   requisitos?: string;
@@ -52,6 +54,13 @@ interface ReportData {
   acompanhantesAuditoria?: string;
   auditor?: string;
 }
+
+const formatDateDisplay = (date: Date) => {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 type ReportVariant = 'meioAmbiente' | 'sst' | 'qualidade';
 
@@ -92,6 +101,9 @@ export default function ReportGeneratorModal({
   const [resultadoOpcao, setResultadoOpcao] = useState<1 | 2 | 3 | 4>(1);
   const [responsavelVerificacao, setResponsavelVerificacao] = useState('');
   const [localResponsavel, setLocalResponsavel] = useState('');
+  const [dataRealizacao, setDataRealizacao] = useState('');
+  const [dataRealizacaoDate, setDataRealizacaoDate] = useState(new Date());
+  const [showDataRealizacaoPicker, setShowDataRealizacaoPicker] = useState(false);
 
   // Estados da assinatura
   const [signatureModalVisible, setSignatureModalVisible] = useState(false);
@@ -135,6 +147,9 @@ export default function ReportGeneratorModal({
       setResultadoOpcao(1);
       setResponsavelVerificacao('');
       setLocalResponsavel('');
+      setDataRealizacao('');
+      setDataRealizacaoDate(new Date());
+      setShowDataRealizacaoPicker(false);
       // Reset campos de qualidade
       setDataAuditoria('');
       setEmpresaAuditada('');
@@ -171,6 +186,7 @@ export default function ReportGeneratorModal({
       resultadoOpcao,
       responsavelVerificacao: responsavelVerificacao.trim(),
       localResponsavel: localResponsavel.trim(),
+      dataRealizacao: dataRealizacao.trim() || undefined,
       assinaturaBase64: assinaturaBase64 || undefined,
       variant:"meioAmbiente",
       requisitos: requisitos || undefined,
@@ -195,6 +211,15 @@ export default function ReportGeneratorModal({
 
   const handleClearSignature = () => {
     setAssinaturaBase64(null);
+  };
+
+  const handleDataRealizacaoChange = (_event: any, selectedDate?: Date) => {
+    setShowDataRealizacaoPicker(Platform.OS === 'ios');
+
+    if (selectedDate) {
+      setDataRealizacaoDate(selectedDate);
+      setDataRealizacao(formatDateDisplay(selectedDate));
+    }
   };
 
   const getResultadoLabel = (opcao: number) => {
@@ -470,6 +495,24 @@ export default function ReportGeneratorModal({
                     style={styles.input}
                   />
 
+                  <Button
+                    mode="outlined"
+                    icon="calendar"
+                    onPress={() => setShowDataRealizacaoPicker(true)}
+                    style={styles.dateButton}
+                    contentStyle={styles.dateButtonContent}>
+                    {dataRealizacao || 'Selecionar data de realização'}
+                  </Button>
+
+                  {showDataRealizacaoPicker && (
+                    <DateTimePicker
+                      value={dataRealizacaoDate}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={handleDataRealizacaoChange}
+                    />
+                  )}
+
                   {/* Campo de assinatura */}
                   <Text style={styles.fieldLabel}>Assinatura *</Text>
                   {assinaturaBase64 ? (
@@ -625,6 +668,13 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: 12,
     backgroundColor: customTheme.colors.surface,
+  },
+  dateButton: {
+    marginBottom: 12,
+  },
+  dateButtonContent: {
+    minHeight: 56,
+    justifyContent: 'flex-start',
   },
   fieldLabel: {
     fontSize: 12,

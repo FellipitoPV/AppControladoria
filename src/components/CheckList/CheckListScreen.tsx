@@ -144,7 +144,7 @@ export default function ChecklistScreen({navigation, route}: ChecklistScreenProp
   };
 
   const getLocationGroup = (locationName?: string): UnidadeTab =>
-    locationName?.toUpperCase().includes('LOG') ? 'LOG' : 'Ecologika';
+    /(?:^|\W)LOG(?:$|\W)/i.test(locationName || '') ? 'LOG' : 'Ecologika';
 
   const visibleChecklists = checklists
     .map(checklist => ({
